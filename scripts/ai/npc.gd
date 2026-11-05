@@ -30,6 +30,8 @@ var rushing := 0.0
 var rush_grab := false
 ## The Director that hands out attack tokens. Found by group if not set.
 var director: Node = null
+## Set by Chatter while this NPC is in a conversation: stand still and face them.
+var chatting_with: Node3D = null
 
 var _type: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
@@ -90,6 +92,7 @@ func engage(who: Fighter) -> void:
 		return
 	mood = Mood.ENGAGED
 	foe = who
+	chatting_with = null
 	_quiet_t = 0.0
 
 
@@ -98,6 +101,7 @@ func alert() -> void:
 	if team == Team.STAFF or mood != Mood.CALM:
 		return
 	mood = Mood.ALERT
+	chatting_with = null
 	_quiet_t = 0.0
 
 
@@ -191,6 +195,12 @@ func _think_staff() -> void:
 
 
 func _think_calm(delta: float) -> void:
+	if chatting_with != null and is_instance_valid(chatting_with):
+		# In a conversation: hold still, face them, stay out of their personal space.
+		_look_at = chatting_with.global_position
+		_wander_to = Vector3.INF
+		move_input = _separation() * 0.5
+		return
 	_wander_t -= delta
 	if _wander_t <= 0.0:
 		_wander_t = _rng.randf_range(4.0, 9.0)
