@@ -44,7 +44,7 @@ NPC looks take a seed every peer agrees on (the `N<n>` number) so crowds match o
 - **Net**: multiplayer entry point (solo, host, join).
 
 ## Input actions (contract)
-`move_up`, `move_down`, `move_left`, `move_right`, `punch`, `kick`, `headbutt`, `counter`, `grab`,
+`move_up`, `move_down`, `move_left`, `move_right`, `punch_left`, `punch_right`, `block`, `kick`, `headbutt`, `grab`,
 `dodge`, `interact`, `order_food`, `throw`, `pause`. Defaults for keyboard/mouse and controller
 are in `Settings.ACTIONS`. Never add input actions in `project.godot`. Add them to `Settings.ACTIONS`
 so they appear in the keybinds screen.
@@ -80,7 +80,7 @@ Implemented in `scripts/actors/fighter.gd` (`class_name Fighter`). Move numbers 
 
 ```gdscript
 class_name Fighter extends CharacterBody3D        # every Fighter joins group "fighters"
-enum State { IDLE, ATTACK, WINDUP, STAGGER, DOWN, CRAWL, KO, HELD, GRABBING, DODGE }
+enum State { IDLE, ATTACK, WINDUP, STAGGER, DOWN, CRAWL, KO, HELD, GRABBING, DODGE, BLOCK }
 enum Team { PLAYERS, PUNTERS, POLICE, STAFF }      # 0, 1, 2, 3
 
 # Exported tuning: team, max_hp, power, move_speed, toughness, grip, crawl_fraction,
@@ -105,6 +105,10 @@ signal hit_dealt(info)
 func is_down() -> bool                # DOWN, CRAWL or KO
 func is_ko() -> bool
 func can_act() -> bool                # IDLE
+func can_attack() -> bool             # IDLE, BLOCK or chaining
+func is_blocking_from(pos) -> bool    # guard up and pos is in front
+func has_counter_ready() -> bool      # just parried: next punch counters
+func defend_hint() -> String          # "block" or "dodge" for the move being wound up
 func can_chain() -> bool              # in an attack's recovery
 func can_be_targeted() -> bool
 func can_be_hit() -> bool             # false for staff, and while KO, dodging (i-frames) or just got up
@@ -112,17 +116,17 @@ func can_be_grabbed() -> bool
 func is_hostile_to(other) -> bool     # players vs punters and police; staff are nobody's enemy
 func can_hit(other) -> bool           # same as is_hostile_to: nobody can hit staff
 func is_counterable_by(defender) -> bool
-func windup_remaining() -> float      # for counter prompts
+func windup_remaining() -> float      # for defend prompts
 func get_facing() -> Vector3
 func hp_fraction() -> float
 
 # Requests: call on the fighter's authority (owner for players, host for NPCs).
 # Forwarded to the host, validated, and replicated to everyone.
-func request_attack(move_id: StringName, target: Fighter = null)  # null = freeflow pick
+func request_attack(move_id: StringName, target: Fighter = null, bonus := 1.0, combo_name := "")  # null = freeflow pick
 func request_grab(victim: Fighter = null)
 func request_release()
 func request_throw()                  # throw the held fighter
-func request_counter()
+func request_block(on: bool)          # hold the guard; raise it just before a punch lands to parry
 func request_dodge(dir: Vector3)
 func request_struggle()               # call repeatedly while HELD
 
@@ -143,7 +147,18 @@ Rules other workstreams rely on:
   before the fighter enters the tree, and don't apply these multipliers again.
 - **Enemy tells.** AI attacks with a move that has `telegraph: true` (`swing`, `haymaker`,
   `shove`, `baton`). Its windup becomes the difficulty's `telegraph_time`, the fighter flashes,
-  `Events.attack_telegraphed` fires, and the target can counter it.
+  `Events.attack_telegraphed` fires, and the target's prompt says Block (punches) or Dodge
+  (moves with `guard_break`).
+- **Blocking.** `BLOCK` covers `Moves.BLOCK_ARC` in front for `BLOCK_CHIP` damage. A guard
+  raised within `PARRY_WINDOW` of a punch landing parries it: the attacker reels,
+  `Events.attack_countered` fires and the defender's next punch gets `COUNTER_BONUS`. Guard
+  breakers (kicks, headbutts, haymakers, shoves, batons, throws) stagger a blocker and fire
+  `Events.guard_broken`. Blocked hits arrive in `hit_landed` with `blocked: true` (and
+  parries with `parried: true`, damage 0), so FX can play a thud instead of blood.
+- **No chasing.** A move steps in at most `Moves.MAX_LUNGE_STEP`; further away it whiffs.
+- **Stance.** `in_stance` / `stance_changed` say when a fighter is squared up for a fight
+  (an exchange in the last `STANCE_HOLD` seconds or, for players, an active enemy within
+  `ENGAGE_RANGE`). Animations can use it to pick a relaxed idle or a guard.
 - **Held fighters** take `Moves.HELD_DAMAGE_MULT` damage from everyone. A holder who is hit
   lets go. A held fighter who goes down is dropped.
 - **Health thresholds.** Below `crawl_fraction`, a knocked-down fighter gets up only to crawl.

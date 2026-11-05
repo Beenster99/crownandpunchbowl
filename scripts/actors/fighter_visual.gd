@@ -111,8 +111,8 @@ func _on_move_started(move_id: StringName) -> void:
 
 
 func _on_hit_taken(info: Dictionary) -> void:
-	if fighter.is_down():
-		return
+	if fighter.is_down() or bool(info.get("blocked", false)) or bool(info.get("parried", false)):
+		return  # a hit taken on the guard keeps the block pose
 	var from_front := true
 	var dir := Vector3.ZERO
 	var a := info.get("attacker") as Node3D
