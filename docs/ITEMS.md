@@ -54,6 +54,17 @@ headbutts, stomps and knees stay bare-knuckle. `Hands.interact_hint()` returns `
 
 A fighter who is knocked down, held or KO'd drops what they're holding.
 
+## Prompts and highlights
+
+`InteractPrompt` (added by `PubItems`) runs locally for the local player. Loose items within 4 m
+get a faint warm outline. The one `interact` would take gets a brighter, pulsing outline and a
+floating prompt such as `[E] Pick up bottle` or `[E] Drink pint of ale`. At the bar it shows
+`[E] Order a pint  [C] Order food`, and while you're holding something, `[T] Throw` floats over
+your head. Key labels come from `Settings.prompt(action)` (the menus workstream's device-aware
+helper), so only keyboard or only controller prompts show. If that helper isn't there, it
+falls back to its own last-device check. The gameplay "Button prompts" setting turns it all off.
+`Hands.interact_target()` returns `{hint, node}` if another system needs to know the target.
+
 ## The bar and drinking
 
 - Pints take 1.2 s to pour and food 4 s, then appear on the counter in front of whoever ordered.

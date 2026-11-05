@@ -58,14 +58,24 @@ func at_bar() -> Bar:
 ## What interact would do right now, for HUD prompts: "pick_up", "drink", "eat",
 ## "order", "drop" or "".
 func interact_hint() -> String:
+	return String(interact_target()["hint"])
+
+
+## What interact would act on right now: {"hint": String, "node": PubItem, Bar or null}.
+## Same priority as the host uses: nearest item, then the bar, then dropping.
+func interact_target() -> Dictionary:
 	var item := PubItems.nearest_item(fighter, fighter.global_position)
 	if item != null:
+		var hint := "pick_up"
 		if item.is_consumable():
-			return "eat" if item.kind == &"food" else "drink"
-		return "pick_up"
-	if at_bar() != null:
-		return "order"
-	return "drop" if held_item() != null else ""
+			hint = "eat" if item.kind == &"food" else "drink"
+		return {"hint": hint, "node": item}
+	var bar := at_bar()
+	if bar != null:
+		return {"hint": "order", "node": bar}
+	if held_item() != null:
+		return {"hint": "drop", "node": held_item()}
+	return {"hint": "", "node": null}
 
 
 # --- Requests (call on the fighter's authority) ---------------------------------------

@@ -17,6 +17,7 @@ extends Node3D
 enum Mode { LOOSE, HELD, FLYING, GONE }
 
 const GROUP := &"items"
+const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.45)
 
 @export var kind: StringName = &"bottle"
 ## Darts in the set. -1 takes the kind's default.
@@ -37,6 +38,8 @@ var _travelled := 0.0
 var _ground_y := 0.0
 var _break_pending := false
 var _mesh: MeshInstance3D
+var _outline: StandardMaterial3D
+var _highlight := 0
 
 
 func _ready() -> void:
@@ -270,6 +273,8 @@ func _rpc_ammo(n: int) -> void:
 func _process(_delta: float) -> void:
 	if mode == Mode.HELD:
 		_follow_holder()
+	elif _highlight == 2:
+		_pulse_highlight()
 
 
 func _physics_process(delta: float) -> void:
@@ -409,6 +414,41 @@ func _follow_holder() -> void:
 			return
 		local = Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-70.0)), Vector3(0.32, 1.0, -0.2))
 	global_transform = holder.global_transform * local
+
+
+## Subtle outline so players can see what they can grab. 0 off, 1 nearby, 2 in reach
+## (pulses). Cosmetic and local: InteractPrompt sets it for the local player.
+func set_highlight(level: int) -> void:
+	if _mesh == null or level == _highlight:
+		return
+	_highlight = level
+	var mat := _mesh.material_override as StandardMaterial3D
+	if mat == null:
+		return
+	if level <= 0 or mode != Mode.LOOSE:
+		mat.next_pass = null
+		mat.emission_enabled = false
+		_highlight = 0
+		return
+	mat.emission_enabled = true  # a warm glint on the item itself
+	mat.emission = HIGHLIGHT_COLOR
+	mat.emission_energy_multiplier = 0.12 if level == 1 else 0.4
+	if _outline == null:
+		_outline = StandardMaterial3D.new()
+		_outline.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_outline.cull_mode = BaseMaterial3D.CULL_FRONT
+		_outline.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_outline.grow = true
+		_outline.render_priority = 1
+	_outline.grow_amount = 0.012 if level == 1 else 0.03
+	_outline.albedo_color = HIGHLIGHT_COLOR * Color(1, 1, 1, 0.22 if level == 1 else 0.85)
+	mat.next_pass = _outline
+
+
+func _pulse_highlight() -> void:
+	if _highlight == 2 and _outline != null:
+		var t := Time.get_ticks_msec() / 1000.0
+		_outline.albedo_color.a = 0.55 + 0.35 * sin(t * 5.0)
 
 
 func _build_mesh(k: Dictionary) -> void:
