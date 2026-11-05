@@ -10,6 +10,7 @@ const ROOM := Vector2(16.0, 12.0)
 func _ready() -> void:
 	_build_room()
 	add_child(GAME_UI_SCENE.instantiate())  # HUD and pause menu
+	PubItems.install(self).furnish_test_pub(ROOM)  # props, bar and Hands (items workstream)
 	var cam := BrawlCamera.new()
 	add_child(cam)
 	# Players are spawned by the host once every peer has loaded (see scripts/net/).
