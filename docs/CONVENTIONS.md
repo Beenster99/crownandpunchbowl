@@ -22,7 +22,13 @@ separate PR so other branches can rebase onto it.
 | `scripts/fx/` | Audio playback, blood, hit-stop, shake |
 | `scripts/ui/` | UI scripts |
 | `assets/` | `models/`, `textures/`, `audio/{sfx,voice,music}/`, `fonts/` |
+| `tools/` | Developer scripts that need a renderer (e.g. character capture) |
 | `tests/` | Headless tests (`godot --headless --path . --script res://tests/<name>.gd`) |
+
+## Characters
+Every character is a `CharacterRig` with a `CharacterLook` from `CharacterLooks`. Animation
+names, the Fighter state mapping and sockets are a contract: see [CHARACTERS.md](CHARACTERS.md).
+NPC looks take a seed every peer agrees on (the `N<n>` number) so crowds match on every machine.
 
 ## Code style
 - GDScript with static types where practical. Tabs for indents. `snake_case` files, `PascalCase` `class_name`.

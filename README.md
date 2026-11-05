@@ -7,6 +7,7 @@ then knock out everyone in the building except the bar staff.
 - Design direction and camera/graphics recommendation: [docs/DESIGN.md](docs/DESIGN.md)
 - Development plan and workstreams: [docs/PLAN.md](docs/PLAN.md)
 - Folder layout and shared contracts: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
+- The six farmers, punters, police and the shared rig: [docs/CHARACTERS.md](docs/CHARACTERS.md)
 
 ## Running
 
@@ -18,6 +19,7 @@ to go back to the menu.
 
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
+godot --headless --path . --script res://tests/character_test.gd
 ```
 
 The current state is the M0 skeleton: shared data, settings and keybind storage, a placeholder
