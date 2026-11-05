@@ -4,6 +4,7 @@
 
 [node name="CombatSandbox" type="Node3D"]
 script = ExtResource("1")
+crowd = false
 
 [node name="World" type="Node3D" parent="."]
 

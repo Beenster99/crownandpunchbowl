@@ -6,6 +6,9 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
 const ROOM := Vector2(16.0, 12.0)
 
+## Spawn the AI crowd (Director). Sandboxes with their own opponents turn this off.
+@export var crowd := true
+
 
 func _ready() -> void:
 	_build_room()
@@ -20,7 +23,8 @@ func _ready() -> void:
 		$Actors.add_child(p)
 		cam.targets.append(p)
 		i += 1
-	_add_director()
+	if crowd:
+		_add_director()
 	Events.banner.emit("%s — %s" % [GameData.current_pub()["name"], GameData.current_pub()["era"]], 3.0)
 
 
