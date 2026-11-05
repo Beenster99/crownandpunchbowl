@@ -14,6 +14,7 @@ func _initialize() -> void:
 	_check_crowd_variation()
 	_check_state_and_move_mapping()
 	_check_lying_down()
+	await _check_ragdoll()
 	if _failures == 0:
 		print("CHARACTERS OK: %d looks, %d animations" % [CharacterLooks.all_ids().size(), CharacterRig.ANIMATIONS.size()])
 	quit(1 if _failures > 0 else 0)
@@ -119,7 +120,36 @@ func _check_lying_down() -> void:
 	for a in [&"ko", &"crawl", &"down"]:
 		rig.play(a, 0.0)
 		rig.anim.advance(1.2)
-		var h := rig.get_socket(&"chest").global_position.y
+		var h := rig.bone_position(&"Chest").y
 		if h > 0.6:
 			_fail("%s: chest still %.2f m off the floor" % [a, h])
 	rig.queue_free()
+
+
+func _check_ragdoll() -> void:
+	var ground := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	shape.shape = WorldBoundaryShape3D.new()
+	ground.add_child(shape)
+	root.add_child(ground)
+	var rig := CharacterRig.new()
+	rig.look_id = "kev"
+	root.add_child(rig)
+	await physics_frame
+	var start := rig.ragdoll_hips_position()
+	rig.play_hit(true, true, Vector3(0, 0, 1))
+	rig.play_state("KO")
+	if not rig.ragdolling:
+		_fail("KO should start the ragdoll")
+	for i in 150:
+		await physics_frame
+	var hips := rig.ragdoll_hips_position()
+	if hips.y > 0.45:
+		_fail("ragdoll hips still %.2f m up after 2.5 s" % hips.y)
+	if hips.z < start.z + 0.1:
+		_fail("ragdoll should fall the way it was hit (z %.2f -> %.2f)" % [start.z, hips.z])
+	rig.play_state("IDLE")
+	if rig.ragdolling or rig.current != &"idle":
+		_fail("animation should take back over from the ragdoll")
+	rig.queue_free()
+	ground.queue_free()

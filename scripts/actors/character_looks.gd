@@ -233,6 +233,9 @@ static func _make(type: String, table: Dictionary, id: String) -> CharacterLook:
 		return CharacterLook.new()
 	var d: Dictionary = table[type].duplicate()
 	d["id"] = id
+	d["model"] = type
+	d["model_height"] = d.get("height", 1.0)
+	d["model_girth"] = d.get("girth", 1.0)
 	if not d.has("display_name"):
 		d["display_name"] = type.capitalize()
 	return CharacterLook.from_dict(d)
@@ -249,9 +252,6 @@ static func _vary(look: CharacterLook, type: String, seed: int) -> void:
 	look.beard_color = look.hair_color
 	look.height *= rng.randf_range(0.94, 1.06)
 	look.girth *= rng.randf_range(0.92, 1.1)
-	look.belly = clampf(look.belly + rng.randf_range(-0.2, 0.35), 0.0, 1.0)
-	look.nose_size *= rng.randf_range(0.85, 1.25)
-	look.head_size *= rng.randf_range(0.95, 1.06)
 	if look.feminine or look.top == CharacterLook.Top.POLICE:
 		pass
 	elif look.beard == CharacterLook.Beard.NONE and rng.randf() < 0.25:

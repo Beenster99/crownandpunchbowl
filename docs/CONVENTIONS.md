@@ -54,7 +54,7 @@ so they appear in the keybinds screen.
 `consumables`, `camera_occluders`.
 
 ## Physics layers
-1 world · 2 players · 3 npcs · 4 items · 5 hitboxes · 6 hurtboxes.
+1 world · 2 players · 3 npcs · 4 items · 5 hitboxes · 6 hurtboxes · 7 ragdoll (cosmetic bodies; they only collide with the world).
 
 ## Audio buses
 `Master` → `Music`, `SFX`, `Voice` (created by `Settings` at startup). Every sound must use one of these.

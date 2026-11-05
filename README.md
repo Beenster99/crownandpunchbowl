@@ -21,6 +21,7 @@ In the pub, move with WASD or the left stick. Esc or Start opens the pause menu.
 
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
+godot --headless --path . --import   # once, so the character models are imported
 godot --headless --path . --script res://tests/ui_test.gd
 godot --headless --path . --script res://tests/coop_rules_test.gd
 tests/run_net_test.sh   # two-process host + client co-op test

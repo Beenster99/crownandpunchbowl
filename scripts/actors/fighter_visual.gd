@@ -111,14 +111,16 @@ func _on_move_started(move_id: StringName) -> void:
 
 
 func _on_hit_taken(info: Dictionary) -> void:
-	if fighter.is_down():
+	if fighter.is_ko():
 		return
 	var from_front := true
+	var dir := Vector3.ZERO
 	var a := info.get("attacker") as Node3D
 	if a != null and is_instance_valid(a):
 		var to_a := a.global_position - fighter.global_position
 		from_front = fighter.get_facing().dot(to_a) >= 0.0
-	rig.play_hit(from_front, bool(info.get("heavy", false)))
+		dir = -to_a.normalized()  # the way the blow pushes them, for a KO ragdoll
+	rig.play_hit(from_front, bool(info.get("heavy", false)), dir)
 
 
 func _on_nose_broken(f: Node) -> void:
