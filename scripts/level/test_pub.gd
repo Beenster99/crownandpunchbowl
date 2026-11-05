@@ -1,9 +1,8 @@
 extends Node3D
 ## Greybox sandbox pub used by every workstream until the real pubs exist.
-## Builds a floor, walls and a bar in code, spawns local players and points the
-## BrawlCamera at them. The pubs workstream replaces this with authored scenes.
+## Builds a floor, walls and a bar in code, spawns players through PlayerSpawner and
+## points the BrawlCamera at them. The pubs workstream replaces this with authored scenes.
 
-const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
 const GAME_UI_SCENE := preload("res://scenes/ui/game_ui.tscn")
 const ROOM := Vector2(16.0, 12.0)
 
@@ -13,16 +12,18 @@ func _ready() -> void:
 	add_child(GAME_UI_SCENE.instantiate())  # HUD and pause menu
 	var cam := BrawlCamera.new()
 	add_child(cam)
-	var i := 0
-	for peer_id in Net.players:
-		var p := PLAYER_SCENE.instantiate()
-		p.name = "P%d" % peer_id
-		p.set_multiplayer_authority(peer_id)
-		p.position = Vector3(-1.5 + i * 1.0, 0.0, ROOM.y * 0.5 - 1.5)
-		$Actors.add_child(p)
-		cam.targets.append(p)
-		i += 1
+	# Players are spawned by the host once every peer has loaded (see scripts/net/).
+	var spawner := PlayerSpawner.new()
+	spawner.spawn_points = [Vector3(-1.5, 0, ROOM.y * 0.5 - 1.5), Vector3(-0.5, 0, ROOM.y * 0.5 - 1.5),
+		Vector3(0.5, 0, ROOM.y * 0.5 - 1.5), Vector3(1.5, 0, ROOM.y * 0.5 - 1.5)]
+	add_child(spawner)
+	spawner.setup($Actors)
+	spawner.player_spawned.connect(func(p: Node3D): cam.targets.append(p))
+	var rules := CoopRules.new()
+	rules.name = "CoopRules"
+	add_child(rules)
 	Events.banner.emit("%s — %s" % [GameData.current_pub()["name"], GameData.current_pub()["era"]], 3.0)
+	Net.level_ready()
 
 
 func _build_room() -> void:

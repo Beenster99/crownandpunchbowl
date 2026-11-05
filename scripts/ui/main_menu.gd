@@ -75,15 +75,28 @@ func _build_title() -> Control:
 	box.add_child(Control.new())
 
 	box.add_child(UiTheme.button("Play solo", func(): _show(_setup_screen)))
-	var host := UiTheme.button("Host co-op  (coming with online play)", Callable())
-	host.disabled = true
-	box.add_child(host)
-	var join := UiTheme.button("Join co-op  (coming with online play)", Callable())
-	join.disabled = true
-	box.add_child(join)
+	box.add_child(UiTheme.button("Host co-op", _open_lobby.bind("host")))
+	box.add_child(UiTheme.button("Join co-op", _open_lobby.bind("join")))
 	box.add_child(UiTheme.button("Settings", open_settings))
 	box.add_child(UiTheme.button("Quit", get_tree().quit))
+	if Net.last_error != "":
+		var err := UiTheme.label(Net.last_error, "HintLabel")
+		err.add_theme_color_override("font_color", Color("e06c4c"))
+		err.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(err)
+		Net.last_error = ""
 	return center
+
+
+func _open_lobby(mode: String) -> void:
+	var lobby: Control = preload("res://scripts/net/lobby_screen.gd").new()
+	lobby.name = "Lobby"
+	lobby.mode = mode
+	lobby.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var tree := get_tree()
+	tree.root.add_child(lobby)
+	tree.current_scene = lobby
+	queue_free()
 
 
 func open_settings() -> SettingsMenu:
@@ -231,4 +244,4 @@ func _on_start() -> void:
 	GameData.current_pub_index = _pub_pick.selected
 	GameData.difficulty_index = _difficulty_index
 	Net.start_solo(player_name, _farmer_index)
-	get_tree().change_scene_to_file(GameData.current_pub()["scene"])
+	Net.start_game()

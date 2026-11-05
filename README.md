@@ -20,7 +20,11 @@ In the pub, move with WASD or the left stick. Esc or Start opens the pause menu.
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
 godot --headless --path . --script res://tests/ui_test.gd
+godot --headless --path . --script res://tests/coop_rules_test.gd
+tests/run_net_test.sh   # two-process host + client co-op test
 ```
+
+Co-op: Host co-op / Join co-op on the main menu. See [docs/NETWORKING.md](docs/NETWORKING.md).
 
 The current state is the M0 skeleton: shared data, settings and keybind storage, a placeholder
 player, and the recommended camera. Gameplay comes in through the workstreams in the plan.

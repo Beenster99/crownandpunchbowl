@@ -24,7 +24,7 @@ func add_shake(amount: float) -> void:
 
 
 func _process(delta: float) -> void:
-	var live := targets.filter(func(t): return is_instance_valid(t))
+	var live := targets.filter(func(t): return is_instance_valid(t) and t.is_inside_tree())
 	if live.is_empty():
 		return
 	var centre := Vector3.ZERO

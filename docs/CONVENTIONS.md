@@ -61,6 +61,9 @@ so they appear in the keybinds screen.
 - Gameplay checks use `is_multiplayer_authority()` and `multiplayer.is_server()`, never "is solo".
   Solo runs through `OfflineMultiplayerPeer`, so the same paths are exercised.
 - Spawned node names must be deterministic: players `P<peer_id>`, NPCs `N<n>`, items `I<n>`.
+- Pub scenes call `Net.level_ready()` at the end of `_ready()` and spawn only after
+  `Net.all_peers_loaded`. Replicated nodes join `Net.SPAWNED_GROUP` and use `NetSync.attach()`.
+  Details in [NETWORKING.md](NETWORKING.md).
 - FX (blood, sound) are cosmetic. They're triggered by RPC or synced state and never affect gameplay.
 
 ## Fighter API

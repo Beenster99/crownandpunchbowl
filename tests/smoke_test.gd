@@ -5,8 +5,9 @@ extends SceneTree
 
 func _initialize() -> void:
 	await process_frame  # let autoloads enter the tree
-	root.get_node("Net").start_solo("Smoke", 0)
-	change_scene_to_file("res://scenes/pubs/test_pub.tscn")
+	var net := root.get_node("Net")
+	net.start_solo("Smoke", 0)
+	net.start_game()  # solo goes through the same RPC path as co-op
 	await create_timer(1.0).timeout
 	var players := get_nodes_in_group("players")
 	if players.size() != 1:
