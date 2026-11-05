@@ -92,6 +92,9 @@ rig.look = CharacterLooks.farmer("mags")       # or rig.look_id = "rugby_lad"; r
 add_child(rig)
 
 rig.set_move_speed(velocity.length())          # every frame: switches idle and walk
+rig.set_guard(in_stance or mood != Npc.Mood.CALM)  # fists up only when there's trouble
+rig.set_talking(chatting_with != null)         # calm chatters gesture
+rig.staff = true                               # before add_child: bar staff polish glasses
 rig.play_move("punch")                         # alternates left and right
 rig.play_state(Fighter.State.keys()[state])    # "STAGGER", "KO", "HELD"...
 rig.play_hit(from_front, heavy)
@@ -104,6 +107,19 @@ rig.set_blood(0.7)                             # cosmetic, 0 to 1
 rig.break_nose()                               # hook to Events.nose_broken
 rig.animation_finished.connect(...)            # e.g. to time the hit frame
 ```
+
+### Calm and guarded
+
+People start relaxed. Standing still, a calm character plays one of the calm idles
+(`idle_relaxed` with weight shifts, or `idle_pint` with a sip now and then, picked from
+`look_seed`), `idle_chat` while talking, or `idle_polish` for staff. Walking calm is
+`walk_relaxed`. Only with the guard up do they play the fists-up `idle` and `walk`.
+Any move or hit raises the guard on its own; `set_guard(false)` drops it again.
+
+`FighterVisual` drives this for you: the guard is up while the fighter is in a fighting
+stance (`Fighter.in_stance`) or, for NPCs, while their AI mood is ALERT or ENGAGED (mood is
+synced so clients match). Staff never square up.
+Every standing loop starts at a random point so a room doesn't move in step.
 
 The rig is a `@tool` script, so you can drop a `CharacterRig` node into any scene, set
 `look_id`, and see the character in the editor.
@@ -126,15 +142,16 @@ spine, chest, head, arms and legs. `play_state("KO")` switches to it (turn off w
 These names are the contract with gameplay. Real art must keep them.
 
 - **Facing** is -Z. The origin is on the floor between the feet. 1.0 scale is about 1.78 m.
-- **Animations** (`CharacterRig.ANIMATIONS`): `idle`, `walk`, `punch_l`, `punch_r`, `kick`,
+- **Animations** (`CharacterRig.ANIMATIONS`): `idle`, `walk`, `idle_relaxed`, `idle_pint`,
+  `idle_chat`, `idle_polish`, `walk_relaxed`, `punch_l`, `punch_r`, `kick`,
   `headbutt`, `windup`, `swing`, `throw`, `grab`, `hold`, `held_struggle`, `hit_front`,
   `hit_back`, `stagger`, `knockdown`, `down`, `get_up`, `crawl`, `ko`, `drink`, `eat`,
-  `dodge`, `cheer`, `taunt`.
+  `dodge`, `cheer`, `taunt`, `block`, `hook_l`, `uppercut_r`.
 - **Fighter states** map one to one (`CharacterRig.STATE_ANIMS`):
 
   | State | Animation | Notes |
   | --- | --- | --- |
-  | IDLE | `idle` or `walk` | Picked from `set_move_speed` |
+  | IDLE | a calm idle, `idle` or a walk | Picked from `set_move_speed`, guard, talking and staff |
   | ATTACK | `punch_r` | Use `play_move()` for the actual move |
   | WINDUP | `windup` | The big telegraphed haymaker. Holds on the last frame. Counter window |
   | STAGGER | `stagger` | |

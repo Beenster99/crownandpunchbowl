@@ -14,6 +14,11 @@ const SHOTS := [
 	["ragdoll", 2.5, true, true],
 	["ragdoll", 0.0, false, true],
 	["idle", 0.6, false, false],
+	["idle_relaxed", 1.2, true, false],
+	["idle_pint", 3.2, true, false],
+	["idle_chat", 0.9, true, false],
+	["idle_polish", 0.5, true, false],
+	["walk_relaxed", 0.3, true, false],
 ]
 
 

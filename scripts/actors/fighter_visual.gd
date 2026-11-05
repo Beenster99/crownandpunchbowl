@@ -58,11 +58,15 @@ func _ready() -> void:
 	rig.name = "Rig"
 	rig.look = look_for(fighter)
 	rig.look_seed = String(fighter.name).trim_prefix("N").to_int()
+	# Before add_child, so the rig starts in the right idle.
+	rig.staff = fighter.team == Fighter.Team.STAFF or String(fighter.get("kind") if "kind" in fighter else "") == "staff"
 	add_child(rig)
-	for placeholder in ["Body", "Facing"]:
-		var n := fighter.get_node_or_null(placeholder) as Node3D
-		if n:
-			n.visible = false
+	var body := fighter.get_node_or_null("Body") as Node3D
+	if body:
+		body.visible = false  # kept: hands.gd and npc.gd still read it
+	var facing := fighter.get_node_or_null("Facing")
+	if facing:
+		facing.queue_free()  # the grey placeholder nose; it floated in front of the face
 	fighter.state_changed.connect(_on_state_changed)
 	fighter.move_started.connect(_on_move_started)
 	fighter.hit_taken.connect(_on_hit_taken)
@@ -80,6 +84,22 @@ func _process(_delta: float) -> void:
 		_play_state(fighter.state)
 	if fighter.max_hp > 0.0:
 		rig.set_blood(clampf(1.0 - fighter.hp / fighter.max_hp, 0.0, 1.0) * 1.1 - 0.1)
+	rig.set_guard(_wants_guard())
+	var partner: Variant = fighter.get("chatting_with") if "chatting_with" in fighter else null
+	rig.set_talking(partner != null and is_instance_valid(partner))
+
+
+## Calm people stand relaxed (hands down, pint, chatting); the fists only come up when
+## there's trouble: the fighter is in a fighting stance (Fighter.in_stance, which every
+## peer works out from the combat RPCs), or an NPC's AI mood is past CALM. Staff never
+## square up.
+func _wants_guard() -> bool:
+	if rig.staff:
+		return false
+	if bool(fighter.get("in_stance")):
+		return true
+	return "mood" in fighter and int(fighter.get("mood")) != 0  # Npc.Mood.CALM
+
 
 
 func head_position() -> Vector3:

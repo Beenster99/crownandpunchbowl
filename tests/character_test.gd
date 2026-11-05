@@ -14,6 +14,7 @@ func _initialize() -> void:
 	_check_crowd_variation()
 	_check_state_and_move_mapping()
 	_check_lying_down()
+	_check_calm_and_guard()
 	await _check_ragdoll()
 	if _failures == 0:
 		print("CHARACTERS OK: %d looks, %d animations" % [CharacterLooks.all_ids().size(), CharacterRig.ANIMATIONS.size()])
@@ -111,6 +112,40 @@ func _check_state_and_move_mapping() -> void:
 	if rig.current != &"walk":
 		_fail("moving should walk, got %s" % rig.current)
 	rig.queue_free()
+
+
+## Nobody stands about with their fists up: calm idles until the guard goes up.
+func _check_calm_and_guard() -> void:
+	var rig := CharacterRig.new()
+	rig.look_id = "local"
+	rig.look_seed = 4
+	root.add_child(rig)
+	if not CharacterRig.CALM_IDLES.has(rig.current):
+		_fail("a fresh character should stand relaxed, got %s" % rig.current)
+	rig.set_talking(true)
+	if rig.current != &"idle_chat":
+		_fail("chatting should gesture, got %s" % rig.current)
+	rig.set_guard(true)
+	if rig.current != &"idle":
+		_fail("guard up should raise the fists, got %s" % rig.current)
+	rig.set_move_speed(3.0)
+	if rig.current != &"walk":
+		_fail("guarded walk expected, got %s" % rig.current)
+	rig.set_guard(false)
+	if rig.current != &"walk_relaxed":
+		_fail("calm walk expected, got %s" % rig.current)
+	rig.set_move_speed(0.0)
+	rig.set_talking(false)
+	if not CharacterRig.CALM_IDLES.has(rig.current):
+		_fail("should settle back to a calm idle, got %s" % rig.current)
+	rig.queue_free()
+	var barman := CharacterRig.new()
+	barman.look_id = "barman"
+	barman.staff = true
+	root.add_child(barman)
+	if barman.current != &"idle_polish":
+		_fail("bar staff should polish glasses, got %s" % barman.current)
+	barman.queue_free()
 
 
 func _check_lying_down() -> void:
