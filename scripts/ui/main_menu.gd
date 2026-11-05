@@ -39,10 +39,18 @@ func _ready() -> void:
 	box.add_child(_difficulty)
 
 	_button(box, "Play solo (test pub)", _on_solo)
-	_button(box, "Host co-op", Callable(), true)
-	_button(box, "Join co-op", Callable(), true)
+	_button(box, "Host co-op", _open_lobby.bind("host"))
+	_button(box, "Join co-op", _open_lobby.bind("join"))
 	_button(box, "Settings", Callable(), true)
 	_button(box, "Quit", get_tree().quit)
+
+	if Net.last_error != "":
+		var err := Label.new()
+		err.text = Net.last_error
+		err.add_theme_color_override("font_color", Color("e06c4c"))
+		err.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(err)
+		Net.last_error = ""
 
 
 func _button(parent: Control, text: String, cb: Callable, disabled := false) -> void:
@@ -59,4 +67,15 @@ func _on_solo() -> void:
 	GameData.current_pub_index = _pub.selected
 	GameData.difficulty_index = _difficulty.selected
 	Net.start_solo("Player", 0)
-	get_tree().change_scene_to_file(GameData.current_pub()["scene"])
+	Net.start_game()
+
+
+func _open_lobby(mode: String) -> void:
+	var lobby: Control = preload("res://scripts/net/lobby_screen.gd").new()
+	lobby.name = "Lobby"
+	lobby.mode = mode
+	lobby.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var tree := get_tree()
+	tree.root.add_child(lobby)
+	tree.current_scene = lobby
+	queue_free()
