@@ -17,6 +17,7 @@ Events="*res://scripts/autoload/events.gd"
 GameData="*res://scripts/autoload/game_data.gd"
 Settings="*res://scripts/autoload/settings.gd"
 Net="*res://scripts/autoload/net.gd"
+Fx="*res://scripts/fx/fx_director.gd"
 
 [display]
 
