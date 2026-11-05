@@ -3,7 +3,8 @@ extends SceneTree
 ## or by hand: one process with `-- host`, another with `-- client`.
 ## Checks: join + lobby sync, host-picked pub/difficulty, synced start, both players
 ## spawned on both peers with the right owners, client movement replicated to the host,
-## pub-to-pub transition, and the host seeing a client drop.
+## networked combat (a client grabs, knees and throws a host-owned punter, and the host
+## sees the hits), pub-to-pub transition, and the host seeing a client drop.
 
 const PORT := 24599
 var net: Node
@@ -43,6 +44,17 @@ func _host() -> bool:
 	if not await _wait(func(): return absf(_player(cid).position.x - 3.0) < 0.05, 10.0):
 		return _fail("host: client movement not replicated (x=%s)" % _player(cid).position.x)
 	_player(1).position.x = -3.0  # client checks this arrives
+	# Networked combat: the client grabs and knees a punter; the host resolves the hits.
+	var hits := []
+	var events := root.get_node("Events")
+	var on_hit := func(info: Dictionary):
+		if info.get("attacker") == _player(cid):
+			hits.append(info)
+	events.hit_landed.connect(on_hit)
+	if not await _wait(func(): return hits.size() > 0, 20.0):
+		return _fail("host: never saw the client's hit land")
+	events.hit_landed.disconnect(on_hit)
+	print("NET host saw client hit %s for %.1f" % [hits[0]["victim"].name, float(hits[0].get("damage", 0.0))])
 	await create_timer(1.0).timeout
 	net.next_pub()
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 10.0):
@@ -74,6 +86,8 @@ func _client() -> bool:
 	me.position.x = 3.0
 	if not await _wait(func(): return absf(_player(1).position.x + 3.0) < 0.05, 10.0):
 		return _fail("client: host movement not replicated")
+	if not await _client_fight(me):
+		return false
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 15.0):
 		return _fail("client: didn't follow the host to the next pub")
 	await create_timer(1.0).timeout
@@ -82,8 +96,43 @@ func _client() -> bool:
 	return true
 
 
+## Grab a host-owned punter, knee it and throw it, checking each step replicates back.
+func _client_fight(me: Node3D) -> bool:
+	if not await _wait(func(): return _punter() != null, 10.0):
+		return _fail("client: no punters replicated")
+	var npc: Node3D = _punter()
+	var hp_before: float = npc.hp
+	for attempt in 5:
+		var dir: Vector3 = Vector3(1, 0, 0)
+		me.global_position = npc.global_position - dir * 0.9
+		me.rotation.y = atan2(-dir.x, -dir.z)
+		await create_timer(0.3).timeout
+		me.request_grab(npc)
+		if await _wait(func(): return me.state == me.State.GRABBING, 1.5):
+			break
+	if me.state != me.State.GRABBING:
+		return _fail("client: grab never took (me %s, npc %s)" % [me.State.keys()[me.state], npc.State.keys()[npc.state]])
+	if not await _wait(func(): return npc.state == npc.State.HELD, 2.0):
+		return _fail("client: punter not shown as held")
+	me.request_attack(&"knee")
+	if not await _wait(func(): return npc.hp < hp_before, 5.0):
+		return _fail("client: knee didn't hurt the punter (hp %s)" % npc.hp)
+	me.request_throw()
+	if not await _wait(func(): return me.state != me.State.GRABBING, 3.0):
+		return _fail("client: throw didn't release the punter")
+	print("NET client grabbed, kneed and threw %s (hp %.0f -> %.0f)" % [npc.name, hp_before, npc.hp])
+	return true
+
+
+func _punter() -> Node3D:
+	for n in get_nodes_in_group("npcs"):
+		if n.is_inside_tree() and not n.is_in_group("staff") and n.state == n.State.IDLE:
+			return n
+	return null
+
+
 func _players_spawned(n: int) -> bool:
-	if current_scene == null or current_scene.name != "TestPub":
+	if current_scene == null or not current_scene.has_node("Actors") or not current_scene.is_node_ready():
 		return false
 	var ps := get_nodes_in_group("players").filter(func(p): return p.is_inside_tree() and not p.is_queued_for_deletion())
 	return ps.size() == n

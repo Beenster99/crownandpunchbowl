@@ -119,7 +119,7 @@ func _target_points() -> PackedVector3Array:
 	if camera == null:
 		return pts
 	for t in camera.targets:
-		if not is_instance_valid(t):
+		if not is_instance_valid(t) or not t.is_inside_tree():
 			continue
 		for h in sample_heights:
 			pts.append(t.global_position + Vector3(0, h, 0))

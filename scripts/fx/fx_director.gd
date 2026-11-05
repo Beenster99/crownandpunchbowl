@@ -231,14 +231,14 @@ func _on_nose_broken(fighter: Node) -> void:
 	var fwd := -f3.global_basis.z
 	play("nose_crunch", head, 2.0)
 	play("blood_splat", head)
-	_later(0.12, say.bind(fighter, "groan", 2))
+	_later(0.12, say.bind(fighter, "groan", 2), fighter)
 	blood.spray(head + fwd * 0.2, fwd + Vector3.DOWN * 0.3, 1.8)
 	blood.add_face_blood(fighter, 0.6)
 	# A nosebleed keeps dripping for a bit.
 	for i in 4:
 		_later(0.6 + i * 0.5, func():
 			if _valid(fighter):
-				blood.floor_decal(head_position(fighter) + fwd * 0.15, randf_range(0.12, 0.22), "splat"))
+				blood.floor_decal(head_position(fighter) + fwd * 0.15, randf_range(0.12, 0.22), "splat"), fighter)
 	hit_stop(hit_stop_nose)
 	shake(shake_nose)
 
@@ -273,7 +273,7 @@ func _on_knocked_out(fighter: Node) -> void:
 	if blood.face_blood(fighter) > 0.2:
 		_later(0.5, func():
 			if _valid(fighter):
-				blood.pool(head_position(fighter) + Vector3.DOWN * 1.0))
+				blood.pool(head_position(fighter) + Vector3.DOWN * 1.0), fighter)
 	shake(shake_heavy)
 	var now := Time.get_ticks_msec() / 1000.0
 	_knocked_out[id] = {"fighter": fighter, "next": now + randf_range(ko_moan_every.x, ko_moan_every.y)}
@@ -299,7 +299,7 @@ func _on_drink(player: Node) -> void:
 	if not _valid(player):
 		return
 	play("gulp", head_position(player))
-	_later(0.75, say.bind(player, "ahh", 0))
+	_later(0.75, say.bind(player, "ahh", 0), player)
 
 
 func _on_food(player: Node) -> void:
@@ -403,5 +403,10 @@ func _is_local_player(n: Variant) -> bool:
 	return _valid(n) and (n as Node).is_in_group("players") and (n as Node).is_multiplayer_authority()
 
 
-func _later(seconds: float, fn: Callable) -> void:
-	get_tree().create_timer(seconds, false).timeout.connect(fn)
+## Run `fn` after `seconds`. If `subject` is given and has been freed by then, skip it
+## (calling a callable that captured or bound a freed node logs an error).
+func _later(seconds: float, fn: Callable, subject: Object = null) -> void:
+	var ref: WeakRef = weakref(subject) if subject != null else null
+	get_tree().create_timer(seconds, false).timeout.connect(func():
+		if ref == null or ref.get_ref() != null:
+			fn.call())

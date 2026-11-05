@@ -131,6 +131,8 @@ func _spawn_npc(data: Variant) -> Node:
 	npc.home = data["home"]
 	npc.director = self
 	npc.set_multiplayer_authority(1)
+	# Net frees this group before a pub change so the despawns reach clients first.
+	npc.add_to_group(&"net_spawned")
 	# The networking workstream's NetSync adds position/state synchronisers when present.
 	var net_sync: Variant = _global_class(&"NetSync")
 	if net_sync != null:

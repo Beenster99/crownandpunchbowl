@@ -109,9 +109,8 @@ func _ready() -> void:
 	camera.snap()
 	var pub := GameData.current_pub()
 	Events.banner.emit("%s  ·  %s" % [pub["name"], pub["era"]], arrival_time)
-	get_tree().create_timer(arrival_time).timeout.connect(func():
-		if phase == Phase.ARRIVING:
-			_set_phase(Phase.CALM))
+	# Bound methods (not lambdas) so the timers drop silently if the pub is freed first.
+	get_tree().create_timer(arrival_time).timeout.connect(_on_arrived)
 	# Tell the host this peer has the pub loaded; it spawns players (and the crowd)
 	# once every peer has.
 	Net.level_ready()
@@ -241,13 +240,25 @@ func _on_pub_cleared(_id: String) -> void:
 		return
 	if GameData.crawl_finished():
 		_announce.rpc("Every pub in the village is yours. Time, gentlemen, please!", clear_delay)
-		get_tree().create_timer(clear_delay).timeout.connect(func(): _back_to_menu.rpc())
+		get_tree().create_timer(clear_delay).timeout.connect(_finish_crawl)
 		return
 	var next := GameData.next_pub_index()
 	_announce.rpc("%s is cleared. On to %s!" % [GameData.current_pub()["name"], GameData.PUBS[next]["name"]], clear_delay)
-	get_tree().create_timer(clear_delay).timeout.connect(func():
-		_sync_cleared.rpc(GameData.pubs_cleared)
-		Net.next_pub())
+	get_tree().create_timer(clear_delay).timeout.connect(_go_to_next_pub)
+
+
+func _on_arrived() -> void:
+	if phase == Phase.ARRIVING:
+		_set_phase(Phase.CALM)
+
+
+func _finish_crawl() -> void:
+	_back_to_menu.rpc()
+
+
+func _go_to_next_pub() -> void:
+	_sync_cleared.rpc(GameData.pubs_cleared)
+	Net.next_pub()
 
 
 func _on_all_players_down() -> void:
