@@ -18,6 +18,10 @@ signal fighter_got_up(fighter: Node)
 signal attack_telegraphed(attacker: Node, target: Node, seconds: float)
 ## `defender` countered `attacker`'s tell.
 signal attack_countered(defender: Node, attacker: Node)
+## `fighter` was thrown over a railing or off an open edge.
+signal fighter_thrown_off_ledge(fighter: Node, thrower: Node, railing: bool)
+## `fighter` landed after falling `height` metres (only falls that hurt).
+signal fighter_fell(fighter: Node, height: float)
 signal nose_broken(fighter: Node)
 signal grab_started(holder: Node, victim: Node)
 signal grab_ended(holder: Node, victim: Node)

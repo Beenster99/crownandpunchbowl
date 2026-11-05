@@ -16,9 +16,11 @@ func run() -> void:
 		"test_staff_never_ko", "test_no_friendly_fire", "test_heal_gets_up_from_crawl",
 		"test_ground_moves", "test_weapon_hooks", "test_player_punch_chain",
 		"test_player_finisher_and_combo", "test_player_kick_stomps", "test_player_input",
-		"test_sparring_punter", "test_sandbox_loads",
+		"test_sparring_punter", "test_sandbox_loads", "test_throw_over_railing",
+		"test_throw_off_open_edge", "test_throw_away_from_edge", "test_short_drop_no_damage",
 	]
 	for t in tests:
+		print("  ", t)
 		_arena = Node3D.new()
 		add_child(_arena)
 		_floor()
@@ -197,14 +199,19 @@ func test_dodge_iframes() -> void:
 
 
 func test_staff_never_ko() -> void:
-	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0))
-	var s := _fighter(Fighter.Team.STAFF, Vector3(0, 0, -1.2))
-	s.can_be_knocked_out = false
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var s := _fighter(Fighter.Team.STAFF, Vector3(0, 0, -1.0))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, 1.0), Vector3(0, 0, -1))
 	await _wait(0.1)
-	_check(not p.is_hostile_to(s), "staff are not targeting enemies")
-	_check(p.can_hit(s), "players can still hit staff on purpose")
+	_check(not p.is_hostile_to(s) and not e.is_hostile_to(s), "staff are nobody's enemy")
+	_check(not p.can_hit(s) and not e.can_hit(s), "nobody can hit the staff")
+	_check(not s.can_be_grabbed(), "staff can't be grabbed")
 	s.take_hit({"attacker": p, "damage": 500.0, "direction": Vector3.FORWARD})
-	_check(s.state == Fighter.State.DOWN and s.hp >= 1.0, "staff go down but not out")
+	_check(is_equal_approx(s.hp, s.max_hp) and s.state == Fighter.State.IDLE,
+		"take_hit on staff does nothing")
+	p.request_attack(&"hook", s)
+	await _wait(0.5)
+	_check(is_equal_approx(s.hp, s.max_hp), "swinging at the barman passes through him")
 
 
 func test_no_friendly_fire() -> void:
@@ -373,14 +380,19 @@ func test_sparring_punter() -> void:
 	_check(not far.angry, "punters across the room stay calm")
 	await _wait(4.0)
 	_check(p.hp < p.max_hp, "angry punters fight back")
+	# Calm everyone and wait for the player to be back on their feet before grabbing.
 	var victim := mate
+	e.angry = false
+	mate.angry = false
+	e.global_position = Vector3(-10, 0, 0)
+	var waited := 0.0
+	while not (p.can_act() and victim.can_be_grabbed()) and waited < 4.0:
+		await get_tree().physics_frame
+		waited += 1.0 / 60.0
 	p.global_position = victim.global_position + Vector3(0, 0, 1.0)
 	p.rotation.y = 0.0
-	e.angry = false
-	e.global_position = Vector3(-10, 0, 0)
 	await _wait(0.05)
-	if p.can_act():
-		p.request_grab(victim)
+	p.request_grab(victim)
 	_check(victim.state == Fighter.State.HELD, "can hold a sparring punter")
 	await _wait(2.0)
 	_check(victim.state == Fighter.State.HELD, "the hold lasts long enough for a mate to get stuck in")
@@ -395,3 +407,92 @@ func test_sandbox_loads() -> void:
 	_check(get_tree().get_nodes_in_group("players").size() == 1, "sandbox spawns the player")
 	_check(get_tree().get_nodes_in_group("npcs").size() == 4, "sandbox spawns 4 punters")
 	Net.leave()
+
+
+## A 2.5 m gallery over z in [-6, -1], edge facing +Z, optionally railed.
+func _gallery(railing: bool, height := 2.5) -> void:
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	shape.shape = BoxShape3D.new()
+	shape.shape.size = Vector3(6, 0.3, 5)
+	body.add_child(shape)
+	body.position = Vector3(0, height - 0.15, -3.5)
+	_arena.add_child(body)
+	if railing:
+		var rail := StaticBody3D.new()
+		var rs := CollisionShape3D.new()
+		rs.shape = BoxShape3D.new()
+		rs.shape.size = Vector3(6, 0.95, 0.1)
+		rail.add_child(rs)
+		rail.position = Vector3(0, height + 0.475, -1.05)
+		_arena.add_child(rail)
+	for x in [-1.5, 0.0, 1.5]:
+		var m := Marker3D.new()
+		m.add_to_group(Ledges.GROUP)
+		m.position = Vector3(x, height, -1.3)
+		m.set_meta("normal", Vector3(0, 0, 1))
+		m.set_meta("drop", height)
+		m.set_meta("railing", railing)
+		_arena.add_child(m)
+
+
+func _throw_from_gallery(railing: bool, face := Vector3(0, 0, 1)) -> Array:
+	_gallery(railing)
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 2.6, -3.2), Vector3(0, 2.6, -3.2) + face)
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 2.6, -3.2) + face * 0.9)
+	await _wait(0.3)
+	var events := []
+	var cb_off := func(f, _t, r): events.append(["off", f, r])
+	var cb_fell := func(f, h): events.append(["fell", f, h])
+	Events.fighter_thrown_off_ledge.connect(cb_off)
+	Events.fighter_fell.connect(cb_fell)
+	p.request_grab(e)
+	_check(e.state == Fighter.State.HELD, "grabbed on the gallery")
+	await _wait(0.1)
+	p.request_throw()
+	await _wait(1.5)
+	Events.fighter_thrown_off_ledge.disconnect(cb_off)
+	Events.fighter_fell.disconnect(cb_fell)
+	return [p, e, events]
+
+
+func test_throw_over_railing() -> void:
+	var r: Array = await _throw_from_gallery(true)
+	var e: Fighter = r[1]
+	var events: Array = r[2]
+	_check(e.global_position.y < 0.3, "thrown over the rail to the floor (y %.2f)" % e.global_position.y)
+	_check(e.global_position.z > -0.5, "landed beyond the edge (z %.2f)" % e.global_position.z)
+	var fall_dmg := (2.5 - Moves.FALL_MIN_HEIGHT) * Moves.FALL_DAMAGE_PER_M
+	_check(e.hp <= e.max_hp - 8.0 - fall_dmg + 1.5, "throw plus fall damage (hp %.1f)" % e.hp)
+	_check(e.is_down(), "knocked down on landing")
+	_check(events.size() >= 2 and events[0][0] == "off" and events[0][2] == true, "thrown-off event, railed")
+	_check(events.any(func(ev): return ev[0] == "fell"), "fell event")
+	_check(e.collision_mask == 7, "world collision restored after the vault")
+
+
+func test_throw_off_open_edge() -> void:
+	var r: Array = await _throw_from_gallery(false)
+	var e: Fighter = r[1]
+	var events: Array = r[2]
+	_check(e.global_position.y < 0.3, "thrown off the open edge (y %.2f)" % e.global_position.y)
+	_check(events.size() >= 1 and events[0][2] == false, "thrown-off event, open edge")
+	_check(e.hp < e.max_hp - 8.0, "fall hurts")
+
+
+func test_throw_away_from_edge() -> void:
+	var r: Array = await _throw_from_gallery(true, Vector3(0, 0, -1))
+	var e: Fighter = r[1]
+	var events: Array = r[2]
+	_check(e.global_position.y > 2.0, "throwing away from the edge stays on the gallery")
+	_check(events.is_empty(), "no ledge events")
+
+
+func test_short_drop_no_damage() -> void:
+	_gallery(false, 0.6)  # a dais
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0.7, -1.5))
+	await _wait(0.2)
+	e.move_input = Vector3(0, 0, 1)
+	await _wait(1.0)
+	e.move_input = Vector3.ZERO
+	_check(e.global_position.y < 0.2, "walked off the dais")
+	_check(is_equal_approx(e.hp, e.max_hp), "short drops don't hurt")
