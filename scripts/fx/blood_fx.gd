@@ -16,10 +16,16 @@ const FACE_DECAL_NAME := "FxFaceBlood"
 @export var drop_radius := 0.03
 @export var face_decal_size := 0.55
 @export var floor_splat_size := Vector2(0.25, 0.6)
+@export_group("Clean hit burst")
+@export var mist_drops := 70  ## fine droplets off the face, per unit of intensity
+@export var mist_radius := 0.011
+@export var mist_speed := Vector2(3.0, 6.5)
+@export var burst_splats := 3  ## far-flung floor splats, per unit of intensity
 
 var _decals: Array = []  # untyped: entries may already be freed
 var _textures := {}
 var _drop_mesh: SphereMesh
+var _mist_mesh: SphereMesh
 
 
 func _ready() -> void:
@@ -33,10 +39,17 @@ func _ready() -> void:
 	mat.roughness = 0.25
 	mat.metallic_specular = 0.8
 	_drop_mesh.material = mat
+	_mist_mesh = SphereMesh.new()
+	_mist_mesh.radius = mist_radius
+	_mist_mesh.height = mist_radius * 2.0
+	_mist_mesh.radial_segments = 4
+	_mist_mesh.rings = 2
+	_mist_mesh.material = mat
 	_textures["splat"] = _make_texture(6, 0.2, 22, 1.0, 11)
 	_textures["smear"] = _make_texture(5, 0.17, 6, 2.5, 23)
 	_textures["pool"] = _make_texture(8, 0.22, 8, 1.0, 37)
 	_textures["face"] = _make_texture(10, 0.15, 30, 1.0, 51)
+	_textures["drops"] = _make_texture(1, 0.05, 70, 1.0, 67)  # a scatter of fine dots
 
 
 static func level() -> int:
@@ -89,6 +102,47 @@ func spray(pos: Vector3, dir: Vector3, intensity: float) -> void:
 		var at := pos + flat * randf_range(0.3, 1.4) + Vector3(randf_range(-0.3, 0.3), 0, randf_range(-0.3, 0.3))
 		var size := randf_range(floor_splat_size.x, floor_splat_size.y) * (0.6 + 0.3 * intensity)
 		_later(randf_range(0.25, 0.45), floor_decal.bind(at, size, "splat"))
+
+
+## A proper connect: a fine mist of droplets off the face plus chunky drops, landing as
+## splats and a scatter of dots further along the punch. `dir` is the way the punch went.
+func face_burst(head: Vector3, dir: Vector3, intensity: float) -> void:
+	if not enabled() or intensity <= 0.0:
+		return
+	var parent := _scene()
+	if parent == null:
+		return
+	var extra := 1.6 if level() >= 2 else 1.0
+	var d := dir.normalized() if dir.length() > 0.01 else Vector3.FORWARD
+	var mist := CPUParticles3D.new()
+	mist.emitting = false  # emit only once it is in place
+	mist.one_shot = true
+	mist.explosiveness = 0.95
+	mist.amount = maxi(12, int(mist_drops * intensity * extra))
+	mist.lifetime = 0.5
+	mist.mesh = _mist_mesh
+	mist.direction = (d + Vector3.UP * 0.35).normalized()
+	mist.spread = 34.0
+	mist.initial_velocity_min = mist_speed.x
+	mist.initial_velocity_max = mist_speed.y * (0.8 + 0.2 * intensity)
+	mist.gravity = Vector3(0, -9.0, 0)
+	mist.damping_min = 2.0
+	mist.damping_max = 4.0
+	mist.scale_amount_min = 0.5
+	mist.scale_amount_max = 1.4
+	mist.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	mist.emission_sphere_radius = 0.06
+	parent.add_child(mist)
+	mist.global_position = head
+	mist.restart()
+	get_tree().create_timer(mist.lifetime + 0.5, false).timeout.connect(mist.queue_free)
+	spray(head, d, intensity * 0.9)
+	var flat := Vector3(d.x, 0.0, d.z).normalized()
+	for i in clampi(int(round(burst_splats * intensity * extra)), 1, 8):
+		var at := head + flat * randf_range(0.8, 2.2) + Vector3(randf_range(-0.4, 0.4), 0, randf_range(-0.4, 0.4))
+		var big := randf() < 0.4
+		var size := randf_range(0.35, 0.8) if big else randf_range(0.5, 1.0)
+		_later(randf_range(0.3, 0.55), floor_decal.bind(at, size, "splat" if big else "drops"))
 
 
 ## A flat blood mark on the floor below `pos`. Floors are flat, so these are textured quads

@@ -330,7 +330,10 @@ func _voice(who: Node3D, line_key: String, text: String) -> void:
 	if voice_mode == VoiceMode.SILENT or DisplayServer.get_name() == "headless":
 		return
 	var stream: AudioStream = null
-	var path := ChatterLines.voice_path(line_key)
+	# Recorded voices (see VoiceCast), then a single-file recording, then TTS or the murmur.
+	var path := VoiceCast.chatter_path(line_key, who)
+	if path == "":
+		path = ChatterLines.voice_path(line_key)
 	if ResourceLoader.exists(path):
 		stream = load(path)
 	elif voice_mode == VoiceMode.TTS and _tts_ok():
@@ -348,7 +351,9 @@ func _voice(who: Node3D, line_key: String, text: String) -> void:
 	player.volume_db = voice_db
 	player.max_distance = voice_range
 	player.unit_size = 3.0
-	player.pitch_scale = 1.0 + (hash(String(who.name)) % 9 - 4) * 0.015
+	# Wider spread than a single voice needs, so two second-homers sharing one recorded
+	# voice still sound like two people.
+	player.pitch_scale = 1.0 + (absi(hash(String(who.name))) % 9 - 4) * 0.025
 	player.stream = stream
 	player.play()
 
@@ -356,12 +361,7 @@ func _voice(who: Node3D, line_key: String, text: String) -> void:
 ## "m" or "f". Uses the fighter's `voice` property or meta if it has one (the FX workstream's
 ## convention), else picks one from the name so it stays the same all night.
 func _voice_of(who: Node) -> String:
-	var v: Variant = who.get("voice")
-	if v == null and who.has_meta("voice"):
-		v = who.get_meta("voice")
-	if v is String and v != "":
-		return v
-	return "f" if hash(String(who.name)) % 2 == 0 else "m"
+	return VoiceCast.sex(who)
 
 
 func _tts_ok() -> bool:
