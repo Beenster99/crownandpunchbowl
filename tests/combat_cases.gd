@@ -14,7 +14,9 @@ func run() -> void:
 		"test_jab_hits_and_lunges", "test_held_takes_bonus_damage", "test_counter",
 		"test_knockdown_crawl_ko", "test_grab_escape_and_throw", "test_dodge_iframes",
 		"test_staff_never_ko", "test_no_friendly_fire", "test_heal_gets_up_from_crawl",
-		"test_ground_moves", "test_weapon_hooks",
+		"test_ground_moves", "test_weapon_hooks", "test_player_punch_chain",
+		"test_player_finisher_and_combo", "test_player_kick_stomps", "test_player_input",
+		"test_sparring_punter", "test_sandbox_loads",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -40,8 +42,8 @@ func _floor() -> void:
 	_arena.add_child(body)
 
 
-func _fighter(team: int, pos: Vector3, face_toward := Vector3.INF) -> Fighter:
-	var f := Fighter.new()
+func _fighter(team: int, pos: Vector3, face_toward := Vector3.INF, script: GDScript = null) -> Fighter:
+	var f: Fighter = script.new() if script != null else Fighter.new()
 	f.team = team
 	f.collision_layer = 2 if team == Fighter.Team.PLAYERS else 4
 	f.collision_mask = 7
@@ -268,3 +270,128 @@ func test_weapon_hooks() -> void:
 	_check(chair.hits == 2, "sweeping weapon hits both (got %d)" % chair.hits)
 	_check(is_equal_approx(a.hp, a.max_hp - 15.0), "weapon modifies damage (hp %.1f)" % a.hp)
 	_check(p.unequip() == chair and p.weapon == null, "unequip returns the item")
+
+
+func _player(pos: Vector3, face_toward := Vector3.INF) -> PlayerFighter:
+	return _fighter(Fighter.Team.PLAYERS, pos, face_toward, PlayerFighter) as PlayerFighter
+
+
+func test_player_punch_chain() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1))
+	e.toughness = 5.0  # don't fall over mid-test
+	await _wait(0.1)
+	var moves := []
+	p.move_started.connect(func(m): moves.append(m))
+	for i in 4:
+		p._perform(&"punch")
+		while not p.can_chain():
+			await get_tree().physics_frame
+	_check(moves == [&"jab", &"cross", &"hook", &"jab"], "punch chain loops (got %s)" % [moves])
+	_check(p.combo == 4, "combo counts hits (got %d)" % p.combo)
+	await _wait(0.6 + 0.3)
+	p._perform(&"punch")
+	_check(moves.back() == &"jab", "chain resets after a pause")
+
+
+func test_player_finisher_and_combo() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1))
+	await _wait(0.1)
+	var combos := []
+	var cb := func(_pl, c): combos.append(c)
+	Events.combo_changed.connect(cb)
+	p._set_combo(Moves.FINISHER_COMBO)
+	_check(p.finisher_ready(), "finisher ready at the threshold")
+	var moves := []
+	p.move_started.connect(func(m): moves.append(m))
+	p._perform(&"punch")
+	_check(moves == [Moves.FINISHER_MOVE], "punch becomes the finisher")
+	await _wait(0.4)
+	_check(e.state == Fighter.State.DOWN, "finisher knocks down")
+	_check(not p.finisher_ready(), "finisher is spent")
+	e.request_attack(&"shove", p)  # take a hit: combo resets
+	await _wait(0.4)
+	e.take_hit({"attacker": null, "damage": 0.0, "direction": Vector3.FORWARD})
+	p.take_hit({"attacker": e, "damage": 3.0, "direction": Vector3.BACK})
+	_check(p.combo == 0, "getting hit resets the combo")
+	await _wait(0.1)
+	p._set_combo(2)
+	await _wait(Moves.COMBO_TIMEOUT + 0.1)
+	_check(p.combo == 0, "combo times out")
+	_check(combos.size() >= 3, "combo_changed fires")
+	Events.combo_changed.disconnect(cb)
+
+
+func test_player_kick_stomps() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2))
+	await _wait(0.1)
+	e.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3.FORWARD, "knockdown": true})
+	var moves := []
+	p.move_started.connect(func(m): moves.append(m))
+	p._perform(&"kick")
+	_check(moves == [&"stomp"], "kick near a downed enemy stomps (got %s)" % [moves])
+
+
+func test_player_input() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
+	await _wait(0.1)
+	Input.action_press("grab")
+	await get_tree().physics_frame
+	Input.action_release("grab")
+	await _wait(0.05)
+	_check(p.state == Fighter.State.GRABBING and e.state == Fighter.State.HELD,
+		"grab button holds (state %d)" % p.state)
+	Input.action_press("punch")
+	await get_tree().physics_frame
+	Input.action_release("punch")
+	await _wait(0.05)
+	_check(e.hp < e.max_hp, "punch while holding knees")
+	Input.action_press("throw")
+	await get_tree().physics_frame
+	Input.action_release("throw")
+	await _wait(0.05)
+	_check(e.state == Fighter.State.DOWN, "throw button throws")
+	Input.action_press("move_right")
+	await _wait(0.3)
+	Input.action_release("move_right")
+	_check(p.global_position.x > 0.5, "stick moves the player")
+
+
+func test_sparring_punter() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.5), Vector3.INF, SparringPunter) as SparringPunter
+	var mate := _fighter(Fighter.Team.PUNTERS, Vector3(1.5, 0, -1.5), Vector3.INF, SparringPunter) as SparringPunter
+	var far := _fighter(Fighter.Team.PUNTERS, Vector3(12, 0, 0), Vector3.INF, SparringPunter) as SparringPunter
+	await _wait(0.1)
+	_check(not e.angry, "punters start calm")
+	p.request_attack(&"jab", e)
+	await _wait(0.4)
+	_check(e.angry and mate.angry, "hitting one angers him and his mate")
+	_check(not far.angry, "punters across the room stay calm")
+	await _wait(4.0)
+	_check(p.hp < p.max_hp, "angry punters fight back")
+	var victim := mate
+	p.global_position = victim.global_position + Vector3(0, 0, 1.0)
+	p.rotation.y = 0.0
+	e.angry = false
+	e.global_position = Vector3(-10, 0, 0)
+	await _wait(0.05)
+	if p.can_act():
+		p.request_grab(victim)
+	_check(victim.state == Fighter.State.HELD, "can hold a sparring punter")
+	await _wait(2.0)
+	_check(victim.state == Fighter.State.HELD, "the hold lasts long enough for a mate to get stuck in")
+	await _wait(1.5)
+	_check(victim.state != Fighter.State.HELD, "held punter struggles free before the grip times out")
+
+
+func test_sandbox_loads() -> void:
+	var sandbox: Node = load("res://scenes/actors/combat_sandbox.tscn").instantiate()
+	_arena.add_child(sandbox)
+	await _wait(0.5)
+	_check(get_tree().get_nodes_in_group("players").size() == 1, "sandbox spawns the player")
+	_check(get_tree().get_nodes_in_group("npcs").size() == 4, "sandbox spawns 4 punters")
+	Net.leave()
