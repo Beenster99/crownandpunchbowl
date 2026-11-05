@@ -11,15 +11,10 @@ extends Node3D
 ## Usage: FighterVisual.attach(fighter). Fighter does this itself in _ready().
 
 const NODE_NAME := "Visual"
-## A player keeps their guard up this long after their last swing or hit taken.
-const GUARD_HOLD := 6.0
-## A player raises their guard when a riled-up NPC is this close.
-const GUARD_RANGE := 4.5
 
 var fighter: Fighter
 var rig: CharacterRig
 var _last_state := -1
-var _last_action := -INF
 
 
 static func attach(f: Fighter) -> FighterVisual:
@@ -94,23 +89,17 @@ func _process(_delta: float) -> void:
 	rig.set_talking(partner != null and is_instance_valid(partner))
 
 
-## Calm people stand relaxed (hands in pockets, pint, chatting); the fists only come up
-## when there's trouble. NPCs follow their AI mood; staff never square up.
+## Calm people stand relaxed (hands down, pint, chatting); the fists only come up when
+## there's trouble: the fighter is in a fighting stance (Fighter.in_stance, which every
+## peer works out from the combat RPCs), or an NPC's AI mood is past CALM. Staff never
+## square up.
 func _wants_guard() -> bool:
 	if rig.staff:
 		return false
-	if "mood" in fighter:
-		return int(fighter.get("mood")) != 0  # Npc.Mood.CALM
-	var now := Time.get_ticks_msec() / 1000.0
-	if now - _last_action < GUARD_HOLD:
+	if bool(fighter.get("in_stance")):
 		return true
-	for node in get_tree().get_nodes_in_group(Fighter.GROUP):
-		if node == fighter or not (node is Fighter) or not ("mood" in node):
-			continue
-		if int(node.get("mood")) != 0 and not node.is_down() \
-				and node.global_position.distance_to(fighter.global_position) < GUARD_RANGE:
-			return true
-	return false
+	return "mood" in fighter and int(fighter.get("mood")) != 0  # Npc.Mood.CALM
+
 
 
 func head_position() -> Vector3:
@@ -138,14 +127,12 @@ func _on_state_changed(_old: Fighter.State, new_state: Fighter.State) -> void:
 
 
 func _on_move_started(move_id: StringName) -> void:
-	_last_action = Time.get_ticks_msec() / 1000.0
 	rig.play_move(String(move_id))
 
 
 func _on_hit_taken(info: Dictionary) -> void:
-	_last_action = Time.get_ticks_msec() / 1000.0
-	if fighter.is_down():
-		return
+	if fighter.is_down() or bool(info.get("blocked", false)) or bool(info.get("parried", false)):
+		return  # a hit taken on the guard keeps the block pose
 	var from_front := true
 	var dir := Vector3.ZERO
 	var a := info.get("attacker") as Node3D

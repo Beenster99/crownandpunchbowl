@@ -92,7 +92,7 @@ rig.look = CharacterLooks.farmer("mags")       # or rig.look_id = "rugby_lad"; r
 add_child(rig)
 
 rig.set_move_speed(velocity.length())          # every frame: switches idle and walk
-rig.set_guard(mood != Npc.Mood.CALM)           # fists up only when there's trouble
+rig.set_guard(in_stance or mood != Npc.Mood.CALM)  # fists up only when there's trouble
 rig.set_talking(chatting_with != null)         # calm chatters gesture
 rig.staff = true                               # before add_child: bar staff polish glasses
 rig.play_move("punch")                         # alternates left and right
@@ -116,9 +116,9 @@ People start relaxed. Standing still, a calm character plays one of the calm idl
 `walk_relaxed`. Only with the guard up do they play the fists-up `idle` and `walk`.
 Any move or hit raises the guard on its own; `set_guard(false)` drops it again.
 
-`FighterVisual` drives this for you: NPCs follow their AI mood (CALM is relaxed, ALERT and
-ENGAGED are guarded; mood is synced so clients match), staff never square up, and players
-keep their guard up for 6 s after a swing or hit, or while a riled-up NPC is within 4.5 m.
+`FighterVisual` drives this for you: the guard is up while the fighter is in a fighting
+stance (`Fighter.in_stance`) or, for NPCs, while their AI mood is ALERT or ENGAGED (mood is
+synced so clients match). Staff never square up.
 Every standing loop starts at a random point so a room doesn't move in step.
 
 The rig is a `@tool` script, so you can drop a `CharacterRig` node into any scene, set
@@ -146,7 +146,7 @@ These names are the contract with gameplay. Real art must keep them.
   `idle_chat`, `idle_polish`, `walk_relaxed`, `punch_l`, `punch_r`, `kick`,
   `headbutt`, `windup`, `swing`, `throw`, `grab`, `hold`, `held_struggle`, `hit_front`,
   `hit_back`, `stagger`, `knockdown`, `down`, `get_up`, `crawl`, `ko`, `drink`, `eat`,
-  `dodge`, `cheer`, `taunt`.
+  `dodge`, `cheer`, `taunt`, `block`, `hook_l`, `uppercut_r`.
 - **Fighter states** map one to one (`CharacterRig.STATE_ANIMS`):
 
   | State | Animation | Notes |

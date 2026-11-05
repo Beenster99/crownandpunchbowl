@@ -10,12 +10,18 @@ var _arena: Node3D
 
 func run() -> void:
 	GameData.difficulty_index = 1  # Session Ale: multipliers of 1.0
+	# Hit-stop runs on real time, and --fixed-fps runs frames much faster than real time,
+	# so a hit-stop would slow whole tests down. Combat timing is what's under test here.
+	var fx := get_node_or_null("/root/Fx")
+	if fx != null and "hit_stop_time_scale" in fx:
+		fx.hit_stop_time_scale = 1.0
 	var tests := [
-		"test_jab_hits_and_lunges", "test_held_takes_bonus_damage", "test_counter",
+		"test_jab_hits_and_lunges", "test_no_snapping_to_far_enemies", "test_held_takes_bonus_damage",
+		"test_counter", "test_guard_breakers", "test_stance", "test_defend_prompt_text",
 		"test_knockdown_crawl_ko", "test_grab_escape_and_throw", "test_dodge_iframes",
 		"test_staff_never_ko", "test_no_friendly_fire", "test_heal_gets_up_from_crawl",
 		"test_ground_moves", "test_weapon_hooks", "test_player_punch_chain",
-		"test_player_finisher_and_combo", "test_player_kick_stomps", "test_player_input",
+		"test_player_combos_and_mashing", "test_player_kick_stomps", "test_player_input",
 		"test_sparring_punter", "test_sandbox_loads", "test_throw_over_railing",
 		"test_throw_off_open_edge", "test_throw_away_from_edge", "test_short_drop_no_damage",
 	]
@@ -79,22 +85,36 @@ func _check(cond: bool, what: String) -> void:
 
 func test_jab_hits_and_lunges() -> void:
 	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -4))
-	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -3.5))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.7))
 	await _wait(0.1)
 	var hits := []
 	p.hit_dealt.connect(func(info): hits.append(info))
 	p.request_attack(&"jab")
 	_check(p.state == Fighter.State.WINDUP, "jab starts a windup")
-	_check(p.target == e, "freeflow picks the enemy in front")
+	_check(p.target == e, "soft lock picks the enemy in front")
 	await _wait(0.6)
-	_check(hits.size() == 1, "jab landed once after lunging (got %d)" % hits.size())
+	_check(hits.size() == 1, "jab steps in a little and lands (got %d)" % hits.size())
 	_check(is_equal_approx(e.hp, e.max_hp - 5.0), "jab did 5 damage (hp %.1f)" % e.hp)
-	_check(p.global_position.distance_to(e.global_position) < 2.0, "player lunged to the enemy")
+
+
+func test_no_snapping_to_far_enemies() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -4))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -3.4))
+	await _wait(0.1)
+	var start := p.global_position
+	p.request_attack(&"jab")
+	await _wait(0.6)
+	_check(p.global_position.distance_to(start) < 0.3,
+		"no lunge across the room (moved %.2f m)" % p.global_position.distance_to(start))
+	_check(is_equal_approx(e.hp, e.max_hp), "the punch whiffs: walk in first")
+	var far := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -5.0))
+	p.request_attack(&"jab")
+	_check(p.target != far, "soft lock doesn't reach across the room")
 
 
 func test_held_takes_bonus_damage() -> void:
 	var holder := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
-	var mate := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -2.6), Vector3(0, 0, 0))
+	var mate := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -2.4), Vector3(0, 0, 0))
 	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
 	await _wait(0.1)
 	holder.request_grab()
@@ -121,23 +141,70 @@ func test_counter() -> void:
 	var cnt_cb := func(d, a): counters.append([d, a])
 	Events.attack_telegraphed.connect(tel_cb)
 	Events.attack_countered.connect(cnt_cb)
+	# Guard up early: the punch is blocked for chip damage.
+	p.request_block(true)
+	_check(p.state == Fighter.State.BLOCK, "block raises the guard")
 	e.request_attack(&"swing", p)
 	_check(telegraphs.size() == 1, "enemy swing is telegraphed")
-	_check(e.is_counterable_by(p), "swing is counterable by its target")
-	await _wait(0.1)
-	p.request_counter()
-	_check(counters.size() == 1, "counter registered")
-	_check(e.state == Fighter.State.STAGGER, "countered enemy is staggered")
-	await _wait(0.8)
-	_check(is_equal_approx(p.hp, p.max_hp), "countered swing never lands")
-	_check(e.hp < e.max_hp, "counter hits back")
+	_check(e.defend_hint() == "block", "a swing is prompted as block")
+	await _wait(0.9)
+	_check(is_equal_approx(p.hp, p.max_hp - 8.0 * Moves.BLOCK_CHIP), "blocked for chip damage (hp %.2f)" % p.hp)
+	_check(p.state == Fighter.State.BLOCK, "the guard holds")
+	_check(counters.is_empty(), "an early block isn't a parry")
+	p.request_block(false)
+	_check(p.state == Fighter.State.IDLE, "guard down")
+	# Raise it just as the punch lands: a parry, and the next punch is a counter.
+	var before := p.hp
+	e.request_attack(&"swing", p)
+	await _wait(e.windup_remaining() - 0.08)
+	p.request_block(true)
+	await _wait(0.2)
+	_check(is_equal_approx(p.hp, before), "parried punch does nothing (hp %.2f)" % p.hp)
+	_check(counters.size() == 1, "parry registered")
+	_check(e.state == Fighter.State.STAGGER, "parried enemy reels")
+	_check(p.has_counter_ready(), "counter ready after a parry")
+	p.request_attack(&"cross", e)
+	await _wait(0.4)
+	_check(is_equal_approx(e.hp, e.max_hp - 7.0 * Moves.COUNTER_BONUS),
+		"counter hits harder (hp %.1f)" % e.hp)
 	Events.attack_telegraphed.disconnect(tel_cb)
 	Events.attack_countered.disconnect(cnt_cb)
-	# Without a counter the swing lands after the telegraph time.
-	await _wait(0.6)
+	# Without a guard the swing lands.
+	await _wait(1.0)
+	before = p.hp
 	e.request_attack(&"swing", p)
 	await _wait(1.0)
-	_check(p.hp < p.max_hp, "uncountered swing lands")
+	_check(p.hp < before, "unguarded swing lands")
+
+
+func test_guard_breakers() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	await _wait(0.1)
+	var broken := []
+	var cb := func(d, _a): broken.append(d)
+	Events.guard_broken.connect(cb)
+	p.request_block(true)
+	e.request_attack(&"haymaker", p)
+	_check(e.defend_hint() == "dodge", "a haymaker is prompted as dodge")
+	await _wait(1.2)
+	_check(broken.size() == 1, "haymaker breaks the guard")
+	_check(p.hp < p.max_hp - 5.0, "guard break hurts (hp %.1f)" % p.hp)
+	Events.guard_broken.disconnect(cb)
+	await _wait(1.0)
+	# Dodging it works.
+	var before := p.hp
+	p.request_block(false)
+	e.request_attack(&"haymaker", p)
+	await _wait(e.windup_remaining() - 0.1)
+	p.request_dodge(Vector3.RIGHT)
+	await _wait(0.5)
+	_check(is_equal_approx(p.hp, before), "dodged the haymaker")
+	# A block only covers the front.
+	await _wait(1.0)
+	p.request_block(true)
+	_check(p.is_blocking_from(p.global_position + p.get_facing()), "a block covers the front")
+	_check(not p.is_blocking_from(p.global_position - p.get_facing()), "a block doesn't cover your back")
 
 
 func test_knockdown_crawl_ko() -> void:
@@ -283,6 +350,25 @@ func _player(pos: Vector3, face_toward := Vector3.INF) -> PlayerFighter:
 	return _fighter(Fighter.Team.PLAYERS, pos, face_toward, PlayerFighter) as PlayerFighter
 
 
+func _tap(p: PlayerFighter, hand: StringName) -> void:
+	p.hand_down(hand)
+	await get_tree().physics_frame
+	p.tick_hands(1.0 / 60.0)
+	p.hand_up(hand)
+
+
+func _hold(p: PlayerFighter, hand: StringName) -> void:
+	p.hand_down(hand)
+	p.tick_hands(Moves.PUNCH_HOLD_TIME + 0.01)
+
+
+func _until_chain(p: PlayerFighter) -> void:
+	var n := 0
+	while not p.can_chain() and n < 120:
+		await get_tree().physics_frame
+		n += 1
+
+
 func test_player_punch_chain() -> void:
 	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
 	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1))
@@ -290,44 +376,109 @@ func test_player_punch_chain() -> void:
 	await _wait(0.1)
 	var moves := []
 	p.move_started.connect(func(m): moves.append(m))
-	for i in 4:
-		p._perform(&"punch")
-		while not p.can_chain():
-			await get_tree().physics_frame
-	_check(moves == [&"jab", &"cross", &"hook", &"jab"], "punch chain loops (got %s)" % [moves])
-	_check(p.combo == 4, "combo counts hits (got %d)" % p.combo)
-	await _wait(0.6 + 0.3)
-	p._perform(&"punch")
-	_check(moves.back() == &"jab", "chain resets after a pause")
+	await _tap(p, &"left")
+	await _wait(0.8)
+	await _tap(p, &"right")
+	await _wait(0.8)
+	_hold(p, &"left")
+	await _wait(0.8)
+	_hold(p, &"right")
+	await _wait(0.8)
+	p.hand_down(&"left")
+	p.hand_down(&"right")
+	await _wait(0.8)
+	_check(moves == [&"jab", &"cross", &"hook", &"uppercut", &"headbutt"],
+		"tap/hold left and right, and both together (got %s)" % [moves])
+	_check(p.combo == 5, "combo counts hits (got %d)" % p.combo)
 
 
-func test_player_finisher_and_combo() -> void:
+func test_player_combos_and_mashing() -> void:
 	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
 	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1))
+	e.toughness = 5.0
+	e.max_hp = 500.0
+	e.hp = 500.0
 	await _wait(0.1)
 	var combos := []
-	var cb := func(_pl, c): combos.append(c)
-	Events.combo_changed.connect(cb)
-	p._set_combo(Moves.FINISHER_COMBO)
-	_check(p.finisher_ready(), "finisher ready at the threshold")
+	var cb := func(_f, n): combos.append(n)
+	Events.combo_performed.connect(cb)
+	# In rhythm: jab, cross, hook.
+	await _tap(p, &"left")
+	await _until_chain(p)
+	await _tap(p, &"right")
+	await _until_chain(p)
+	_hold(p, &"left")
+	await _wait(0.8)
+	_check(combos == ["One-two", "Left, right, goodnight"], "rhythm strings are combos (got %s)" % [combos])
+	var expected := 500.0 - 5.0 - 7.0 * 1.15 - 10.0 * 1.4
+	_check(absf(e.hp - expected) < 0.01, "combos hit harder (hp %.2f, want %.2f)" % [e.hp, expected])
+	# Out of rhythm: no combo.
+	combos.clear()
+	await _wait(1.0)
+	await _tap(p, &"left")
+	await _wait(1.0)
+	await _tap(p, &"right")
+	await _wait(0.8)
+	_check(combos.is_empty(), "a slow one-two isn't a combo")
+	# Mashing during a punch fumbles: the extra presses are lost.
 	var moves := []
 	p.move_started.connect(func(m): moves.append(m))
-	p._perform(&"punch")
-	_check(moves == [Moves.FINISHER_MOVE], "punch becomes the finisher")
-	await _wait(0.4)
-	_check(e.state == Fighter.State.DOWN, "finisher knocks down")
-	_check(not p.finisher_ready(), "finisher is spent")
-	e.request_attack(&"shove", p)  # take a hit: combo resets
-	await _wait(0.4)
-	e.take_hit({"attacker": null, "damage": 0.0, "direction": Vector3.FORWARD})
+	await _wait(1.0)
+	await _tap(p, &"right")
+	for i in 4:
+		await _tap(p, &"left")
+	_check(p._fumble_t > 0.0 and p._history.is_empty(), "mashing fumbles the string")
+	await _wait(0.9)
+	_check(moves == [&"cross"], "mashed presses are dropped (got %s)" % [moves])
+	Events.combo_performed.disconnect(cb)
+	# Combo counter resets when you're hit, and times out.
+	p._set_combo(3)
 	p.take_hit({"attacker": e, "damage": 3.0, "direction": Vector3.BACK})
 	_check(p.combo == 0, "getting hit resets the combo")
-	await _wait(0.1)
+	await _wait(0.6)
 	p._set_combo(2)
 	await _wait(Moves.COMBO_TIMEOUT + 0.1)
 	_check(p.combo == 0, "combo times out")
-	_check(combos.size() >= 3, "combo_changed fires")
-	Events.combo_changed.disconnect(cb)
+
+
+func test_stance() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -2.5), Vector3(0, 0, 0))
+	await _wait(0.2)
+	_check(not p.in_stance, "no stance near a calm punter")
+	e.request_attack(&"shove", p)
+	await _wait(0.05)
+	_check(p.in_stance and p.stance_target == e, "an attacking punter puts you in a stance")
+	await _wait(1.0)
+	Input.action_press("move_right")
+	await _wait(0.5)
+	Input.action_release("move_right")
+	var to := e.global_position - p.global_position
+	to.y = 0.0
+	_check(p.get_facing().angle_to(to.normalized()) < deg_to_rad(25.0), "footwork keeps you facing the foe")
+	_check(p.global_position.x > 0.5, "you can still move round them")
+	await _wait(Moves.STANCE_HOLD + 0.5)
+	_check(not p.in_stance, "stance relaxes when the exchange is over")
+
+
+func test_defend_prompt_text() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	var prompts: Node = load("res://scripts/combat/defend_prompts.gd").new()
+	prompts.player = p
+	p.add_child(prompts)
+	await _wait(0.1)
+	prompts.device = "kb"
+	var kb: String = prompts.prompt_text("block")
+	_check(kb.ends_with("BLOCK") and kb.contains(Settings.action_label("block", "kb")), "kb block prompt: " + kb)
+	if not Settings.has_method("prompt"):
+		prompts.device = "pad"
+		_check(prompts.prompt_text("dodge") == "%s  DODGE" % Settings.action_label("dodge", "pad"),
+			"pad dodge prompt: " + prompts.prompt_text("dodge"))
+	e.request_attack(&"haymaker", p)
+	await _wait(0.05)
+	var label := e.get_children().filter(func(c): return c is Label3D)
+	_check(label.size() == 1 and (label[0] as Label3D).text.ends_with("DODGE"), "prompt over the attacker")
 
 
 func test_player_kick_stomps() -> void:
@@ -351,9 +502,9 @@ func test_player_input() -> void:
 	await _wait(0.05)
 	_check(p.state == Fighter.State.GRABBING and e.state == Fighter.State.HELD,
 		"grab button holds (state %d)" % p.state)
-	Input.action_press("punch")
+	Input.action_press("punch_left")
 	await get_tree().physics_frame
-	Input.action_release("punch")
+	Input.action_release("punch_left")
 	await _wait(0.05)
 	_check(e.hp < e.max_hp, "punch while holding knees")
 	Input.action_press("throw")
@@ -365,6 +516,19 @@ func test_player_input() -> void:
 	await _wait(0.3)
 	Input.action_release("move_right")
 	_check(p.global_position.x > 0.5, "stick moves the player")
+	Input.action_press("block")
+	await _wait(0.05)
+	_check(p.state == Fighter.State.BLOCK, "holding block raises the guard")
+	Input.action_release("block")
+	await _wait(0.05)
+	_check(p.state == Fighter.State.IDLE, "letting go drops it")
+	var moves := []
+	p.move_started.connect(func(m): moves.append(m))
+	Input.action_press("punch_right")
+	await _wait(0.05)
+	Input.action_release("punch_right")
+	await _wait(0.05)
+	_check(moves == [&"cross"], "right punch button throws a cross (got %s)" % [moves])
 
 
 func test_sparring_punter() -> void:

@@ -16,8 +16,12 @@ signal fighter_knocked_out(fighter: Node)
 signal fighter_got_up(fighter: Node)
 ## An enemy started a counterable attack. `seconds` is the counter window.
 signal attack_telegraphed(attacker: Node, target: Node, seconds: float)
-## `defender` countered `attacker`'s tell.
+## `defender` parried `attacker`'s punch with a well-timed block (their next punch counters).
 signal attack_countered(defender: Node, attacker: Node)
+## `defender` was blocking, but a guard breaker (kick, headbutt, haymaker) went through.
+signal guard_broken(defender: Node, attacker: Node)
+## `fighter` threw the last move of a named combo ("One-two", "Counter"...).
+signal combo_performed(fighter: Node, combo_name: String)
 ## `fighter` was thrown over a railing or off an open edge.
 signal fighter_thrown_off_ledge(fighter: Node, thrower: Node, railing: bool)
 ## `fighter` landed after falling `height` metres (only falls that hurt).

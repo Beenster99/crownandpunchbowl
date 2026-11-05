@@ -19,7 +19,7 @@ const ANIMATIONS: Array[StringName] = [
 	&"idle", &"walk", &"punch_l", &"punch_r", &"kick", &"headbutt", &"windup", &"swing",
 	&"throw", &"grab", &"hold", &"held_struggle", &"hit_front", &"hit_back", &"stagger",
 	&"knockdown", &"down", &"get_up", &"crawl", &"ko", &"drink", &"eat", &"dodge",
-	&"cheer", &"taunt",
+	&"cheer", &"taunt", &"block", &"hook_l", &"uppercut_r",
 	# Calm, before anyone kicks off: relaxed stances, a pint, chatting, staff polishing.
 	&"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
 ]
@@ -33,7 +33,7 @@ const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_p
 const STATE_ANIMS := {
 	"idle": &"idle", "attack": &"punch_r", "windup": &"windup", "stagger": &"stagger",
 	"down": &"knockdown", "crawl": &"crawl", "ko": &"ko", "held": &"held_struggle",
-	"grabbing": &"grab", "dodge": &"dodge",
+	"grabbing": &"grab", "dodge": &"dodge", "block": &"block",
 }
 
 ## Move names (as in Events.hit_landed "move") -> animation. "punch" alternates hands.
@@ -42,7 +42,8 @@ const MOVE_ANIMS := {
 	"swing": &"swing", "throw": &"throw", "grab": &"grab", "drink": &"drink", "eat": &"eat",
 	"cheer": &"cheer", "taunt": &"taunt",
 	# Move ids from scripts/combat/moves.gd. Placeholders reuse the nearest animation.
-	"jab": &"punch_l", "cross": &"punch_r", "hook": &"punch_r", "uppercut": &"punch_r",
+	"jab": &"punch_l", "cross": &"punch_r", "hook": &"hook_l", "uppercut": &"uppercut_r",
+	"hook_l": &"hook_l", "uppercut_r": &"uppercut_r",
 	"haymaker": &"punch_r", "counter": &"punch_r", "counter_whiff": &"dodge", "shove": &"punch_l",
 	"knee": &"kick", "stomp": &"kick", "baton": &"swing",
 }
@@ -53,6 +54,7 @@ const CHAINS := {&"knockdown": &"down", &"grab": &"hold"}
 const RETURNS_TO_IDLE: Array[StringName] = [
 	&"punch_l", &"punch_r", &"kick", &"headbutt", &"swing", &"throw", &"hit_front",
 	&"hit_back", &"stagger", &"get_up", &"drink", &"eat", &"dodge", &"cheer", &"taunt",
+	&"hook_l", &"uppercut_r",
 ]
 ## Lying on the floor. Drunken sway is switched off for these.
 const ON_FLOOR: Array[StringName] = [&"knockdown", &"down", &"crawl", &"ko"]
@@ -678,6 +680,29 @@ func _anim_defs() -> Dictionary:
 	]}
 	defs[&"punch_l"] = {"length": 0.42, "keys": [
 		[0.0, guard], [0.08, _mirror(punch_r_load)], [0.16, _mirror(punch_r_hit)], [0.26, _mirror(punch_r_hit)], [0.42, guard],
+	]}
+	# Left hook: load the hip, arm bent at 90 degrees sweeping round at head height.
+	var hook_load := _with(guard, {&"Spine": Vector3(-4, 22, 0), &"ShoulderL": Vector3(50, 0, -40), &"ElbowL": Vector3(95, 0, 0),
+		&"KneeL": Vector3(-20, 0, 0)})
+	var hook_hit := _with(guard, {&"Spine": Vector3(-10, -30, 0), &"Chest": Vector3(0, -12, 0), &"ShoulderL": Vector3(88, -10, -80),
+		&"ElbowL": Vector3(85, 0, 0), &"KneeR": Vector3(-20, 0, 0), &"_hips": Vector3(0, -0.03, -0.04)})
+	defs[&"hook_l"] = {"length": 0.5, "keys": [
+		[0.0, guard], [0.12, hook_load], [0.2, hook_hit], [0.3, hook_hit], [0.5, guard],
+	]}
+	# Right uppercut: dip the knees, then drive up through the chin.
+	var upper_load := _with(guard, {&"Spine": Vector3(-14, -14, 0), &"ShoulderR": Vector3(10, 0, 14), &"ElbowR": Vector3(125, 0, 0),
+		&"KneeL": Vector3(-34, 0, 0), &"KneeR": Vector3(-30, 0, 0), &"_hips": Vector3(0, -0.08, 0)})
+	var upper_hit := _with(guard, {&"Spine": Vector3(6, 18, 0), &"Chest": Vector3(8, 6, 0), &"ShoulderR": Vector3(125, 0, -6),
+		&"ElbowR": Vector3(70, 0, 0), &"Head": Vector3(-8, 0, 0), &"_hips": Vector3(0, 0.02, -0.04)})
+	defs[&"uppercut_r"] = {"length": 0.55, "keys": [
+		[0.0, guard], [0.14, upper_load], [0.22, upper_hit], [0.32, upper_hit], [0.55, guard],
+	]}
+	# Block: forearms up in front of the face, chin tucked.
+	var cover := _with(guard, {&"Spine": Vector3(-12, 0, 0), &"Head": Vector3(-14, 0, 0),
+		&"ShoulderL": Vector3(70, 0, 22), &"ElbowL": Vector3(135, 0, 0),
+		&"ShoulderR": Vector3(70, 0, -22), &"ElbowR": Vector3(135, 0, 0), &"_hips": Vector3(0, -0.03, 0)})
+	defs[&"block"] = {"length": 1.0, "loop": true, "keys": [
+		[0.0, cover], [0.5, _with(cover, {&"Spine": Vector3(-13, 3, 0), &"_hips": Vector3(0, -0.04, 0)})], [1.0, cover],
 	]}
 	var kick_out := _with(guard, {&"Spine": Vector3(18, 0, 0), &"HipR": Vector3(85, 0, 0), &"KneeR": Vector3(-4, 0, 0),
 		&"KneeL": Vector3(-14, 0, 0), &"HipL": Vector3(-4, 0, -5), &"ShoulderL": Vector3(30, 0, -32), &"ElbowL": Vector3(70, 0, 0)})

@@ -18,14 +18,14 @@ func _initialize() -> void:
 
 	# Rebinding swaps a clash rather than leaving an action unbound.
 	settings.reset_binds()
-	var punch_kb: Dictionary = settings.binds["punch"]["kb"].duplicate()
-	var swapped: String = settings.set_bind("kick", "kb", punch_kb)
-	_check(swapped == "punch", "binding kick to punch's button should swap with punch")
-	_check(settings.binding_equals(settings.binds["kick"]["kb"], punch_kb), "kick takes the new binding")
-	_check(settings.binds["punch"]["kb"].has("mouse") and settings.binds["punch"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT,
-		"punch gets kick's old binding")
+	var punch_kb: Dictionary = settings.binds["punch_left"]["kb"].duplicate()
+	var swapped: String = settings.set_bind("punch_right", "kb", punch_kb)
+	_check(swapped == "punch_left", "binding right punch to left punch's button should swap them")
+	_check(settings.binding_equals(settings.binds["punch_right"]["kb"], punch_kb), "right punch takes the new binding")
+	_check(settings.binds["punch_left"]["kb"].has("mouse") and settings.binds["punch_left"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT,
+		"left punch gets right punch's old binding")
 	settings.reset_binds("kb")
-	_check(settings.binds["kick"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT, "reset keyboard binds")
+	_check(settings.binds["punch_right"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT, "reset keyboard binds")
 
 	# Event conversion respects the device column.
 	var key := InputEventKey.new()
@@ -37,8 +37,8 @@ func _initialize() -> void:
 	axis.axis = JOY_AXIS_TRIGGER_LEFT
 	axis.axis_value = 0.9
 	_check(settings.binding_from_event(axis, "pad") == {"axis": JOY_AXIS_TRIGGER_LEFT, "dir": 1}, "trigger -> pad")
-	_check(settings.action_label("punch", "kb") == "Left mouse", "punch label")
-	_check(settings.action_label("grab", "pad") == "LB", "grab pad label")
+	_check(settings.action_label("punch_left", "kb") == "Left mouse", "punch label")
+	_check(settings.action_label("block", "pad") == "LB", "block pad label")
 	_check(settings.action_label("move_up", "pad") == "Left stick up", "stick label")
 	for action in settings.ACTIONS:
 		_check(InputMap.has_action(action), "input action exists: " + action)
