@@ -58,6 +58,8 @@ func _ready() -> void:
 	get_tree().node_added.connect(_on_node_added)
 	for f in get_tree().get_nodes_in_group(Fighter.GROUP):
 		_give_hands(f)
+	if get_node_or_null(InteractPrompt.NODE_NAME) == null:
+		add_child(InteractPrompt.new())  # outlines and button prompts for the local player
 
 
 func _exit_tree() -> void:

@@ -15,7 +15,7 @@ func run() -> void:
 		"test_chair_sweeps_and_breaks", "test_throw_bottle", "test_darts_one_at_a_time",
 		"test_thrown_leg_lands", "test_pint_heals_tipsy_and_leaves_glass", "test_food_heals_over_time",
 		"test_bar_orders", "test_throws_miss_bar_staff", "test_drop_when_knocked_down",
-		"test_poker_never_breaks", "test_handyman_and_seasoned_drinker",
+		"test_poker_never_breaks", "test_handyman_and_seasoned_drinker", "test_prompts_and_highlights",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -329,3 +329,48 @@ func test_handyman_and_seasoned_drinker() -> void:
 	_hands(barrow).request_interact()
 	await _wait(0.05)
 	_check(is_equal_approx(barrow.hp, 74.0), "ale heals Barrow double (hp %.1f)" % barrow.hp)
+
+
+func test_prompts_and_highlights() -> void:
+	var prompt := _items.get_node(InteractPrompt.NODE_NAME) as InteractPrompt
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3.ZERO, Vector3(0, 0, -1))
+	var bottle := _items.add_item(&"bottle", Vector3(0, 0.8, -0.8))
+	var near := _items.add_item(&"chair_leg", Vector3(2.5, 0, 0))
+	var far := _items.add_item(&"poker", Vector3(9, 0, 0))
+	await _wait(0.1)
+	_check(bottle._highlight == 2, "the item in reach gets the strong outline")
+	_check(near._highlight == 1, "items nearby get a faint outline")
+	_check(far._highlight == 0, "far items aren't outlined")
+	_check(prompt._label.visible and prompt._label.text.ends_with("Pick up bottle"),
+		"prompt names the item (%s)" % prompt._label.text)
+	_check(prompt._label.text.begins_with("[%s]" % Settings.action_label("interact", "kb")),
+		"keyboard prompt shows the keyboard key (%s)" % prompt._label.text)
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	pad.pressed = true
+	Input.parse_input_event(pad)
+	await _wait(0.05)
+	_check(prompt._label.text.begins_with("[%s]" % Settings.action_label("interact", "pad")),
+		"after using a controller the prompt shows the button (%s)" % prompt._label.text)
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_W
+	key.pressed = true
+	Input.parse_input_event(key)
+	await _wait(0.05)
+	_check(prompt._label.text.begins_with("[%s]" % Settings.action_label("interact", "kb")),
+		"and back to keyboard")
+	bottle.server_give(p)
+	await _wait(0.05)
+	_check(bottle._highlight == 0, "held items aren't outlined")
+	_check(prompt._held_label.visible and "Throw" in prompt._held_label.text, "holding shows the throw key")
+	var bar := Bar.new()
+	bar.position = Vector3(0, 0, -6)
+	_items.add_child(bar)
+	p.global_position = Vector3(0, 0, -5.2)
+	await _wait(0.05)
+	_check("Order a pint" in prompt._label.text and "Order food" in prompt._label.text,
+		"at the bar it offers drinks and food (%s)" % prompt._label.text)
+	Settings.values["gameplay"]["context_prompts"] = false
+	await _wait(0.05)
+	_check(not prompt._label.visible and not prompt._held_label.visible, "prompts can be turned off")
+	Settings.values["gameplay"]["context_prompts"] = true
