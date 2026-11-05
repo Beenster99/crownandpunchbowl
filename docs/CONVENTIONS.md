@@ -22,7 +22,13 @@ separate PR so other branches can rebase onto it.
 | `scripts/fx/` | Audio playback, blood, hit-stop, shake |
 | `scripts/ui/` | UI scripts |
 | `assets/` | `models/`, `textures/`, `audio/{sfx,voice,music}/`, `fonts/` |
+| `tools/` | Developer scripts that need a renderer (e.g. character capture) |
 | `tests/` | Headless tests (`godot --headless --path . --script res://tests/<name>.gd`) |
+
+## Characters
+Every character is a `CharacterRig` with a `CharacterLook` from `CharacterLooks`. Animation
+names, the Fighter state mapping and sockets are a contract: see [CHARACTERS.md](CHARACTERS.md).
+NPC looks take a seed every peer agrees on (the `N<n>` number) so crowds match on every machine.
 
 ## Code style
 - GDScript with static types where practical. Tabs for indents. `snake_case` files, `PascalCase` `class_name`.
@@ -48,7 +54,7 @@ so they appear in the keybinds screen.
 `consumables`, `camera_occluders`.
 
 ## Physics layers
-1 world · 2 players · 3 npcs · 4 items · 5 hitboxes · 6 hurtboxes.
+1 world · 2 players · 3 npcs · 4 items · 5 hitboxes · 6 hurtboxes · 7 ragdoll (cosmetic bodies; they only collide with the world).
 
 ## Audio buses
 `Master` → `Music`, `SFX`, `Voice` (created by `Settings` at startup). Every sound must use one of these.
@@ -61,6 +67,9 @@ so they appear in the keybinds screen.
 - Gameplay checks use `is_multiplayer_authority()` and `multiplayer.is_server()`, never "is solo".
   Solo runs through `OfflineMultiplayerPeer`, so the same paths are exercised.
 - Spawned node names must be deterministic: players `P<peer_id>`, NPCs `N<n>`, items `I<n>`.
+- Pub scenes call `Net.level_ready()` at the end of `_ready()` and spawn only after
+  `Net.all_peers_loaded`. Replicated nodes join `Net.SPAWNED_GROUP` and use `NetSync.attach()`.
+  Details in [NETWORKING.md](NETWORKING.md).
 - FX (blood, sound) are cosmetic. They're triggered by RPC or synced state and never affect gameplay.
 
 ## Fighter API
@@ -149,3 +158,46 @@ Rules other workstreams rely on:
   Daises and stairs don't hurt.
 - **Nobody hits the bar staff.** Staff (`Team.STAFF`) can't be targeted, grabbed or hit by
   players or NPCs; attacks pass straight through them and `take_hit` ignores them.
+
+## AI and Director
+
+Implemented in `scripts/ai/`: `Npc` (`npc.gd`, extends Fighter), `Director` (`director.gd`) and
+`NpcTypes` (`npc_types.gd`, stats and personality per kind). NPC scene: `scenes/actors/npc.tscn`.
+Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/ai_test.gd`.
+
+- **One Director per pub scene**, in group `director`. It spawns NPCs (named `N<n>`) through its
+  own `MultiplayerSpawner` under `actors`, and thinks on the host only.
+- **Markers.** Pubs place `Marker3D` nodes in groups `npc_door`, `punter_spot` and `staff_spot`.
+- **Kinds:** `second_homer`, `local`, `rugby_lad` (group `npcs`), `police` (`npcs` and `police`),
+  `staff` (`staff` only; nobody hits them and the Director ignores any hit on them).
+- **Moods:** `Npc.Mood.CALM / ALERT / ENGAGED`. Punters engage only when hit, when a mate nearby is
+  hit, in a gang-up, or walking in on a hot fight. They cool off when it goes quiet.
+- **Queries other workstreams use:** `director.heat` (0..1, HUD meter),
+  `director.punters_left()`. Events emitted: `fight_started`, `reinforcements_arrived`,
+  `police_called`, `pub_cleared`, `banner`. `all_players_down` belongs to co-op rules, not the Director.
+
+### Pub chatter
+
+`Chatter` (`scripts/ai/chatter.gd`) is added by the Director as `Director/Chatter` (export
+`chatter`, on by default). While the pub is calm, second-homers pair up with someone standing
+within `talk_distance` and talk at them. Tests:
+`godot --headless --fixed-fps 60 --path . --script res://tests/chatter_test.gd`.
+
+- **Lines** live in `ChatterLines` (`scripts/ai/chatter_lines.gd`): topics with `open`, `reply` and
+  `more` lines, plus shared pools (`reply`, `segue`, `close`, `local`, `interrupt`). A local or rugby
+  lad who gets cornered only answers from `local`. Add new lines at the end of an array so keys stay stable.
+  The joke is always on the speaker, never on whoever they're talking about.
+- **When:** only when `director.heat <= quiet_heat` and nobody has been hit for `resume_after`
+  seconds. Any hit, `fight_started` or `police_called` ends every conversation, and a talker may
+  yelp an `interrupt` line. A talker leaving CALM ends theirs too.
+- **Npc hook:** `Npc.chatting_with` makes a calm NPC stop wandering and face its partner.
+  `engage()` and `alert()` clear it.
+- **Networking:** the host picks speakers and lines and sends `_say` / `_hush` RPCs. Every peer shows
+  the bubble (`ChatterBubble`, a Label3D over the head, hidden when `gameplay/subtitles` is off) and
+  plays the voice on the `Voice` bus. Cosmetic only.
+- **Voice:** a recording at `ChatterLines.voice_path(key)` (e.g.
+  `assets/audio/voice/chatter/dogs_open_03.ogg`, shared lines as `shared_<part>_NN.ogg`) wins.
+  Otherwise `ChatterVoice` plays a synthesised posh murmur, or the OS text-to-speech voice when
+  `voice_mode` is `TTS` and `audio/general/text_to_speech` is enabled. Male or female follows the
+  fighter's `voice` property or meta (`"m"` / `"f"`, the FX convention).
+  `ChatterLines.all_keys()` lists every line for a recording script.
