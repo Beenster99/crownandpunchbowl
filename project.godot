@@ -1,0 +1,43 @@
+; Engine configuration file.
+; Edit through the Godot editor where possible.
+
+config_version=5
+
+[application]
+
+config/name="Crown and Punchbowl"
+config/description="Co-op pub brawler set in a rural English village."
+run/main_scene="res://scenes/main/main_menu.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Events="*res://scripts/autoload/events.gd"
+GameData="*res://scripts/autoload/game_data.gd"
+Settings="*res://scripts/autoload/settings.gd"
+Net="*res://scripts/autoload/net.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="players"
+3d_physics/layer_3="npcs"
+3d_physics/layer_4="items"
+3d_physics/layer_5="hitboxes"
+3d_physics/layer_6="hurtboxes"
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=1
