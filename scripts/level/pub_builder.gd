@@ -456,7 +456,8 @@ func back_bar(centre: Vector3, length: float, facing: Vector3, carved := false) 
 
 ## Fireplace set into a wall. `pos` is the hearth centre on the floor against the wall,
 ## `facing` points into the room. Inglenook = big, walk-in 17th century hearth.
-func fireplace(pos: Vector3, facing: Vector3, kind := "inglenook") -> void:
+## `top` is the world height the chimney breast reaches (defaults to the wall height).
+func fireplace(pos: Vector3, facing: Vector3, kind := "inglenook", top := -1.0) -> void:
 	var along_x := absf(facing.z) > absf(facing.x)
 	var root := Node3D.new()
 	root.name = "Fireplace"
@@ -478,8 +479,9 @@ func fireplace(pos: Vector3, facing: Vector3, kind := "inglenook") -> void:
 		cheek.add_child(cs)
 		root.add_child(cheek)
 		deco(cheek, bs.size, Vector3.ZERO, brick)
-	var breast := deco(root, _flip(along_x, Vector3(w + 1.0, float(style["wall_height"]) - h, d)),
-		_flip(along_x, Vector3(0, (h + float(style["wall_height"])) * 0.5, 0)) + facing * (d * 0.5), brick)
+	var breast_top: float = (float(style["wall_height"]) if top < 0.0 else top) - pos.y
+	var breast := deco(root, _flip(along_x, Vector3(w + 1.0, breast_top - h, d)),
+		_flip(along_x, Vector3(0, (h + breast_top) * 0.5, 0)) + facing * (d * 0.5), brick)
 	breast.add_to_group("camera_occluders")
 	deco(root, _flip(along_x, Vector3(w, h, 0.1)), Vector3(0, h * 0.5, 0) + facing * 0.05, dark)
 	if kind == "inglenook":
@@ -770,3 +772,148 @@ func barrel(pos: Vector3, on_side := false) -> void:
 		cylinder(m, 0.37, 0.05, Vector3(0, y, 0), hoop)
 	if on_side:
 		body.rotation.z = PI * 0.5
+
+
+
+# --- Levels: galleries, platforms and stairs -------------------------------------
+
+## Every flight of stairs built, as {"base": Vector3, "top": Vector3, "dir": Vector3}.
+## Used by tests and handy for AI pathing.
+var stairs_built: Array[Dictionary] = []
+
+const _SIDES := {
+	"front": Vector3.BACK, "back": Vector3.FORWARD, "left": Vector3.LEFT, "right": Vector3.RIGHT,
+}
+
+
+## A raised floor: a gallery, loft, balcony or dais. `rect` is (x, z, width, depth) and
+## `top` is the height of its walking surface.
+## `edges`: the sides that drop off ("front" = +Z, "back" = -Z, "left" = -X, "right" = +X).
+## Sides not listed are against a wall.
+## `rails`: the drop-off sides that get a railing. Railings are waist height, so a
+## fighter can be thrown over them; open sides can be walked or shoved off.
+## `gaps`: [{side, c, w}] breaks in a railing, e.g. at the top of stairs or a deliberate
+## spot to throw someone off.
+## Every drop-off edge gets Ledges markers (see PubLevel.LEDGES).
+func platform(rect: Rect2, top: float, edges: Array = ["front"], rails: Array = [], gaps: Array = [],
+		metal_rails := false) -> Node3D:
+	var root := Node3D.new()
+	root.name = "Gallery" if top > 1.5 else "Dais"
+	world.add_child(root, true)
+	occluder(root)
+	var thick := 0.25 if top > 1.0 else top
+	var centre := Vector3(rect.get_center().x, top - thick * 0.5, rect.get_center().y)
+	var floor_mat := material(style["floor_a"].darkened(0.15)) if top > 1.0 else material(style["timber"].lightened(0.1))
+	var slab := solid(Vector3(rect.size.x, thick, rect.size.y), centre, floor_mat, 0.0, root)
+	slab.name = "Floor"
+	# Boards on top so it reads as a floor, edge beam on drop-off sides.
+	deco(slab, Vector3(rect.size.x, 0.02, rect.size.y), Vector3(0, thick * 0.5 + 0.01, 0), material(style["floor_b"]))
+	var rail_mat := material(Color("1c1c1c"), 0.8, 0.4) if metal_rails else material(style["timber"])
+	for side in edges:
+		var n: Vector3 = _SIDES[side]
+		var along_x := absf(n.z) > 0.5
+		var length := rect.size.x if along_x else rect.size.y
+		var edge_mid := Vector3(centre.x, 0, centre.z) + Vector3(n.x * rect.size.x * 0.5, 0, n.z * rect.size.y * 0.5)
+		if top > 1.0:
+			deco(root, _flip(along_x, Vector3(length, 0.3, 0.18)), edge_mid + Vector3(0, top - 0.15, 0) - n * 0.09, material(style["timber"]))
+		var side_gaps := gaps.filter(func(g): return g["side"] == side)
+		# Supports under the front of a gallery.
+		if top > 1.5:
+			var posts := maxi(1, int(round(length / 3.5)))
+			for i in posts + 1:
+				var a := -length * 0.5 + length * float(i) / float(posts)
+				var at := edge_mid + _flip(along_x, Vector3(a, 0, 0)) - n * 0.15
+				if _in_gaps(a + (edge_mid.x if along_x else edge_mid.z), side_gaps, 0.2):
+					continue
+				solid(Vector3(0.24, top - thick, 0.24), at + Vector3(0, (top - thick) * 0.5, 0), material(style["timber"]), 0.0, root)
+		if rails.has(side):
+			_railing(root, edge_mid, n, along_x, length, top, side_gaps, rail_mat)
+		# Ledge markers every ~1.5 m along the edge.
+		var count := maxi(1, int(length / 1.5))
+		for i in count:
+			var a := -length * 0.5 + length * (float(i) + 0.5) / float(count)
+			var world_a := a + (edge_mid.x if along_x else edge_mid.z)
+			var railed := rails.has(side) and not _in_gaps(world_a, side_gaps, 0.0)
+			marker(PubLevel.LEDGES, edge_mid + _flip(along_x, Vector3(a, 0, 0)) + Vector3(0, top, 0) - n * 0.3,
+				{"normal": n, "drop": top, "railing": railed, "facing": n})
+	return root
+
+
+func _in_gaps(a: float, gaps: Array, pad: float) -> bool:
+	for g in gaps:
+		if absf(a - float(g["c"])) < float(g["w"]) * 0.5 + pad:
+			return true
+	return false
+
+
+func _railing(root: Node3D, edge_mid: Vector3, n: Vector3, along_x: bool, length: float, top: float,
+		gaps: Array, mat: Material) -> void:
+	var h := 0.95
+	var start := (edge_mid.x if along_x else edge_mid.z) - length * 0.5
+	var end := start + length
+	# Split the rail into runs between gaps.
+	var cuts := [[start, end]]
+	for g in gaps:
+		var g0: float = float(g["c"]) - float(g["w"]) * 0.5
+		var g1: float = float(g["c"]) + float(g["w"]) * 0.5
+		var next := []
+		for run in cuts:
+			if g1 <= run[0] or g0 >= run[1]:
+				next.append(run)
+			else:
+				if g0 > run[0]:
+					next.append([run[0], g0])
+				if g1 < run[1]:
+					next.append([g1, run[1]])
+		cuts = next
+	for run in cuts:
+		var r0: float = run[0]
+		var r1: float = run[1]
+		if r1 - r0 < 0.1:
+			continue
+		var mid := (r0 + r1) * 0.5
+		var base := Vector3(mid, top, edge_mid.z) if along_x else Vector3(edge_mid.x, top, mid)
+		base -= n * 0.08
+		var body := solid(_flip(along_x, Vector3(r1 - r0, 0.08, 0.1)), base + Vector3(0, h, 0), mat, 0.0, root, false)
+		# Collision covers the whole height so you can't walk through; it's low enough to throw over.
+		var cs := body.get_child(0) as CollisionShape3D
+		var bs := BoxShape3D.new()
+		bs.size = _flip(along_x, Vector3(r1 - r0, h, 0.1))
+		cs.shape = bs
+		cs.position.y = -h * 0.5
+		deco(body, _flip(along_x, Vector3(r1 - r0, 0.08, 0.12)), Vector3.ZERO, mat)
+		var balusters := maxi(1, int((r1 - r0) / 0.25))
+		for i in balusters + 1:
+			var a := -(r1 - r0) * 0.5 + (r1 - r0) * float(i) / float(balusters)
+			deco(body, Vector3(0.04, h, 0.04), _flip(along_x, Vector3(a, -h * 0.5, 0)), mat)
+
+
+## A straight flight of stairs from `base` (floor level, foot of the stairs) running in
+## `dir` (one of the four axis directions) for `run` metres, climbing `rise`. The
+## collision is a smooth ramp so fighters walk up without snagging; the steps are visual.
+func stairs(base: Vector3, dir: Vector3, run: float, rise: float, width := 1.4) -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "Stairs"
+	root.collision_layer = 1
+	root.collision_mask = 0
+	root.position = base
+	world.add_child(root, true)
+	var side := Vector3(-dir.z, 0, dir.x) * (width * 0.5)
+	var far := dir * run
+	var up := Vector3(0, rise, 0)
+	var shape := ConvexPolygonShape3D.new()
+	shape.points = PackedVector3Array([side, -side, far + side, far - side, far + up + side, far + up - side])
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	root.add_child(cs)
+	var steps := maxi(2, int(round(rise / 0.2)))
+	var tread := run / float(steps)
+	var step_rise := rise / float(steps)
+	var along_x := absf(dir.x) > 0.5
+	var wood := material(style["timber"].lightened(0.15))
+	for i in steps:
+		var h := step_rise * float(i + 1)
+		var centre := dir * (tread * (float(i) + 0.5)) + Vector3(0, h * 0.5, 0)
+		deco(root, Vector3(tread, h, width) if along_x else Vector3(width, h, tread), centre, wood)
+	stairs_built.append({"base": base, "top": base + far + up, "dir": dir})
+	return occluder(root)

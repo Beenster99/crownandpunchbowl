@@ -25,6 +25,7 @@ const DOORS := "DoorSpawns"
 const POLICE := "PoliceSpawns"
 const PROPS := "PropSpawns"
 const BAR_ZONES := "BarZones"
+const LEDGES := "Ledges"
 
 const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
 const MENU_SCENE := "res://scenes/main/main_menu.tscn"
