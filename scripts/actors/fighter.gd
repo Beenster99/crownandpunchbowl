@@ -48,7 +48,7 @@ const _RELEASE_SILENT := 1  # victim's state is set by whatever happens next (hi
 @export var grip := 1.0
 ## Below this fraction of max_hp, a fighter who gets knocked down only gets up to crawl.
 @export_range(0.0, 1.0) var crawl_fraction := 0.25
-## Bar staff can't be knocked out.
+## False for anyone who must never be KO'd. (Bar staff are untouchable anyway.)
 @export var can_be_knocked_out := true
 @export var get_up_time := 1.5
 
@@ -88,6 +88,13 @@ var _knee_cd := 0.0
 var _flash := 0.0
 var _saved_layer := 0
 var _ko_announced := false
+var _launch_y := 0.0
+var _vault_origin := Vector3.ZERO
+var _vault_normal := Vector3.ZERO
+var _vault_t := -1.0
+var _saved_mask := 0
+var _airborne := false
+var _fall_peak := 0.0
 
 
 func _ready() -> void:
@@ -126,7 +133,7 @@ func can_be_targeted() -> bool:
 
 ## Whether an incoming hit would land right now.
 func can_be_hit() -> bool:
-	if state == State.KO or _invuln > 0.0:
+	if team == Team.STAFF or state == State.KO or _invuln > 0.0:
 		return false
 	if state == State.DODGE and _state_t < Moves.DODGE_IFRAMES:
 		return false
@@ -145,13 +152,11 @@ func is_hostile_to(other: Fighter) -> bool:
 	return (team == Team.PLAYERS) != (other.team == Team.PLAYERS)
 
 
-## Whether an attack from this fighter can physically land on `other`. Players can
-## hit the bar staff if they swing at them on purpose; targeting never picks them.
+## Whether an attack from this fighter can physically land on `other`.
+## Nobody hits the bar staff: attacks pass straight through them.
 func can_hit(other: Fighter) -> bool:
 	if other == null or other == self:
 		return false
-	if team == Team.PLAYERS:
-		return other.team != Team.PLAYERS
 	return is_hostile_to(other)
 
 
@@ -357,6 +362,8 @@ func _server_action(action: StringName, args: Array) -> void:
 		&"struggle":
 			if state == State.HELD and held_by != null:
 				held_by._server_add_escape(Moves.ESCAPE_PER_STRUGGLE)
+		&"landed":
+			_server_landed(float(args[0]))
 
 
 func _sender_is_host() -> bool:
@@ -443,11 +450,22 @@ func _server_throw() -> void:
 	var victim := holding
 	_server_release(_RELEASE_SILENT)
 	var m := Moves.get_move(&"throw")
+	var dir := get_facing()
+	var knockback := float(m["knockback"])
+	# Near a gallery edge and throwing towards it? Over they go.
+	var ledge := Ledges.for_throw(get_tree(), victim.global_position, dir)
+	if ledge != null:
+		dir = Ledges.normal_of(ledge)
+		knockback = Moves.LEDGE_THROW_SPEED * maxf(victim.toughness, 0.1)
 	victim.take_hit({
 		"attacker": self, "move": "throw", "damage": float(m["damage"]) * power,
-		"direction": get_facing(), "heavy": true, "knockdown": true,
-		"knockback": float(m["knockback"]), "poise": 0.0,
+		"direction": dir, "heavy": true, "knockdown": true,
+		"knockback": knockback, "poise": 0.0,
 	})
+	if ledge != null and victim.state != State.KO:
+		var railed := Ledges.has_railing(ledge)
+		victim._rpc_over_edge.rpc(ledge.global_position, dir, railed)
+		Events.fighter_thrown_off_ledge.emit(victim, self, railed)
 
 
 func _server_counter() -> void:
@@ -466,6 +484,19 @@ func _server_dodge(dir: Vector3) -> void:
 	if _dodge_cd > 0.0 or not (can_act() or can_chain() or state == State.WINDUP):
 		return
 	_rpc_dodge.rpc(dir)
+
+
+## The fighter's authority reports a landing; the host turns it into fall damage.
+func _server_landed(height: float) -> void:
+	if height < Moves.FALL_MIN_HEIGHT or height > Moves.MAX_FALL:
+		return
+	var dmg := (height - Moves.FALL_MIN_HEIGHT) * Moves.FALL_DAMAGE_PER_M
+	_rpc_fell.rpc(height)
+	take_hit({
+		"attacker": null, "move": "fall", "damage": dmg, "direction": Vector3.ZERO,
+		"position": global_position + Vector3.UP * 0.3, "heavy": true, "knockdown": true,
+		"ground": true, "knockback": 0.0, "poise": 0.0,
+	})
 
 
 func _server_add_escape(amount: float) -> void:
@@ -669,6 +700,29 @@ func _rpc_release(mode: int) -> void:
 	Events.grab_ended.emit(self, victim)
 
 
+## Send this fighter over a ledge: they keep their momentum until clear of the edge. With a
+## railing, they're lifted and pass through the rail (world collision off) on the way.
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_over_edge(ledge_pos: Vector3, normal: Vector3, railing: bool) -> void:
+	if not _sender_is_host():
+		return
+	_vault_normal = normal
+	_vault_origin = ledge_pos
+	_launch_y = Moves.RAIL_VAULT_LIFT if railing else 1.5
+	if _vault_t < 0.0:
+		_saved_mask = collision_mask
+		if railing:
+			collision_mask &= ~1
+	_vault_t = 0.0
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_fell(height: float) -> void:
+	if not _sender_is_host():
+		return
+	Events.fighter_fell.emit(self, height)
+
+
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_dodge(dir: Vector3) -> void:
 	if not _sender_is_host():
@@ -806,11 +860,43 @@ func _tick_motion(delta: float) -> void:
 			_impulse = Vector3.ZERO
 			return
 	v += _impulse
-	_impulse = _impulse.move_toward(Vector3.ZERO, 14.0 * delta)
+	# A body sailing off a ledge keeps its momentum instead of skidding to a stop.
+	var drag := 2.0 if (_vault_t >= 0.0 or not is_on_floor()) else 14.0
+	_impulse = _impulse.move_toward(Vector3.ZERO, drag * delta)
 	velocity.x = v.x
 	velocity.z = v.z
-	velocity.y = 0.0 if is_on_floor() else velocity.y - GRAVITY * delta
+	if _launch_y > 0.0:
+		velocity.y = _launch_y
+		_launch_y = 0.0
+	else:
+		velocity.y = 0.0 if is_on_floor() else velocity.y - GRAVITY * delta
 	move_and_slide()
+	_tick_vault(delta)
+	_track_fall()
+
+
+func _tick_vault(delta: float) -> void:
+	if _vault_t < 0.0:
+		return
+	_vault_t += delta
+	var past := (global_position - _vault_origin).dot(_vault_normal)
+	if past > 0.7 or _vault_t > 1.0:
+		collision_mask = _saved_mask
+		_vault_t = -1.0
+
+
+## Runs on the authority: report how far we fell when we land.
+func _track_fall() -> void:
+	if not is_on_floor():
+		if not _airborne:
+			_airborne = true
+			_fall_peak = global_position.y
+		_fall_peak = maxf(_fall_peak, global_position.y)
+	elif _airborne:
+		_airborne = false
+		var drop := _fall_peak - global_position.y
+		if drop >= Moves.FALL_MIN_HEIGHT:
+			_send(&"landed", [drop])
 
 
 func _face(dir: Vector3, delta: float, rate: float) -> void:

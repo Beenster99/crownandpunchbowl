@@ -50,6 +50,12 @@ const NOSE_BREAK_DAMAGE := 9.0     ## a face hit this hard can break a nose
 const CRAWL_SPEED := 0.7
 const GRAB_MOVE_SCALE := 0.45      ## holder's speed multiplier
 const KNEE_COOLDOWN := 0.45
+const LEDGE_THROW_RANGE := 2.2     ## a throw this close to a ledge, roughly towards it, goes over
+const LEDGE_THROW_SPEED := 6.5     ## outward speed when thrown over an edge
+const RAIL_VAULT_LIFT := 5.5       ## upward speed that carries a thrown body over a railing
+const FALL_MIN_HEIGHT := 1.2       ## falls shorter than this don't hurt (a dais, the stairs)
+const FALL_DAMAGE_PER_M := 12.0    ## damage per metre fallen beyond FALL_MIN_HEIGHT
+const MAX_FALL := 12.0             ## sanity cap on a reported fall
 
 const DATA := {
 	# --- Player bare-knuckle ---------------------------------------------------

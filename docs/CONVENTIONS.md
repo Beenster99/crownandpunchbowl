@@ -67,7 +67,7 @@ so they appear in the keybinds screen.
 
 Implemented in `scripts/actors/fighter.gd` (`class_name Fighter`). Move numbers live in
 `scripts/combat/moves.gd` (`Moves`), freeflow target picking in `scripts/combat/targeting.gd`
-(`Targeting`). Tests: `godot --headless --path . --script res://tests/combat_test.gd`.
+(`Targeting`). Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/combat_test.gd`.
 
 ```gdscript
 class_name Fighter extends CharacterBody3D        # every Fighter joins group "fighters"
@@ -75,7 +75,7 @@ enum State { IDLE, ATTACK, WINDUP, STAGGER, DOWN, CRAWL, KO, HELD, GRABBING, DOD
 enum Team { PLAYERS, PUNTERS, POLICE, STAFF }      # 0, 1, 2, 3
 
 # Exported tuning: team, max_hp, power, move_speed, toughness, grip, crawl_fraction,
-# can_be_knocked_out (false for staff), get_up_time
+# can_be_knocked_out, get_up_time
 var hp: float
 var state: State
 var move_input: Vector3      # controller writes this every physics frame (world XZ, length <= 1)
@@ -98,10 +98,10 @@ func is_ko() -> bool
 func can_act() -> bool                # IDLE
 func can_chain() -> bool              # in an attack's recovery
 func can_be_targeted() -> bool
-func can_be_hit() -> bool             # false while KO, dodging (i-frames) or just got up
+func can_be_hit() -> bool             # false for staff, and while KO, dodging (i-frames) or just got up
 func can_be_grabbed() -> bool
 func is_hostile_to(other) -> bool     # players vs punters and police; staff are nobody's enemy
-func can_hit(other) -> bool           # players can still hit staff on purpose
+func can_hit(other) -> bool           # same as is_hostile_to: nobody can hit staff
 func is_counterable_by(defender) -> bool
 func windup_remaining() -> float      # for counter prompts
 func get_facing() -> Vector3
@@ -138,4 +138,14 @@ Rules other workstreams rely on:
 - **Held fighters** take `Moves.HELD_DAMAGE_MULT` damage from everyone. A holder who is hit
   lets go. A held fighter who goes down is dropped.
 - **Health thresholds.** Below `crawl_fraction`, a knocked-down fighter gets up only to crawl.
-  At 0 hp they are KO'd: out of targeting and collision. Staff go down but never out.
+  At 0 hp they are KO'd: out of targeting and collision.
+- **Throwing people off galleries.** A throw within `Moves.LEDGE_THROW_RANGE` of a ledge,
+  roughly towards it, sends the victim over: lifted over a railing, or straight off an open
+  edge. Ledges are the `Markers/Ledges` markers from the pubs (metadata `normal`, `drop`,
+  `railing`) or any node in the `ledges` group (`scripts/combat/ledges.gd`). Emits
+  `Events.fighter_thrown_off_ledge`.
+- **Falls hurt.** Any landing after a drop of at least `Moves.FALL_MIN_HEIGHT` (1.2 m) does
+  `FALL_DAMAGE_PER_M` per metre beyond that, plus a knockdown, and emits `Events.fighter_fell`.
+  Daises and stairs don't hurt.
+- **Nobody hits the bar staff.** Staff (`Team.STAFF`) can't be targeted, grabbed or hit by
+  players or NPCs; attacks pass straight through them and `take_hit` ignores them.
