@@ -20,6 +20,11 @@ var _difficulty: OptionButton
 var _player_list: ItemList
 var _ready_toggle: CheckButton
 var _start: Button
+var _join_button: Button
+var _host_panel: VBoxContainer
+var _host_lines: Label
+var _copy_internet: Button
+var _copy_lan: Button
 
 
 func _ready() -> void:
@@ -28,12 +33,19 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
+	theme = UiTheme.get_theme()
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(scroll)
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(center)
 	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_CENTER)
-	root.custom_minimum_size = Vector2(520, 0)
-	root.position = Vector2(-260, -300)
+	root.custom_minimum_size = Vector2(640, 0)
 	root.add_theme_constant_override("separation", 10)
-	add_child(root)
+	center.add_child(root)
 
 	var title := Label.new()
 	title.text = "HOST A NIGHT OUT" if mode == "host" else "JOIN YOUR MATES"
@@ -67,8 +79,8 @@ func _ready() -> void:
 	_connect_box.add_theme_constant_override("separation", 10)
 	root.add_child(_connect_box)
 	_address_edit = LineEdit.new()
-	_address_edit.placeholder_text = "Host IP address (e.g. 192.168.1.20)"
-	_address_edit.text = "127.0.0.1"
+	_address_edit.placeholder_text = "Address from the host's lobby, e.g. 81.2.3.4"
+	_address_edit.text_submitted.connect(func(_t: String): _on_connect())
 	if mode == "join":
 		_connect_box.add_child(_row("Address", _address_edit))
 	_port_edit = SpinBox.new()
@@ -76,14 +88,15 @@ func _ready() -> void:
 	_port_edit.max_value = 65535
 	_port_edit.value = Net.DEFAULT_PORT
 	_connect_box.add_child(_row("Port", _port_edit))
-	var go := _button(_connect_box, "Open the pub" if mode == "host" else "Join")
-	go.pressed.connect(_on_connect)
+	_join_button = _button(_connect_box, "Open the pub" if mode == "host" else "Join")
+	_join_button.pressed.connect(_on_connect)
 
 	# After connecting.
 	_lobby_box = VBoxContainer.new()
 	_lobby_box.add_theme_constant_override("separation", 10)
 	_lobby_box.visible = false
 	root.add_child(_lobby_box)
+	_build_host_panel()
 	_pub = OptionButton.new()
 	for p in GameData.PUBS:
 		_pub.add_item("%s (%s)" % [p["name"], p["era"]])
@@ -110,6 +123,7 @@ func _ready() -> void:
 	Net.lobby_settings_changed.connect(_refresh)
 	Net.joined_lobby.connect(_on_joined)
 	Net.connection_failed.connect(_on_failed)
+	Net.host_info_changed.connect(_refresh_host_info)
 	_status.text = "Pick a name and a farmer."
 
 
@@ -119,12 +133,13 @@ func _on_connect() -> void:
 	if mode == "host":
 		err = Net.host(_name_edit.text, _farmer.selected, port)
 		if err == OK:
-			_status.text = "Pub's open on port %d. Mates join with your IP address. You'll need to forward UDP port %d to play over the internet." % [port, port]
+			_status.text = "The pub's open. Give your mates one of the addresses below."
 			_show_lobby()
 	else:
-		err = Net.join(_address_edit.text.strip_edges(), _name_edit.text, _farmer.selected, port)
+		err = Net.join(_address_edit.text, _name_edit.text, _farmer.selected, port)
 		if err == OK:
-			_status.text = "Knocking on the door…"
+			_status.text = "Knocking on the door… (giving up after %d seconds)" % int(Net.JOIN_TIMEOUT)
+			_join_button.disabled = true
 	if err != OK:
 		_status.text = Net.last_error
 
@@ -136,6 +151,7 @@ func _on_joined() -> void:
 
 func _on_failed() -> void:
 	_status.text = Net.last_error
+	_join_button.disabled = false
 	_connect_box.visible = true
 	_lobby_box.visible = false
 
@@ -144,6 +160,7 @@ func _show_lobby() -> void:
 	_connect_box.visible = false
 	_lobby_box.visible = true
 	_refresh()
+	_refresh_host_info()
 
 
 func _refresh() -> void:
@@ -187,3 +204,74 @@ func _button(parent: Control, text: String) -> Button:
 	b.custom_minimum_size.y = 44
 	parent.add_child(b)
 	return b
+
+
+# --- Host addresses -------------------------------------------------------------
+
+func _build_host_panel() -> void:
+	_host_panel = VBoxContainer.new()
+	_host_panel.add_theme_constant_override("separation", 6)
+	_host_panel.visible = false
+	_lobby_box.add_child(_host_panel)
+	_lobby_box.move_child(_host_panel, 0)
+	_host_lines = Label.new()
+	_host_lines.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_host_panel.add_child(_host_lines)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_host_panel.add_child(row)
+	_copy_internet = _button(row, "Copy internet address")
+	_copy_internet.pressed.connect(func(): _copy(Net.internet_address()))
+	_copy_lan = _button(row, "Copy home-network address")
+	_copy_lan.pressed.connect(func():
+		var lan: Array = Net.host_info.get("lan", [])
+		if not lan.is_empty():
+			_copy(_with_port(lan[0])))
+
+
+func _refresh_host_info() -> void:
+	if not is_inside_tree() or _host_panel == null:
+		return
+	var info := Net.host_info
+	_host_panel.visible = Net.is_host() and not info.is_empty()
+	if info.is_empty():
+		return
+	var port: int = info["port"]
+	var lines: Array[String] = []
+	var internet := Net.internet_address()
+	match info["upnp"]:
+		"trying":
+			lines.append("Over the internet: %s  (asking your router to open port %d…)" %
+				[internet if internet != "" else "looking up…", port])
+		"open":
+			lines.append("Over the internet: %s  (your router opened port %d automatically)" %
+				[internet if internet != "" else "unknown", port])
+		_:
+			lines.append("Over the internet: %s" % (internet if internet != "" else "unknown"))
+			if info["upnp_error"] != "":
+				lines.append("   %s To play over the internet, forward UDP port %d to %s in your router settings, or use a free VPN like Tailscale." %
+					[info["upnp_error"], port, info["lan"][0] if not info["lan"].is_empty() else "this PC"])
+	if info["cgnat"]:
+		lines.append("   Warning: your internet provider shares your internet address with other customers, so mates can't reach you over the internet directly. Use a free VPN like Tailscale instead: you and your mates install it, sign in to the same network, and join on your Tailscale address.")
+	var lan: Array = info["lan"]
+	if not lan.is_empty():
+		lines.append("Same Wi-Fi or home network: %s" % ", ".join(lan.map(_with_port)))
+	var vpn: Array = info["vpn"]
+	if not vpn.is_empty():
+		lines.append("VPN (Tailscale, ZeroTier, Radmin): %s" % ", ".join(vpn.map(_with_port)))
+	lines.append("If Windows asks whether to allow the game through the firewall, tick both boxes and press Allow.")
+	_host_lines.text = "\n".join(lines)
+	_copy_internet.disabled = internet == ""
+	_copy_lan.disabled = lan.is_empty()
+
+
+func _with_port(ip: String) -> String:
+	var port: int = Net.host_info.get("port", Net.DEFAULT_PORT)
+	return ip if port == Net.DEFAULT_PORT else "%s:%d" % [ip, port]
+
+
+func _copy(text: String) -> void:
+	if text == "":
+		return
+	DisplayServer.clipboard_set(text)
+	_status.text = "Copied %s. Send it to your mates." % text

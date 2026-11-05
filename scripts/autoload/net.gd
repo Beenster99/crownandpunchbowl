@@ -26,6 +26,8 @@ signal connection_failed()
 signal server_disconnected()
 ## A player left mid-session. Emitted on every peer.
 signal player_dropped(peer_id: int, player_name: String)
+## Host: host_info changed (addresses found, router port opened or not).
+signal host_info_changed()
 ## Every peer is loading a pub. Emitted on every peer just before the scene changes.
 signal pub_loading(pub_index: int)
 ## Host only: every connected peer has loaded the current pub, so it is safe to spawn.
@@ -39,6 +41,8 @@ const MENU_SCENE := "res://scenes/main/main_menu.tscn"
 ## Every node a MultiplayerSpawner creates joins this group (players, NPCs, items),
 ## so the host can despawn them cleanly before a pub change.
 const SPAWNED_GROUP := "net_spawned"
+## Seconds a join waits for the host before giving up with a useful message.
+const JOIN_TIMEOUT := 10.0
 
 ## peer_id -> {"name": String, "farmer": int, "ready": bool}
 var players := {}
@@ -47,7 +51,20 @@ var in_game := false
 ## Human-readable reason for the last failure (rejected, lost host…), for menus to show.
 var last_error := ""
 
+## Host only: what to tell mates so they can join. Keys:
+##   port, lan (Array of home-network IPs), vpn (Tailscale/ZeroTier/Radmin IPs),
+##   public_ip ("" until known), upnp ("off" | "trying" | "open" | "failed"), upnp_error,
+##   router_ip (the router's own internet address from UPnP), cgnat (bool: the provider
+##   shares the public address, so only a VPN will work for internet play).
+var host_info := {}
+## Set false to skip UPnP and the public address lookup (tests, LAN parties).
+var use_upnp := true
+
 var _local_name := "Farmer"
+var _join_attempt := 0
+var _join_target := ""
+var _join_port := DEFAULT_PORT
+var _port_opener: PortOpener
 var _local_farmer := 0
 ## Host only: peers that have finished loading the current pub.
 var _loaded := {}
@@ -55,6 +72,10 @@ var _all_loaded_sent := false
 
 
 func _ready() -> void:
+	_port_opener = PortOpener.new()
+	_port_opener.name = "PortOpener"
+	_port_opener.finished.connect(_on_port_opened)
+	add_child(_port_opener)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -76,25 +97,60 @@ func host(player_name: String, farmer: int, port := DEFAULT_PORT) -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, MAX_PLAYERS)
 	if err != OK:
-		last_error = "Couldn't open port %d (%s)." % [port, error_string(err)]
+		last_error = ("Couldn't open port %d. Is another copy of the game already hosting? " +
+			"Try a different port. (%s)") % [port, error_string(err)]
 		return err
 	multiplayer.multiplayer_peer = peer
 	players = {1: _make_player(player_name, farmer, true)}
 	players_changed.emit()
+	_start_host_info(port)
 	return OK
 
 
+## `address` may include a port ("81.2.3.4:24566"), which then wins over `port`.
 func join(address: String, player_name: String, farmer: int, port := DEFAULT_PORT) -> Error:
 	_reset()
 	_local_name = player_name
 	_local_farmer = farmer
+	var target := NetAddress.parse(address, port)
+	if target.is_empty():
+		last_error = "That address doesn't look right. Type the host's address, like 81.2.3.4 or 81.2.3.4:%d." % DEFAULT_PORT
+		return ERR_INVALID_PARAMETER
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(address if address != "" else "127.0.0.1", port)
+	var err := peer.create_client(target[0], target[1])
 	if err != OK:
-		last_error = "Couldn't connect (%s)." % error_string(err)
+		last_error = "Couldn't find %s. Check the address. (%s)" % [target[0], error_string(err)]
 		return err
 	multiplayer.multiplayer_peer = peer
+	_join_target = "%s:%d" % target
+	_join_port = target[1]
+	_join_attempt += 1
+	var attempt := _join_attempt
+	get_tree().create_timer(JOIN_TIMEOUT).timeout.connect(_on_join_timeout.bind(attempt, target[0]))
 	return OK
+
+
+func _on_join_timeout(attempt: int, address: String) -> void:
+	if attempt != _join_attempt or players.has(local_id()) or not is_online():
+		return
+	last_error = join_failure_message(address)
+	leave()
+	connection_failed.emit()
+
+
+## What to tell a player whose join got no answer, based on the address they typed.
+func join_failure_message(address: String) -> String:
+	var msg := "No answer from %s after %d seconds. " % [_join_target, int(JOIN_TIMEOUT)]
+	if NetAddress.is_loopback(address):
+		return msg + "127.0.0.1 means this computer. Type the address shown in the host's lobby instead."
+	if NetAddress.is_private(address):
+		return msg + ("That's a home-network address, so it only works on the same Wi-Fi or network " +
+			"as the host. Over the internet, use the host's internet address. Also check the host " +
+			"allowed the game through Windows Firewall.")
+	return msg + ("Check the address and port match the host's lobby, that the host's lobby says " +
+		"the router port is open (or they forwarded UDP %d), and that Windows Firewall allowed " +
+		"the game on their PC. If the host's lobby warns about a shared internet address, use a " +
+		"VPN like Tailscale instead.") % _join_port
 
 
 func leave() -> void:
@@ -104,6 +160,10 @@ func leave() -> void:
 	players.clear()
 	in_game = false
 	_loaded.clear()
+	_join_attempt += 1  # cancels any pending join timeout
+	if _port_opener:
+		_port_opener.close()
+	host_info = {}
 	players_changed.emit()
 
 
@@ -332,7 +392,7 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
-	last_error = "Couldn't reach the host."
+	last_error = join_failure_message(_join_target.rsplit(":", true, 1)[0])
 	leave()
 	connection_failed.emit()
 
@@ -360,6 +420,60 @@ func _on_server_disconnected() -> void:
 	leave()
 	server_disconnected.emit()
 	get_tree().change_scene_to_file(MENU_SCENE)
+
+
+# --- Host addresses and router port ------------------------------------------------
+
+func _start_host_info(port: int) -> void:
+	host_info = {
+		"port": port, "lan": NetAddress.lan_addresses(), "vpn": NetAddress.vpn_addresses(),
+		"public_ip": "", "upnp": "trying" if use_upnp else "off", "upnp_error": "",
+		"router_ip": "", "cgnat": false,
+	}
+	host_info_changed.emit()
+	if not use_upnp:
+		return
+	_port_opener.open(port)
+	_port_opener.fetch_public_ip(_on_public_ip)
+
+
+func _on_port_opened(result: Dictionary) -> void:
+	if host_info.is_empty():
+		return
+	host_info["upnp"] = "open" if result["ok"] else "failed"
+	host_info["upnp_error"] = result["error"]
+	host_info["router_ip"] = result["external_ip"]
+	_update_cgnat()
+
+
+func _on_public_ip(ip: String) -> void:
+	if host_info.is_empty():
+		return
+	host_info["public_ip"] = ip
+	_update_cgnat()
+
+
+## The router's internet address being private/shared, or not matching the address the
+## outside world sees, means the provider puts several customers behind one address
+## (carrier-grade NAT). Port opening can't help then; a VPN can.
+func _update_cgnat() -> void:
+	var router: String = host_info["router_ip"]
+	var public: String = host_info["public_ip"]
+	host_info["cgnat"] = router != "" and (NetAddress.is_private(router) or NetAddress.is_cgnat(router)
+		or (public != "" and NetAddress.is_ipv4(public) and router != public))
+	host_info_changed.emit()
+
+
+## The address mates should type to join over the internet ("" if unknown).
+func internet_address() -> String:
+	var ip: String = host_info.get("public_ip", "")
+	if ip == "":
+		ip = host_info.get("router_ip", "")
+	if ip == "" or NetAddress.is_private(ip):
+		return ""
+	var port: int = host_info.get("port", DEFAULT_PORT)
+	return ip if port == DEFAULT_PORT else "%s:%d" % [ip, port]
+
 
 
 # --- Helpers ----------------------------------------------------------------------
