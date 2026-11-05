@@ -9,16 +9,42 @@ extends Camera3D
 @export var min_distance := 11.0
 @export var max_distance := 20.0
 @export var follow_speed := 5.0
+## Player zoom range, as a multiple of the framing distance (the zoom_in / zoom_out actions).
+@export var min_zoom := 0.65
+@export var max_zoom := 1.35
+@export var zoom_step := 0.08
 ## Floor area (x, z, width, depth) the framing centre is kept inside. Zero size = no limit.
 @export var bounds := Rect2()
 
 var targets: Array[Node3D] = []
+## 1.0 = default framing. Below 1 is closer. Kept across pubs for the session.
+static var zoom := 1.0
 var _trauma := 0.0
+var _zoom_smooth := 1.0
 
 
 func _ready() -> void:
-	fov = 40.0
+	fov = float(Settings.get_value("graphics", "fov"))
 	current = true
+	_zoom_smooth = zoom
+	Settings.changed.connect(_on_settings_changed)
+
+
+func _on_settings_changed(section: String, key: String) -> void:
+	if section == "graphics" and key == "fov":
+		fov = float(Settings.get_value("graphics", "fov"))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Mouse wheel ticks and button presses step the zoom; held pad buttons keep going in _process.
+	if event.is_action_pressed("zoom_in"):
+		zoom_by(-zoom_step)
+	elif event.is_action_pressed("zoom_out"):
+		zoom_by(zoom_step)
+
+
+func zoom_by(amount: float) -> void:
+	zoom = clampf(zoom + amount, min_zoom, max_zoom)
 
 
 func add_shake(amount: float) -> void:
@@ -27,10 +53,15 @@ func add_shake(amount: float) -> void:
 
 ## Jump straight to the framing position (e.g. on level load) instead of easing in.
 func snap() -> void:
+	_zoom_smooth = zoom
 	_frame(1.0)
 
 
 func _process(delta: float) -> void:
+	for a in [["zoom_in", -1.0], ["zoom_out", 1.0]]:
+		if InputMap.has_action(a[0]) and Input.is_action_pressed(a[0]) and Settings.device == "pad":
+			zoom_by(a[1] * delta * 0.6)
+	_zoom_smooth = lerpf(_zoom_smooth, zoom, clampf(8.0 * delta, 0.0, 1.0))
 	_frame(clampf(follow_speed * delta, 0.0, 1.0))
 	if _trauma > 0.0:
 		var s := _trauma * _trauma * 0.25
@@ -56,7 +87,7 @@ func _frame(weight: float) -> void:
 	var spread := 0.0
 	for t in live:
 		spread = maxf(spread, t.global_position.distance_to(centre))
-	var dist := clampf(min_distance + spread * 1.2, min_distance, max_distance)
+	var dist := clampf(min_distance + spread * 1.2, min_distance, max_distance) * _zoom_smooth
 	var pitch := deg_to_rad(pitch_degrees)
 	var want := centre + Vector3(0.0, sin(pitch), cos(pitch)) * dist
 	global_position = global_position.lerp(want, weight)

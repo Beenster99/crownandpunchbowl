@@ -115,9 +115,10 @@ func _make_control(section: String, key: String, opt: Dictionary) -> Control:
 			var ob := OptionButton.new()
 			for item in _choice_items(section, key, opt):
 				ob.add_item(item)
-			ob.select(_choice_index(opt, value))
+			ob.select(_choice_index(section, key, value))
 			ob.item_selected.connect(func(i: int):
-				Settings.set_value(section, key, opt["values"][i] if opt.has("values") else i))
+				var vals := _choice_values(section, key)
+				Settings.set_value(section, key, vals[i] if not vals.is_empty() else i))
 			return ob
 		_:
 			var row := HBoxContainer.new()
@@ -142,17 +143,34 @@ func _make_control(section: String, key: String, opt: Dictionary) -> Control:
 func _choice_items(section: String, key: String, opt: Dictionary) -> Array:
 	if section == "gameplay" and key == "difficulty":
 		return GameData.DIFFICULTIES.map(func(d): return d["name"])
+	if section == "graphics" and key == "resolution":
+		return Settings.resolution_choices().map(func(r): return Settings.resolution_label(r))
 	return opt["items"]
 
 
-func _choice_index(opt: Dictionary, value: Variant) -> int:
-	if opt.has("values"):
-		return maxi(opt["values"].find(int(value)), 0)
-	return int(value)
+## The stored values behind a choice's items, or [] when the stored value is the item index.
+func _choice_values(section: String, key: String) -> Array:
+	if section == "graphics" and key == "resolution":
+		return Settings.resolution_choices()
+	return Settings.OPTIONS[section][key].get("values", [])
+
+
+func _choice_index(section: String, key: String, value: Variant) -> int:
+	var vals := _choice_values(section, key)
+	if vals.is_empty():
+		return int(value)
+	for i in vals.size():
+		if typeof(vals[i]) == typeof(value) and vals[i] == value:
+			return i
+		if vals[i] is int and (value is int or value is float) and vals[i] == int(value):
+			return i
+	return 0
 
 
 func _format(opt: Dictionary, v: float) -> String:
-	return "%d%%" % roundi(v * 100.0) if opt.get("percent", false) else str(v)
+	if opt.get("percent", false):
+		return "%d%%" % roundi(v * 100.0)
+	return "%d%s" % [roundi(v), opt.get("suffix", "")] if opt.has("suffix") else str(v)
 
 
 func _refresh_section(section: String) -> void:
@@ -164,7 +182,7 @@ func _refresh_section(section: String) -> void:
 			ctl.set_pressed_no_signal(bool(value))
 			ctl.text = "On" if value else "Off"
 		elif ctl is OptionButton:
-			ctl.select(_choice_index(opt, value))
+			ctl.select(_choice_index(section, key, value))
 		else:
 			var slider: HSlider = ctl.get_child(0)
 			slider.set_value_no_signal(float(value))
