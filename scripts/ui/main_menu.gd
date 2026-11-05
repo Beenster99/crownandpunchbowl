@@ -38,7 +38,7 @@ func _ready() -> void:
 	_difficulty.select(GameData.difficulty_index)
 	box.add_child(_difficulty)
 
-	_button(box, "Play solo (test pub)", _on_solo)
+	_button(box, "Play solo", _on_solo)
 	_button(box, "Host co-op", Callable(), true)
 	_button(box, "Join co-op", Callable(), true)
 	_button(box, "Settings", Callable(), true)
@@ -56,7 +56,7 @@ func _button(parent: Control, text: String, cb: Callable, disabled := false) -> 
 
 
 func _on_solo() -> void:
-	GameData.current_pub_index = _pub.selected
+	GameData.start_crawl(_pub.selected)
 	GameData.difficulty_index = _difficulty.selected
 	Net.start_solo("Player", 0)
 	get_tree().change_scene_to_file(GameData.current_pub()["scene"])

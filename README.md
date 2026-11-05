@@ -7,17 +7,19 @@ then knock out everyone in the building except the bar staff.
 - Design direction and camera/graphics recommendation: [docs/DESIGN.md](docs/DESIGN.md)
 - Development plan and workstreams: [docs/PLAN.md](docs/PLAN.md)
 - Folder layout and shared contracts: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
+- The four pubs, pub flow and level markers: [docs/PUBS.md](docs/PUBS.md)
 
 ## Running
 
 Open the folder in Godot 4.7 and press Play. The main menu lets you pick a pub and difficulty
-and start a solo session in the greybox test pub. Move with WASD or the left stick. Press Esc
+and start a solo session in one of the four greybox pubs. Move with WASD or the left stick. Press Esc
 to go back to the menu.
 
 ## Tests
 
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
+godot --headless --path . --script res://tests/pubs_test.gd
 ```
 
 The current state is the M0 skeleton: shared data, settings and keybind storage, a placeholder
