@@ -52,6 +52,51 @@ func _initialize() -> void:
 	_check(is_equal_approx(settings.get_value("sound", "music"), 0.6), "reset sound section")
 	settings.reset_section("gameplay")
 
+	# Device detection drives prompts.
+	settings.set_device("kb")
+	var got_device := [""]
+	settings.device_changed.connect(func(d): got_device[0] = d)
+	var pad_press := InputEventJoypadButton.new()
+	pad_press.button_index = JOY_BUTTON_A
+	pad_press.pressed = true
+	settings._input(pad_press)
+	_check(settings.device == "pad" and got_device[0] == "pad", "pad press switches device")
+	_check(settings.prompt("dodge") == "A", "pad prompt for dodge")
+	var prompt = load("res://scripts/ui/button_prompt.gd").make("dodge", "Dodge")  # loaded late: needs autoloads
+	root.add_child(prompt)
+	_check(prompt._cap_label.text == "A", "ButtonPrompt shows pad label")
+	settings._input(key)
+	_check(settings.device == "kb", "key press switches back")
+	_check(prompt._cap_label.text == "Space", "ButtonPrompt follows device")
+	prompt.queue_free()
+
+	# Zoom actions exist and don't clash with throw on the pad.
+	_check(InputMap.has_action("zoom_in") and InputMap.has_action("zoom_out"), "zoom actions")
+	_check(not settings.binding_equals(settings.binds["throw"]["pad"], settings.binds["zoom_in"]["pad"]),
+		"throw and zoom in differ on pad")
+
+	# Graphics presets set the detail options; touching one detail flips to Custom.
+	settings.set_value("graphics", "quality", 0)
+	_check(settings.get_value("graphics", "shadow_quality") == 0 and not settings.get_value("graphics", "bloom"),
+		"low preset applied")
+	_check(settings.get_value("graphics", "quality") == 0, "preset stays Low after applying")
+	settings.set_value("graphics", "bloom", true)
+	_check(settings.get_value("graphics", "quality") == settings.CUSTOM_QUALITY, "detail change -> Custom")
+	settings.set_value("graphics", "quality", 2)
+	_check(settings.get_value("graphics", "ambient_occlusion") == true, "high preset applied")
+	_check(settings.resolution_choices()[0] == "auto", "resolution choices start with native")
+	var we := WorldEnvironment.new()
+	we.environment = Environment.new()
+	we.environment.fog_enabled = true
+	root.add_child(we)
+	await process_frame
+	settings.set_value("graphics", "fog", false)
+	_check(not we.environment.fog_enabled, "fog setting reaches live environments")
+	settings.set_value("graphics", "fog", true)
+	_check(we.environment.fog_enabled, "fog restored")
+	we.queue_free()
+	settings.reset_section("graphics")
+
 	# Main menu builds, settings opens with all four tabs.
 	change_scene_to_file("res://scenes/main/main_menu.tscn")
 	await process_frame

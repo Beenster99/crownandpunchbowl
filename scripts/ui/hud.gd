@@ -1,11 +1,12 @@
 class_name Hud
 extends CanvasLayer
 ## In-fight HUD: a panel per player (health and tipsy), punters still standing, the room's heat,
-## the local combo, banners and context prompts like "E: Order pint".
+## the local combo, banners and a controls reminder that shows what each button does, using
+## keyboard/mouse or controller labels depending on what the player last touched.
+## World-space pickup and bar prompts belong to the items workstream (they use Settings.prompt()).
 ##
 ## It only reads, never drives gameplay. What it reads (all optional, so placeholders work):
 ## - Nodes in group `players`: `hp`, `max_hp` (floats), `tipsy` (0..1), and
-##   `get_context_prompt() -> {"action": String, "text": String}` ({} for none) on the local player.
 ##   The name and farmer come from Net.players[peer_id], keyed by the node's multiplayer authority.
 ## - Nodes in group `npcs`: counted as standing unless `is_down()` returns true.
 ## - The first node in group `director`: `heat` (0..1). The meter hides when there is none.
@@ -21,10 +22,14 @@ var _heat_box: VBoxContainer
 var _heat: ProgressBar
 var _combo: Label
 var _banner: Label
-var _prompt: Label
+var _hints: VBoxContainer
 var _combo_tween: Tween
 var _banner_tween: Tween
-var _pad_last := false
+## Shown in the controls reminder, in this order, if the action exists in Settings.ACTIONS.
+const HINTS := [["punch", "Punch"], ["punch_left", "Left hand"], ["punch_right", "Right hand"],
+	["kick", "Kick"], ["headbutt", "Headbutt"], ["block", "Block / parry"], ["counter", "Counter"],
+	["grab", "Grab and hold"], ["dodge", "Dodge"], ["interact", "Pick up / order drink"],
+	["order_food", "Order food"], ["throw", "Throw"]]
 
 
 func _ready() -> void:
@@ -84,16 +89,22 @@ func _ready() -> void:
 	_banner.modulate.a = 0.0
 	root.add_child(_banner)
 
-	_prompt = UiTheme.label("")
-	_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt.offset_left = -400
-	_prompt.offset_right = 400
-	_prompt.offset_top = -110
-	_prompt.offset_bottom = -70
-	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt.add_theme_font_size_override("font_size", 24)
-	_outline(_prompt)
-	root.add_child(_prompt)
+	_hints = VBoxContainer.new()
+	_hints.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_hints.offset_left = 20
+	_hints.offset_bottom = -20
+	_hints.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_hints.add_theme_constant_override("separation", 4)
+	_hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hints.modulate.a = 0.85
+	root.add_child(_hints)
+	for h in HINTS:
+		if Settings.ACTIONS.has(h[0]):
+			_hints.add_child(ButtonPrompt.make(h[0], h[1]))
+	_hints.visible = bool(Settings.get_value("gameplay", "control_hints"))
+	Settings.changed.connect(func(section, key):
+		if section == "gameplay" and key == "control_hints":
+			_hints.visible = bool(Settings.get_value("gameplay", "control_hints")))
 
 	Events.banner.connect(show_banner)
 	Events.combo_changed.connect(_on_combo)
@@ -114,17 +125,9 @@ func show_banner(text: String, seconds := 3.0) -> void:
 	_banner_tween.tween_property(_banner, "modulate:a", 0.0, 0.5)
 
 
-func _input(event: InputEvent) -> void:
-	if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf(event.axis_value) > 0.5):
-		_pad_last = true
-	elif event is InputEventKey or event is InputEventMouseButton:
-		_pad_last = false
-
-
 func _process(_delta: float) -> void:
 	_update_players()
 	_update_room()
-	_update_prompt()
 
 
 func _update_players() -> void:
@@ -182,19 +185,6 @@ func _update_room() -> void:
 	_heat_box.visible = director != null and director.get("heat") != null
 	if _heat_box.visible:
 		_heat.value = float(director.get("heat"))
-
-
-func _update_prompt() -> void:
-	var text := ""
-	if Settings.get_value("gameplay", "context_prompts"):
-		for p in get_tree().get_nodes_in_group("players"):
-			if p.is_multiplayer_authority() and p.has_method("get_context_prompt"):
-				var prompt: Dictionary = p.get_context_prompt()
-				if not prompt.is_empty():
-					text = "%s: %s" % [Settings.action_label(prompt["action"], "pad" if _pad_last else "kb"),
-						prompt["text"]]
-				break
-	_prompt.text = text
 
 
 func _on_combo(player: Node, combo: int) -> void:
