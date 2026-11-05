@@ -19,6 +19,7 @@ to go back to the menu.
 
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
+godot --headless --path . --import   # once, so the character models are imported
 godot --headless --path . --script res://tests/character_test.gd
 ```
 
