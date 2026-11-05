@@ -8,6 +8,7 @@ then knock out everyone in the building except the bar staff.
 - Development plan and workstreams: [docs/PLAN.md](docs/PLAN.md)
 - Folder layout and shared contracts: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 - The six farmers, punters, police and the shared rig: [docs/CHARACTERS.md](docs/CHARACTERS.md)
+- The four pubs, pub flow and level markers: [docs/PUBS.md](docs/PUBS.md)
 
 ## Running
 
@@ -24,6 +25,7 @@ godot --headless --path . --script res://tests/ui_test.gd
 godot --headless --path . --script res://tests/coop_rules_test.gd
 tests/run_net_test.sh   # two-process host + client co-op test
 godot --headless --path . --script res://tests/character_test.gd
+godot --headless --path . --script res://tests/pubs_test.gd
 ```
 
 Co-op: Host co-op / Join co-op on the main menu. See [docs/NETWORKING.md](docs/NETWORKING.md).

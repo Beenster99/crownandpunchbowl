@@ -45,13 +45,13 @@ const FARMERS := [
 ## Era drives the look of each pub (beams, panelling, lighting, props).
 const PUBS := [
 	{"id": "crown_and_punchbowl", "name": "The Crown and Punchbowl", "era": "17th century",
-		"scene": "res://scenes/pubs/test_pub.tscn"},
+		"scene": "res://scenes/pubs/crown_and_punchbowl.tscn"},
 	{"id": "king_william", "name": "The King William", "era": "18th century",
-		"scene": "res://scenes/pubs/test_pub.tscn"},
+		"scene": "res://scenes/pubs/king_william.tscn"},
 	{"id": "farmers_dog", "name": "The Farmers Dog", "era": "19th century",
-		"scene": "res://scenes/pubs/test_pub.tscn"},
+		"scene": "res://scenes/pubs/farmers_dog.tscn"},
 	{"id": "pillock_tickle", "name": "The Pillock Tickle", "era": "17th century",
-		"scene": "res://scenes/pubs/test_pub.tscn"},
+		"scene": "res://scenes/pubs/pillock_tickle.tscn"},
 ]
 
 ## Multipliers read by AI, combat and spawning. 1.0 = baseline.
@@ -73,6 +73,10 @@ const DIFFICULTIES := [
 ## Session state chosen in the lobby. The host owns these and syncs them to clients.
 var current_pub_index := 0
 var difficulty_index := 1
+## Pub crawl progress: the host's chosen first pub and how many pubs are cleared.
+## The crawl visits every pub once, in order, wrapping round from the start pub.
+var start_pub_index := 0
+var pubs_cleared := 0
 
 
 func current_pub() -> Dictionary:
@@ -84,4 +88,19 @@ func difficulty() -> Dictionary:
 
 
 func advance_pub() -> void:
-	current_pub_index = (current_pub_index + 1) % PUBS.size()
+	current_pub_index = next_pub_index()
+
+
+## Start a new night out at `pub_index`.
+func start_crawl(pub_index: int) -> void:
+	start_pub_index = pub_index
+	current_pub_index = pub_index
+	pubs_cleared = 0
+
+
+func next_pub_index() -> int:
+	return (current_pub_index + 1) % PUBS.size()
+
+
+func crawl_finished() -> bool:
+	return pubs_cleared >= PUBS.size()

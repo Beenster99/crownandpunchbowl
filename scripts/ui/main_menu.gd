@@ -241,7 +241,7 @@ func _on_start() -> void:
 	Settings.set_value("profile", "farmer", _farmer_index)
 	Settings.set_value("profile", "pub", _pub_pick.selected)
 	Settings.set_value("gameplay", "difficulty", _difficulty_index)
-	GameData.current_pub_index = _pub_pick.selected
+	GameData.start_crawl(_pub_pick.selected)
 	GameData.difficulty_index = _difficulty_index
 	Net.start_solo(player_name, _farmer_index)
 	Net.start_game()

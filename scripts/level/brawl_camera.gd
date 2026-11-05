@@ -9,6 +9,8 @@ extends Camera3D
 @export var min_distance := 11.0
 @export var max_distance := 20.0
 @export var follow_speed := 5.0
+## Floor area (x, z, width, depth) the framing centre is kept inside. Zero size = no limit.
+@export var bounds := Rect2()
 
 var targets: Array[Node3D] = []
 var _trauma := 0.0
@@ -23,22 +25,13 @@ func add_shake(amount: float) -> void:
 	_trauma = clampf(_trauma + amount * float(Settings.get_value("gameplay", "camera_shake")), 0.0, 1.0)
 
 
+## Jump straight to the framing position (e.g. on level load) instead of easing in.
+func snap() -> void:
+	_frame(1.0)
+
+
 func _process(delta: float) -> void:
-	var live := targets.filter(func(t): return is_instance_valid(t) and t.is_inside_tree())
-	if live.is_empty():
-		return
-	var centre := Vector3.ZERO
-	for t in live:
-		centre += t.global_position
-	centre /= live.size()
-	var spread := 0.0
-	for t in live:
-		spread = maxf(spread, t.global_position.distance_to(centre))
-	var dist := clampf(min_distance + spread * 1.2, min_distance, max_distance)
-	var pitch := deg_to_rad(pitch_degrees)
-	var want := centre + Vector3(0.0, sin(pitch), cos(pitch)) * dist
-	global_position = global_position.lerp(want, clampf(follow_speed * delta, 0.0, 1.0))
-	look_at(global_position - Vector3(0.0, sin(pitch), cos(pitch)), Vector3.UP)
+	_frame(clampf(follow_speed * delta, 0.0, 1.0))
 	if _trauma > 0.0:
 		var s := _trauma * _trauma * 0.25
 		h_offset = randf_range(-s, s)
@@ -47,3 +40,24 @@ func _process(delta: float) -> void:
 	else:
 		h_offset = 0.0
 		v_offset = 0.0
+
+
+func _frame(weight: float) -> void:
+	var live := targets.filter(func(t): return is_instance_valid(t) and t.is_inside_tree())
+	if live.is_empty():
+		return
+	var centre := Vector3.ZERO
+	for t in live:
+		centre += t.global_position
+	centre /= live.size()
+	if bounds.has_area():
+		centre.x = clampf(centre.x, bounds.position.x, bounds.end.x)
+		centre.z = clampf(centre.z, bounds.position.y, bounds.end.y)
+	var spread := 0.0
+	for t in live:
+		spread = maxf(spread, t.global_position.distance_to(centre))
+	var dist := clampf(min_distance + spread * 1.2, min_distance, max_distance)
+	var pitch := deg_to_rad(pitch_degrees)
+	var want := centre + Vector3(0.0, sin(pitch), cos(pitch)) * dist
+	global_position = global_position.lerp(want, weight)
+	look_at(global_position - Vector3(0.0, sin(pitch), cos(pitch)), Vector3.UP)
