@@ -1,15 +1,53 @@
 # Characters and animation
 
 Workstream 8. Every person in the game (six farmers, the punters, the police and the bar
-staff) is **one shared rig** (`CharacterRig`) wearing a different **look** (`CharacterLook`).
-Looks are data in `CharacterLooks`. The rig builds a chunky low-poly body out of primitives
-and carries the full placeholder animation set, so gameplay can use real-looking characters
-now and swap in real art later without code changes.
+staff) is a **rigged, skinned model** built in Blender on **one shared armature**, driven by
+`CharacterRig` and dressed from a **look** (`CharacterLook`, data in `CharacterLooks`).
+The rig retargets the full animation set onto each model's skeleton, and knockouts hand
+over to a **physics ragdoll**.
 
 ![Line-up](images/characters_lineup.jpg)
 
 Open `scenes/actors/character_lineup.tscn` and press F6 to see everyone. Left/Right cycles the
-animation, B toggles blood, C switches to the in-game camera angle.
+animation, B toggles blood, C switches to the in-game camera angle, K knocks everyone out
+into ragdolls.
+
+## How the models are made
+
+`tools/blender/build_characters.py` builds every model from the look data. No hand-made art
+files are needed, and changing a look and rebuilding takes about a minute for all 15.
+
+- **Bodies** are a quick procedural sculpt: ellipsoids and capsules for the torso, belly,
+  limbs and fists are voxel-remeshed into one watertight surface, smoothed so the joins
+  fillet, and decimated. Each body part is remeshed separately so an arm never welds to
+  the torso, and the part is remembered per vertex so skin weights never bleed across.
+- **Heads** are sculpted the same way (cranium, jaw, brow ridge, cheeks, chin) with a
+  separate nose on its own bone, ears, lips, eyebrows and eyes.
+- **Clothes, hair and beards** are shells grown off the body or head surface (gilets,
+  waistcoats, bibs, braces, hi-vis, collars, cuffs, pockets, hair caps, beards and stubble),
+  with hems relaxed so cut edges read as seams. Hats are small modelled pieces.
+- **Colours** come from named materials (`skin`, `top`, `trousers`, `over`, `hat`...).
+  Godot recolours them from the look, so one model serves a whole crowd type. Shirts get a
+  check pattern mapped triplanar, so the models need no UVs.
+- **Variants**: optional pieces are separate meshes called `Hair_<STYLE>`, `Beard_<STYLE>`,
+  `Hat_<STYLE>` and `Top_<TYPE>`. Each crowd model carries every piece its type can roll,
+  and Godot shows the ones that match. `Blood_*` meshes appear as a fighter gets hurt.
+- **Armature**: `Hips`, `Spine`, `Chest`, `Neck`, `Head`, `Nose`, `Shoulder/Elbow/Hand` and
+  `Hip/Knee/Foot` with L and R. All models share these names.
+
+Rebuild after changing `CharacterLooks`:
+
+```
+godot --headless --path . --script res://tools/export_looks.gd      # looks -> looks.json
+blender -b -P tools/blender/build_characters.py                      # all models (Blender 4.5)
+blender -b -P tools/blender/build_characters.py -- --blend tom gaz   # some, plus .blend files
+godot --headless --path . --import                                   # reimport the .glb files
+```
+
+`--blend` also saves `tools/blender/out/<id>.blend` (not committed) so you can open a model,
+tweak it or hand-sculpt over it. A hand-made model works as long as it keeps the bone names,
+the material names and the piece names above. `tools/blender/preview.py` renders .blend files
+with Cycles for a quick look without Godot.
 
 ## The six farmers
 
@@ -58,6 +96,10 @@ rig.play_move("punch")                         # alternates left and right
 rig.play_state(Fighter.State.keys()[state])    # "STAGGER", "KO", "HELD"...
 rig.play_hit(from_front, heavy)
 rig.get_socket(&"hand_r").add_child(bottle)    # weapons, pints
+rig.play_hit(true, false, hit_direction)       # remembers the direction for a ragdoll
+rig.play_state("KO")                           # goes ragdoll, thrown along hit_direction
+rig.start_ragdoll(impulse)                     # or do it yourself, any time
+rig.ragdoll_hips_position()                    # where the body landed (for get-up / revive)
 rig.set_blood(0.7)                             # cosmetic, 0 to 1
 rig.break_nose()                               # hook to Events.nose_broken
 rig.animation_finished.connect(...)            # e.g. to time the hit frame
@@ -65,6 +107,19 @@ rig.animation_finished.connect(...)            # e.g. to time the hit frame
 
 The rig is a `@tool` script, so you can drop a `CharacterRig` node into any scene, set
 `look_id`, and see the character in the editor.
+
+### Ragdoll
+
+Each rig builds a `PhysicalBoneSimulator3D` with capsule bodies and cone joints for the hips,
+spine, chest, head, arms and legs. `play_state("KO")` switches to it (turn off with
+`ragdoll_on_ko`), and any later `play()` or `play_state()` switches back to animation.
+
+- Ragdolls are **cosmetic**: every peer runs its own, so they never decide gameplay. The
+  fighter's own body and KO state stay host-authoritative as usual.
+- They sit on physics layer 7 (`ragdoll`) and only collide with the world (layer 1), so
+  bodies don't trip the living or pile up on each other.
+- When a downed fighter gets up or is revived, move the fighter to `ragdoll_hips_position()`
+  first, then play `get_up`.
 
 ### Contract
 
@@ -113,29 +168,30 @@ These names are the contract with gameplay. Real art must keep them.
 Combat owns the real timing. If it needs different numbers, change the keys in
 `CharacterRig._anim_defs()` and update this table.
 
-## Swapping in real art (M3/M4)
+## How the animations work
 
-The plan is one humanoid skinned mesh in Blender, exported as glTF to
-`assets/models/characters/`, with all animations above on one shared armature. Clothes, hair
-and hats are separate meshes switched on per look, and colours come from the look. Put
-`BoneAttachment3D` nodes on the hand, head and chest bones with the socket names above.
-Then `CharacterRig` builds the imported scene instead of the primitives, and everything
-that calls the API keeps working.
+The 25 animations are pose data in `CharacterRig._anim_defs()` (joint rotations in the
+character's own axes). At load time they are retargeted onto each model's skeleton:
+a bone's pose rotation is `rest_local * (M⁻¹ q M)`, where M is the bone's rest orientation.
+That means one set of animation data drives every model, whatever its proportions. A
+hand-keyed Blender action could later replace any of them by name.
 
-## Performance note
+## Performance
 
-Each placeholder character is about 80 small meshes. That is fine for greybox fights of
-20 to 30 people. If it becomes a problem before real art lands, merge each character's static
-meshes per joint.
+Models are 25k to 48k triangles with every variant included (only the shown pieces draw),
+and Godot generates LODs on import, so a crowd in the high camera draws far fewer. The 15
+`.glb` files are about 23 MB in the repo.
 
 ## Tests and tools
 
-- `godot --headless --path . --script res://tests/character_test.gd` builds every look,
-  plays every animation, and checks sockets, state mapping, crowd variation, and that the
-  floor animations really are on the floor.
+- `godot --headless --path . --script res://tests/character_test.gd` (after `--import`) builds
+  every look, plays every animation, and checks sockets, state mapping, crowd variation,
+  that the floor animations really are on the floor, and that a KO ragdoll falls the way it
+  was hit and hands back to animation. The headless dummy renderer prints a few harmless
+  `Parameter "material" is null` lines.
 - `xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_characters.gd -- <dir>`
   renders the line-up to PNGs, which is how the images in this file were made.
 
 ![Actions: punch, headbutt, kick, drink](images/characters_actions.jpg)
 
-![On the floor: crawl with blood, then KO from the game camera](images/characters_floor.jpg)
+![On the floor: crawling with blood, then everyone knocked out into ragdolls](images/characters_floor.jpg)

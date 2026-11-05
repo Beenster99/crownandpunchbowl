@@ -2,7 +2,8 @@ extends Node3D
 ## Character line-up: every farmer on the front row, punters, police and bar staff
 ## behind. Open scenes/actors/character_lineup.tscn and press F6 to look at them.
 ## Left/Right (or the dodge/punch keys) cycle the animation every character plays.
-## B toggles blood. C switches between the game camera and a close-up.
+## B toggles blood. C switches between the game camera and a close-up. K knocks everyone
+## out into ragdolls (any animation key stands them back up).
 
 @export var auto_cycle_seconds := 0.0
 
@@ -64,11 +65,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_C:
 				_close = not _close
 				_set_camera()
+			KEY_K:
+				knock_out_all()
 
 
 func play_all(anim_name: StringName) -> void:
 	_anim_index = CharacterRig.ANIMATIONS.find(anim_name)
 	_show_anim()
+
+
+## Knocks everyone backwards into ragdolls, each a slightly different way.
+func knock_out_all() -> void:
+	var i := 0
+	for r in rigs:
+		var back := r.global_basis.z
+		var side := r.global_basis.x * (0.5 if i % 2 == 0 else -0.5)
+		r.start_ragdoll((back + side).normalized() * (25.0 + 5.0 * (i % 3)) + Vector3.UP * 8.0)
+		i += 1
+	_label.text = "ragdoll   (Left/Right: animation, B: blood, C: camera, K: knock out)"
 
 
 func _step(dir: int) -> void:
@@ -81,7 +95,7 @@ func _show_anim() -> void:
 	for r in rigs:
 		r.auto_return_to_idle = false
 		r.play(a, 0.1)
-	_label.text = "%s   (Left/Right: animation, B: blood, C: camera)" % a
+	_label.text = "%s   (Left/Right: animation, B: blood, C: camera, K: knock out)" % a
 
 
 func _add(look: CharacterLook, pos: Vector3, title: String) -> void:
@@ -119,6 +133,11 @@ func _set_camera() -> void:
 
 
 func _build_stage() -> void:
+	var ground := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	shape.shape = WorldBoundaryShape3D.new()
+	ground.add_child(shape)
+	add_child(ground)  # so ragdolls have something to land on
 	var floor_mesh := MeshInstance3D.new()
 	floor_mesh.mesh = PlaneMesh.new()
 	floor_mesh.mesh.size = Vector2(24, 12)

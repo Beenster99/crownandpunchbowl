@@ -1,0 +1,847 @@
+{
+	"tom": {
+		"id": "tom",
+		"display_name": "Tom \"Muckspreader\" Pryce",
+		"description": "Six foot five of shaved head and boiler suit. The forehead is load-bearing.",
+		"feminine": false,
+		"height": 1.12,
+		"girth": 1.45,
+		"shoulders": 1.4,
+		"belly": 0.55,
+		"limb_thickness": 1.45,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.18,
+		"hand_size": 1.35,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e9a98a",
+		"flush": "d4705c",
+		"nose_size": 1.25,
+		"brow": 1.0,
+		"hair": "SHAVED",
+		"hair_color": "8a6a4e",
+		"beard": "STUBBLE",
+		"beard_color": "6b4a32",
+		"glasses": false,
+		"top": "BOILER_SUIT",
+		"top_color": "3f5f86",
+		"top_trim": "2f4866",
+		"sleeves_rolled": true,
+		"over": "NONE",
+		"over_color": "2a3550",
+		"trousers_color": "3f5f86",
+		"shorts": false,
+		"boots_color": "6b4b2a",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHAVED"
+			],
+			"beard": [
+				"STUBBLE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"BOILER_SUIT"
+			]
+		}
+	},
+	"gaz": {
+		"id": "gaz",
+		"display_name": "Gaz Whitlock",
+		"description": "Wiry hedge-layer in a ripped fleece and a beanie. Long arms, ginger goatee, never still.",
+		"feminine": false,
+		"height": 0.96,
+		"girth": 0.78,
+		"shoulders": 0.9,
+		"belly": 0.0,
+		"limb_thickness": 0.75,
+		"arm_length": 1.12,
+		"leg_length": 1.04,
+		"head_size": 0.95,
+		"hand_size": 1.05,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "f1c6a6",
+		"flush": "e08a77",
+		"nose_size": 1.0,
+		"brow": 0.2,
+		"hair": "MOP",
+		"hair_color": "c2622d",
+		"beard": "GOATEE",
+		"beard_color": "b5582a",
+		"glasses": false,
+		"top": "FLEECE",
+		"top_color": "556b2f",
+		"top_trim": "3d4d22",
+		"sleeves_rolled": false,
+		"over": "NONE",
+		"over_color": "2a3550",
+		"trousers_color": "4b5320",
+		"shorts": false,
+		"boots_color": "3a2a1a",
+		"wellies": false,
+		"hat": "BEANIE",
+		"hat_color": "e0752a",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"MOP"
+			],
+			"beard": [
+				"GOATEE"
+			],
+			"hat": [
+				"BEANIE"
+			],
+			"top": [
+				"FLEECE"
+			]
+		}
+	},
+	"barrow": {
+		"id": "barrow",
+		"display_name": "Old Man Barrow",
+		"description": "Seventy-three, bent like a hawthorn, tweed cap, white mutton chops and a nose like a plum.",
+		"feminine": false,
+		"height": 0.94,
+		"girth": 0.92,
+		"shoulders": 0.88,
+		"belly": 0.25,
+		"limb_thickness": 0.82,
+		"arm_length": 1.05,
+		"leg_length": 1.0,
+		"head_size": 1.02,
+		"hand_size": 1.2,
+		"stoop": 24.0,
+		"sway": 0.0,
+		"skin": "e7b9a0",
+		"flush": "c4413a",
+		"nose_size": 1.6,
+		"brow": 0.6,
+		"hair": "BALD",
+		"hair_color": "e9e6df",
+		"beard": "MUTTON_CHOPS",
+		"beard_color": "efece6",
+		"glasses": false,
+		"top": "WAX_JACKET",
+		"top_color": "7a5a3a",
+		"top_trim": "a68a5b",
+		"sleeves_rolled": false,
+		"over": "WAISTCOAT",
+		"over_color": "8f6a3f",
+		"trousers_color": "b08a3e",
+		"shorts": false,
+		"boots_color": "4a3220",
+		"wellies": false,
+		"hat": "FLAT_CAP",
+		"hat_color": "8a7356",
+		"tool_belt": false,
+		"neckerchief": true,
+		"neckerchief_color": "b03a2e",
+		"variants": {
+			"hair": [
+				"BALD"
+			],
+			"beard": [
+				"MUTTON_CHOPS"
+			],
+			"hat": [
+				"FLAT_CAP"
+			],
+			"top": [
+				"WAX_JACKET"
+			]
+		}
+	},
+	"mags": {
+		"id": "mags",
+		"display_name": "Margaret \"Mags\" Fenwick",
+		"description": "Dairy farmer and parish councillor. Quilted gilet, red check shirt, wellies and a grip like a gate latch.",
+		"feminine": true,
+		"height": 0.97,
+		"girth": 1.05,
+		"shoulders": 0.98,
+		"belly": 0.1,
+		"limb_thickness": 1.05,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 0.98,
+		"hand_size": 1.45,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e4ae8c",
+		"flush": "d98270",
+		"nose_size": 0.9,
+		"brow": 0.15,
+		"hair": "BUN",
+		"hair_color": "8e3b22",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "SHIRT",
+		"top_color": "b0302c",
+		"top_trim": "3b1a18",
+		"sleeves_rolled": true,
+		"over": "GILET",
+		"over_color": "1f3a5f",
+		"trousers_color": "4d4a3a",
+		"shorts": false,
+		"boots_color": "2f5a2e",
+		"wellies": true,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"BUN"
+			],
+			"beard": [
+				"NONE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"SHIRT"
+			]
+		}
+	},
+	"dicky": {
+		"id": "dicky",
+		"display_name": "Dicky Thresher",
+		"description": "Battered trilby, comb-over, braces holding up the belly. Sways like a barley field in a breeze.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 1.25,
+		"shoulders": 1.0,
+		"belly": 1.0,
+		"limb_thickness": 1.05,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.06,
+		"hand_size": 1.05,
+		"stoop": 6.0,
+		"sway": 1.0,
+		"skin": "f0b89c",
+		"flush": "d2433e",
+		"nose_size": 1.4,
+		"brow": 0.3,
+		"hair": "COMB_OVER",
+		"hair_color": "5a4632",
+		"beard": "STUBBLE",
+		"beard_color": "6a5440",
+		"glasses": false,
+		"top": "SHIRT",
+		"top_color": "d8c9a8",
+		"top_trim": "8a2f2f",
+		"sleeves_rolled": false,
+		"over": "BRACES",
+		"over_color": "8a2f2f",
+		"trousers_color": "5d4a3a",
+		"shorts": false,
+		"boots_color": "2a1d14",
+		"wellies": false,
+		"hat": "TRILBY",
+		"hat_color": "6d5b45",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"COMB_OVER"
+			],
+			"beard": [
+				"STUBBLE"
+			],
+			"hat": [
+				"TRILBY"
+			],
+			"top": [
+				"SHIRT"
+			]
+		}
+	},
+	"kev": {
+		"id": "kev",
+		"display_name": "Kev Haybale",
+		"description": "Bib-and-brace overalls, tool belt, full beard and a cap. Can fix anything, can break anything.",
+		"feminine": false,
+		"height": 1.03,
+		"girth": 1.15,
+		"shoulders": 1.18,
+		"belly": 0.2,
+		"limb_thickness": 1.18,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.25,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "8d5a3b",
+		"flush": "7a4630",
+		"nose_size": 1.0,
+		"brow": 0.45,
+		"hair": "SHORT",
+		"hair_color": "1d1712",
+		"beard": "FULL",
+		"beard_color": "241a12",
+		"glasses": false,
+		"top": "SHIRT",
+		"top_color": "6f8a5a",
+		"top_trim": "4c6040",
+		"sleeves_rolled": true,
+		"over": "OVERALLS",
+		"over_color": "34506e",
+		"trousers_color": "34506e",
+		"shorts": false,
+		"boots_color": "7a5226",
+		"wellies": false,
+		"hat": "BASEBALL_CAP",
+		"hat_color": "9a2a22",
+		"tool_belt": true,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHORT"
+			],
+			"beard": [
+				"FULL"
+			],
+			"hat": [
+				"BASEBALL_CAP"
+			],
+			"top": [
+				"SHIRT"
+			]
+		}
+	},
+	"second_homer_gilet": {
+		"id": "second_homer_gilet",
+		"display_name": "Second Homer Gilet",
+		"description": "Down from London for the weekend. Navy gilet, pale blue shirt, stone chinos, loafers.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 0.92,
+		"shoulders": 0.92,
+		"belly": 0.0,
+		"limb_thickness": 0.85,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.1,
+		"hair": "SIDE_PARTING",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "SHIRT",
+		"top_color": "a9c4e0",
+		"top_trim": "ffffff",
+		"sleeves_rolled": false,
+		"over": "GILET",
+		"over_color": "1d2a44",
+		"trousers_color": "cbb98f",
+		"shorts": false,
+		"boots_color": "6b3d22",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SIDE_PARTING"
+			],
+			"beard": [
+				"NONE",
+				"STUBBLE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"SHIRT"
+			]
+		}
+	},
+	"second_homer_chinos": {
+		"id": "second_homer_chinos",
+		"display_name": "Second Homer Chinos",
+		"description": "Red trousers, jumper over a collared shirt, floppy hair, boat shoes. Owns three houses here.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 0.9,
+		"shoulders": 0.9,
+		"belly": 0.0,
+		"limb_thickness": 0.85,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.1,
+		"hair": "FLOPPY",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "JUMPER",
+		"top_color": "e3c9a2",
+		"top_trim": "ffffff",
+		"sleeves_rolled": false,
+		"over": "NONE",
+		"over_color": "2a3550",
+		"trousers_color": "b8433b",
+		"shorts": false,
+		"boots_color": "7b5a3a",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"FLOPPY",
+				"SIDE_PARTING"
+			],
+			"beard": [
+				"NONE",
+				"STUBBLE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"JUMPER"
+			]
+		}
+	},
+	"rambler": {
+		"id": "rambler",
+		"display_name": "Rambler",
+		"description": "Weekend walker in a cagoule and a bobble hat. Came in for a ploughman's.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 0.95,
+		"shoulders": 1.0,
+		"belly": 0.3,
+		"limb_thickness": 0.9,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.3,
+		"hair": "SHORT",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": true,
+		"top": "CAGOULE",
+		"top_color": "2a7ab0",
+		"top_trim": "1a4a70",
+		"sleeves_rolled": false,
+		"over": "NONE",
+		"over_color": "2a3550",
+		"trousers_color": "4a4a46",
+		"shorts": true,
+		"boots_color": "5a3a22",
+		"wellies": false,
+		"hat": "BOBBLE_HAT",
+		"hat_color": "c23b30",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHORT"
+			],
+			"beard": [
+				"NONE",
+				"STUBBLE"
+			],
+			"hat": [
+				"BOBBLE_HAT"
+			],
+			"top": [
+				"CAGOULE"
+			]
+		}
+	},
+	"local": {
+		"id": "local",
+		"display_name": "Local",
+		"description": "A villager who isn't a farmer. Hoodie or jumper, jeans, trainers. Picks a side late.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 1.05,
+		"shoulders": 1.0,
+		"belly": 0.35,
+		"limb_thickness": 1.0,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.3,
+		"hair": "SHORT",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "HOODIE",
+		"top_color": "555b63",
+		"top_trim": "3a3e44",
+		"sleeves_rolled": false,
+		"over": "NONE",
+		"over_color": "2a3550",
+		"trousers_color": "33415c",
+		"shorts": false,
+		"boots_color": "d8d8d8",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHORT",
+				"SHAVED",
+				"MOP",
+				"BALD",
+				"SIDE_PARTING"
+			],
+			"beard": [
+				"NONE",
+				"STUBBLE",
+				"FULL",
+				"GOATEE"
+			],
+			"hat": [
+				"NONE",
+				"BASEBALL_CAP",
+				"BEANIE"
+			],
+			"top": [
+				"HOODIE",
+				"JUMPER",
+				"FLEECE",
+				"SHIRT"
+			]
+		}
+	},
+	"rugby_lad": {
+		"id": "rugby_lad",
+		"display_name": "Rugby Lad",
+		"description": "Thick neck, hooped rugby shirt, collar up. Comes in fours.",
+		"feminine": false,
+		"height": 1.06,
+		"girth": 1.35,
+		"shoulders": 1.45,
+		"belly": 0.0,
+		"limb_thickness": 1.35,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 0.95,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.6,
+		"hair": "SHAVED",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "RUGBY_SHIRT",
+		"top_color": "1f3d7a",
+		"top_trim": "e6e0cf",
+		"sleeves_rolled": false,
+		"over": "NONE",
+		"over_color": "2a3550",
+		"trousers_color": "b9ad8c",
+		"shorts": false,
+		"boots_color": "4a2f1c",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHAVED",
+				"SHORT",
+				"FLOPPY"
+			],
+			"beard": [
+				"NONE",
+				"STUBBLE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"RUGBY_SHIRT"
+			]
+		}
+	},
+	"constable": {
+		"id": "constable",
+		"display_name": "Constable",
+		"description": "Custodian helmet, black jacket, hi-vis vest. Turns up in pairs.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 1.08,
+		"shoulders": 1.1,
+		"belly": 0.0,
+		"limb_thickness": 1.1,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.4,
+		"hair": "SHORT",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "POLICE",
+		"top_color": "1a1d24",
+		"top_trim": "ffffff",
+		"sleeves_rolled": false,
+		"over": "HI_VIS",
+		"over_color": "d8e83a",
+		"trousers_color": "1a1d24",
+		"shorts": false,
+		"boots_color": "0f0f12",
+		"wellies": false,
+		"hat": "POLICE_HELMET",
+		"hat_color": "16192a",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHORT"
+			],
+			"beard": [
+				"NONE"
+			],
+			"hat": [
+				"POLICE_HELMET"
+			],
+			"top": [
+				"POLICE"
+			]
+		}
+	},
+	"sergeant": {
+		"id": "sergeant",
+		"display_name": "Sergeant",
+		"description": "Peaked cap, stripes, bigger than the constables and in no mood.",
+		"feminine": false,
+		"height": 1.07,
+		"girth": 1.3,
+		"shoulders": 1.3,
+		"belly": 0.35,
+		"limb_thickness": 1.25,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.7,
+		"hair": "SHORT",
+		"hair_color": "4a3222",
+		"beard": "MOUSTACHE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "POLICE",
+		"top_color": "1a1d24",
+		"top_trim": "ffffff",
+		"sleeves_rolled": false,
+		"over": "HI_VIS",
+		"over_color": "d8e83a",
+		"trousers_color": "1a1d24",
+		"shorts": false,
+		"boots_color": "0f0f12",
+		"wellies": false,
+		"hat": "POLICE_CAP",
+		"hat_color": "16192a",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHORT"
+			],
+			"beard": [
+				"MOUSTACHE"
+			],
+			"hat": [
+				"POLICE_CAP"
+			],
+			"top": [
+				"POLICE"
+			]
+		}
+	},
+	"barman": {
+		"id": "barman",
+		"display_name": "Barman",
+		"description": "Polishing a glass he has polished for twenty years. Never joins in.",
+		"feminine": false,
+		"height": 1.0,
+		"girth": 1.1,
+		"shoulders": 1.0,
+		"belly": 0.5,
+		"limb_thickness": 1.0,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.3,
+		"hair": "SHORT",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "BAR_SHIRT",
+		"top_color": "f2efe6",
+		"top_trim": "1b1b1b",
+		"sleeves_rolled": true,
+		"over": "APRON",
+		"over_color": "2b2b2b",
+		"trousers_color": "222222",
+		"shorts": false,
+		"boots_color": "111111",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"SHORT"
+			],
+			"beard": [
+				"NONE",
+				"STUBBLE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"BAR_SHIRT"
+			]
+		}
+	},
+	"barwoman": {
+		"id": "barwoman",
+		"display_name": "Barwoman",
+		"description": "Has seen worse. Has served worse. Will not be knocked out.",
+		"feminine": true,
+		"height": 1.0,
+		"girth": 0.95,
+		"shoulders": 1.0,
+		"belly": 0.0,
+		"limb_thickness": 1.0,
+		"arm_length": 1.0,
+		"leg_length": 1.0,
+		"head_size": 1.0,
+		"hand_size": 1.0,
+		"stoop": 0.0,
+		"sway": 0.0,
+		"skin": "e8b48f",
+		"flush": "d9826b",
+		"nose_size": 1.0,
+		"brow": 0.3,
+		"hair": "PONYTAIL",
+		"hair_color": "4a3222",
+		"beard": "NONE",
+		"beard_color": "4a3222",
+		"glasses": false,
+		"top": "BAR_SHIRT",
+		"top_color": "1b1b1b",
+		"top_trim": "8a1f2a",
+		"sleeves_rolled": true,
+		"over": "WAISTCOAT",
+		"over_color": "5a1620",
+		"trousers_color": "222222",
+		"shorts": false,
+		"boots_color": "111111",
+		"wellies": false,
+		"hat": "NONE",
+		"hat_color": "5a4a38",
+		"tool_belt": false,
+		"neckerchief": false,
+		"neckerchief_color": "a3302a",
+		"variants": {
+			"hair": [
+				"PONYTAIL"
+			],
+			"beard": [
+				"NONE"
+			],
+			"hat": [
+				"NONE"
+			],
+			"top": [
+				"BAR_SHIRT"
+			]
+		}
+	}
+}

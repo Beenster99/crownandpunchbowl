@@ -17,6 +17,11 @@ enum Hat { NONE, FLAT_CAP, BEANIE, TRILBY, BASEBALL_CAP, POLICE_HELMET, POLICE_C
 ## One line used on cards and in the docs.
 @export_multiline var description := ""
 @export var feminine := false
+## Which model in assets/models/characters/ this look wears (the farmer id or crowd type).
+@export var model := ""
+## Height and girth the model was built at. Crowd variation scales from these.
+@export var model_height := 1.0
+@export var model_girth := 1.0
 
 @export_group("Build")
 ## Uniform scale. 1.0 is about 1.78 m tall.

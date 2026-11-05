@@ -1,14 +1,14 @@
 @tool
 class_name CharacterRig
 extends Node3D
-## The shared humanoid rig. Every farmer, punter, copper and member of bar staff is
-## this rig with a different CharacterLook. It builds a chunky low-poly body out of
-## primitives, plus the full placeholder animation set.
+## The shared humanoid rig. Every farmer, punter, copper and member of bar staff is a
+## rigged, skinned model built in Blender (tools/blender/build_characters.py) on one shared
+## armature, recoloured and dressed here from a CharacterLook. The 25 animations are
+## generated from pose data at load time and retargeted onto each model's skeleton, and
+## knockouts can hand over to a physics ragdoll.
 ##
 ## Gameplay code only talks to the API below (play_state, play_move, set_move_speed,
-## get_socket, set_blood, break_nose). When real art arrives, a skinned glTF with the
-## same animation names and sockets replaces the primitives without touching gameplay.
-## See docs/CHARACTERS.md.
+## get_socket, set_blood, break_nose, start_ragdoll). See docs/CHARACTERS.md.
 ##
 ## Facing is -Z, the same as the placeholder player. The rig's origin is between the feet.
 
@@ -58,6 +58,11 @@ const ANIM_JOINTS: Array[StringName] = [
 	&"HipL", &"KneeL", &"HipR", &"KneeR",
 ]
 
+const MODEL_DIR := "res://assets/models/characters/"
+## Physics layer 7 ("ragdoll"): ragdolls hit the world but not players, NPCs or each other.
+const RAGDOLL_LAYER := 1 << 6
+const RAGDOLL_MASK := 1
+
 ## Which look to build. Leave empty and set look_id instead to pick from CharacterLooks.
 @export var look: CharacterLook:
 	set(value):
@@ -75,22 +80,31 @@ const ANIM_JOINTS: Array[StringName] = [
 @export var auto_return_to_idle := true
 ## Plays this animation on start. In the editor it previews the pose.
 @export var start_animation: StringName = &"idle"
+## KO hands over to the ragdoll instead of the ko animation.
+@export var ragdoll_on_ko := true
+## How hard a KO punch throws the body, in N·s per unit of hit direction.
+@export var ragdoll_impulse := 30.0
 
 var anim: AnimationPlayer
+var skeleton: Skeleton3D
 var current: StringName = &""
+var ragdolling := false
 
-var _body: Node3D
-var _joints := {}
+var _model: Node3D
+var _meshes: Array[MeshInstance3D] = []
 var _sockets := {}
-var _mats := {}
-var _leg := 0.0
+var _bone := {}
+var _rest_global := {}
+var _scale := 1.0
 var _lie := 0.0
 var _time := 0.0
 var _moving := false
 var _next_punch_left := false
 var _blood := 0.0
 var _blood_nodes: Array[Node3D] = []
-var _nose: Node3D
+var _last_hit := Vector3.ZERO
+var _sim: PhysicalBoneSimulator3D
+var _physical := {}
 
 
 func _ready() -> void:
@@ -101,12 +115,12 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _body == null or look == null:
+	if _model == null or look == null:
 		return
 	_time += delta
-	var w := 0.0 if ON_FLOOR.has(current) else look.sway
-	_body.rotation.z = sin(_time * 1.3) * 0.07 * w
-	_body.rotation.x = sin(_time * 0.85 + 1.0) * 0.04 * w
+	var w := 0.0 if ON_FLOOR.has(current) or ragdolling else look.sway
+	_model.rotation.z = sin(_time * 1.3) * 0.07 * w
+	_model.rotation.x = sin(_time * 0.85 + 1.0) * 0.04 * w
 
 
 # --- Public API ------------------------------------------------------------
@@ -116,6 +130,8 @@ func play(anim_name: StringName, blend := 0.1) -> void:
 	if anim == null or not anim.has_animation(anim_name):
 		push_warning("CharacterRig: no animation '%s'" % anim_name)
 		return
+	if ragdolling:
+		stop_ragdoll()
 	current = anim_name
 	anim.speed_scale = 1.0
 	anim.play(anim_name, blend)
@@ -126,7 +142,10 @@ func play(anim_name: StringName, blend := 0.1) -> void:
 ## Plays the animation for a Fighter state, by name: "stagger", "KO", "held"...
 func play_state(state_name: String) -> void:
 	var key := state_name.to_lower()
-	if key == "idle":
+	if key == "ko" and ragdoll_on_ko and not Engine.is_editor_hint():
+		var dir := _last_hit if _last_hit.length() > 0.01 else global_basis.z
+		start_ragdoll(dir.normalized() * ragdoll_impulse + Vector3.UP * ragdoll_impulse * 0.25)
+	elif key == "idle":
 		play(&"walk" if _moving else &"idle")
 	elif STATE_ANIMS.has(key):
 		play(STATE_ANIMS[key])
@@ -145,8 +164,11 @@ func play_move(move: String) -> void:
 		push_warning("CharacterRig: no animation for move '%s'" % move)
 
 
-## Plays a hit reaction. `from_front` is true when the hit came from in front.
-func play_hit(from_front := true, heavy := false) -> void:
+## Plays a hit reaction. Pass the hit's world direction (attacker to victim) so a KO
+## that follows throws the ragdoll the right way.
+func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> void:
+	if direction != Vector3.ZERO:
+		_last_hit = direction
 	if heavy:
 		play(&"stagger", 0.05)
 	else:
@@ -180,15 +202,60 @@ func set_blood(level: float) -> void:
 
 ## Knocks the nose sideways. Hook this to Events.nose_broken.
 func break_nose() -> void:
-	if _nose:
-		_nose.rotation_degrees = Vector3(0, 0, 22)
-		_nose.position.x += 0.012
+	if skeleton and _bone.has(&"Nose"):
+		var i: int = _bone[&"Nose"]
+		skeleton.set_bone_pose_rotation(i, skeleton.get_bone_rest(i).basis.get_rotation_quaternion() * Quaternion(Vector3.FORWARD, 0.45))
 	set_blood(maxf(_blood, 0.45))
 
 
 ## The head's height in world units for this look, standing. Handy for UI and camera.
 func head_height() -> float:
-	return (_sockets[&"head"] as Node3D).global_position.y - global_position.y if _sockets.has(&"head") else 1.7
+	if skeleton == null:
+		return 1.7
+	return (skeleton.global_transform * skeleton.get_bone_global_pose(_bone[&"Head"])).origin.y - global_position.y
+
+
+## Goes limp and hands the body to physics. impulse is in world space, applied to the chest.
+## The ragdoll is cosmetic: every peer runs its own, gameplay keeps using the fighter's body.
+func start_ragdoll(impulse := Vector3.ZERO) -> void:
+	if _sim == null:
+		return
+	anim.pause()
+	ragdolling = true
+	current = &"ko"
+	_sim.active = true
+	_sim.influence = 1.0
+	_sim.physical_bones_start_simulation()
+	if impulse != Vector3.ZERO:
+		var chest: PhysicalBone3D = _physical.get(&"Chest")
+		var head: PhysicalBone3D = _physical.get(&"Head")
+		if chest:
+			chest.apply_central_impulse(impulse * 0.7)
+		if head:
+			head.apply_central_impulse(impulse * 0.3)
+
+
+## Ends the ragdoll and goes back to animation (call play() or play_state() next).
+func stop_ragdoll() -> void:
+	if _sim == null or not ragdolling:
+		return
+	_sim.physical_bones_stop_simulation()
+	_sim.active = false
+	ragdolling = false
+	skeleton.reset_bone_poses()
+
+
+## A bone's current position in world space (up to date even before sockets refresh).
+func bone_position(bone: StringName) -> Vector3:
+	return (skeleton.global_transform * skeleton.get_bone_global_pose(_bone[bone])).origin
+
+
+## Where the ragdoll's hips ended up, in world space. Move the fighter here before get_up.
+func ragdoll_hips_position() -> Vector3:
+	var pb: PhysicalBone3D = _physical.get(&"Hips")
+	if ragdolling and pb:
+		return pb.global_position
+	return bone_position(&"Hips")
 
 
 # --- Building --------------------------------------------------------------
@@ -197,378 +264,226 @@ func rebuild() -> void:
 	for c in get_children():
 		remove_child(c)
 		c.free()
-	_joints.clear()
+	_meshes.clear()
 	_sockets.clear()
-	_mats.clear()
+	_bone.clear()
+	_rest_global.clear()
 	_blood_nodes.clear()
-	_nose = null
+	_physical.clear()
+	_sim = null
+	ragdolling = false
+	skeleton = null
 	if look == null:
 		return
-	_build_body()
+	var path := MODEL_DIR + (look.model if look.model != "" else look.id) + ".glb"
+	if not ResourceLoader.exists(path):
+		push_error("CharacterRig: missing model %s (run tools/blender/build_characters.py)" % path)
+		return
+	_model = (load(path) as PackedScene).instantiate()
+	_model.name = "Model"
+	var s := look.height / maxf(look.model_height, 0.01)
+	var g := look.girth / maxf(look.model_girth, 0.01)
+	_model.scale = Vector3(s * sqrt(g), s, s * sqrt(g))
+	add_child(_model)
+	skeleton = _find_skeleton(_model)
+	for i in skeleton.get_bone_count():
+		_bone[StringName(skeleton.get_bone_name(i))] = i
+		_rest_global[i] = skeleton.get_bone_global_rest(i)
+	_scale = look.model_height
+	var hips_rest: Vector3 = (_rest_global[_bone[&"Hips"]] as Transform3D).origin
+	_lie = ((0.15 * look.girth + 0.04 * look.belly) * look.model_height - hips_rest.y) / _scale
+	_dress()
+	_build_sockets()
 	_build_animations()
+	if not Engine.is_editor_hint():
+		_build_ragdoll()
 	set_blood(_blood)
 	if start_animation != &"" and anim.has_animation(start_animation):
 		play(start_animation, 0.0)
 		anim.advance(0.0)
 
 
-func _build_body() -> void:
+func _find_skeleton(n: Node) -> Skeleton3D:
+	if n is Skeleton3D:
+		return n
+	for c in n.get_children():
+		var s := _find_skeleton(c)
+		if s:
+			return s
+	return null
+
+
+## Shows the pieces this look wears and recolours every surface from the look.
+func _dress() -> void:
 	var L := look
-	var t := L.limb_thickness
-	var thigh := 0.44 * L.leg_length
-	var shin := 0.42 * L.leg_length
-	var foot_h := 0.08
-	_leg = thigh + shin + foot_h
-	var torso_w := 0.4 * L.girth * (0.92 if L.feminine else 1.0)
-	var torso_d := 0.25 * L.girth
-	var hip_w := torso_w * (1.06 if L.feminine else 0.95)
-	var shoulder_x := 0.17 * L.shoulders + 0.06 * L.girth
-	var upper := 0.3 * L.arm_length
-	var fore := 0.27 * L.arm_length
-	var head_r := 0.13 * L.head_size
-	_lie = 0.15 * L.girth + 0.04 * L.belly - _leg
+	var colours := {
+		&"skin": L.skin, &"flush": L.flush, &"lips": L.flush.lerp(Color("a8474a"), 0.6) if L.feminine else L.skin.lerp(Color("6a3028"), 0.45),
+		&"eye_white": Color("f2ede2"), &"eye_dark": Color("1a1412"), &"hair": L.hair_color, &"beard": L.beard_color,
+		&"stubble": L.skin.lerp(L.beard_color, 0.45), &"brow": (L.hair_color if L.hair != CharacterLook.Hair.BALD else L.beard_color).darkened(0.15),
+		&"top": L.top_color, &"trim": L.top_trim, &"over": L.over_color, &"trousers": L.trousers_color,
+		&"boots": L.boots_color, &"hat": L.hat_color, &"neckerchief": L.neckerchief_color, &"metal": Color("c8ccd4"),
+		&"leather": Color("6b4a2a"), &"dark": Color("161616"), &"white": Color("ececec"), &"socks": Color("6a6a60"),
+		&"blood": Color("7a0b0b"), &"hivis_band": Color("b9bcc4"),
+	}
+	var mats := {}
+	var wanted := {
+		"Hair_": CharacterLook.Hair.find_key(L.hair), "Beard_": CharacterLook.Beard.find_key(L.beard),
+		"Hat_": CharacterLook.Hat.find_key(L.hat), "Top_": CharacterLook.Top.find_key(L.top),
+	}
+	var blood := {}
+	for mi in _all_meshes(_model):
+		var n := String(mi.name)
+		var show := true
+		for prefix in wanted:
+			if n.begins_with(prefix):
+				show = n == prefix + String(wanted[prefix])
+		if n.begins_with("Blood_"):
+			blood[n] = mi
+		mi.visible = show
+		_meshes.append(mi)
+		for i in mi.mesh.get_surface_count():
+			var src := mi.mesh.surface_get_material(i)
+			var key := StringName(src.resource_name if src else "top")
+			if not mats.has(key):
+				mats[key] = _material(key, colours.get(key, Color.MAGENTA))
+			mi.set_surface_override_material(i, mats[key])
+	for n in ["Blood_Nose", "Blood_Face", "Blood_Shirt", "Blood_Cheek"]:
+		if blood.has(n):
+			_blood_nodes.append(blood[n])
 
-	var sleeve := L.top_color
-	var torso_col := L.top_color
-	var legs_col := L.trousers_color
-	if L.over == CharacterLook.Over.OVERALLS:
-		legs_col = L.over_color
 
-	_body = Node3D.new()
-	_body.name = "Body"
-	_body.scale = Vector3.ONE * L.height
-	add_child(_body)
+func _material(key: StringName, colour: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = colour
+	m.roughness = 0.82
+	match key:
+		&"eye_white", &"eye_dark":
+			m.roughness = 0.25
+		&"metal":
+			m.metallic = 0.8
+			m.roughness = 0.35
+		&"blood":
+			m.roughness = 0.3
+		&"skin", &"flush", &"lips":
+			m.rim_enabled = true
+			m.rim = 0.25
+			m.rim_tint = 0.6
+		&"top":
+			if look.top == CharacterLook.Top.SHIRT:
+				m.albedo_color = Color.WHITE
+				m.albedo_texture = _check_texture(look.top_color, look.top_trim)
+				m.uv1_triplanar = true
+				m.uv1_scale = Vector3.ONE * 5.0
+	return m
 
-	# Spine and chest.
-	var hips := _joint(&"Hips", _body, Vector3(0, _leg, 0))
-	var spine := _joint(&"Spine", hips, Vector3(0, 0.02, 0))
-	var hunch := _joint(&"Hunch", spine, Vector3(0, 0.18, 0))
-	hunch.rotation_degrees.x = -L.stoop
-	var chest := _joint(&"Chest", hunch, Vector3.ZERO)
-	var neck := _joint(&"Neck", chest, Vector3(0, 0.38, 0))
-	var head := _joint(&"Head", neck, Vector3(0, 0.06, 0))
 
-	_box(hips, Vector3(hip_w, 0.2, torso_d * 0.95), Vector3(0, -0.03, 0), legs_col)
-	_box(spine, Vector3(torso_w * 0.98, 0.22, torso_d), Vector3(0, 0.08, 0), torso_col)
-	_box(chest, Vector3(torso_w * 1.04, 0.36, torso_d * 1.04), Vector3(0, 0.19, 0), torso_col)
-	# Shoulder yoke so broad builds read from above.
-	_box(chest, Vector3(shoulder_x * 2.0 + 0.06 * t, 0.12, torso_d * 0.95), Vector3(0, 0.32, 0), torso_col)
-	if L.belly > 0.15:
-		var outer := L.over_color if L.over in [CharacterLook.Over.OVERALLS, CharacterLook.Over.HI_VIS, CharacterLook.Over.APRON] else torso_col
-		var b := _sphere(spine, 0.5, Vector3(0, 0.1, -torso_d * 0.12 - 0.05 * L.belly), outer)
-		b.scale = Vector3(torso_w * 0.92, 0.3 + 0.06 * L.belly, torso_d * 0.75 + 0.14 * L.belly)
-	_cyl(neck, 0.055 * t + 0.02 * L.girth, 0.1, Vector3(0, 0.02, 0), L.skin)
+## A tattersall check for shirts, mapped triplanar so the models need no UVs.
+static func _check_texture(base: Color, line: Color) -> ImageTexture:
+	var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
+	for y in 32:
+		for x in 32:
+			var c := base
+			var on_x := x % 16 < 3
+			var on_y := y % 16 < 3
+			if on_x and on_y:
+				c = base.lerp(line, 0.8)
+			elif on_x or on_y:
+				c = base.lerp(line, 0.45)
+			img.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(img)
 
-	_build_head(head, head_r)
-	_build_clothes(spine, chest, hips, torso_w, torso_d, hip_w, shoulder_x)
 
-	# Arms.
-	var rolled := L.sleeves_rolled
-	for side in [-1.0, 1.0]:
-		var s := "L" if side < 0 else "R"
-		var shoulder := _joint(StringName("Shoulder" + s), chest, Vector3(shoulder_x * side, 0.31, 0))
-		var elbow := _joint(StringName("Elbow" + s), shoulder, Vector3(0, -upper, 0))
-		_capsule(shoulder, 0.07 * t, upper + 0.1, Vector3(0, -upper * 0.5, 0), sleeve)
-		_capsule(elbow, 0.06 * t, fore + 0.06, Vector3(0, -fore * 0.5, 0), L.skin if rolled else sleeve)
-		if rolled:
-			_cyl(elbow, 0.072 * t, 0.07, Vector3(0, -0.02, 0), sleeve)
-		var hs := L.hand_size
-		_box(elbow, Vector3(0.1, 0.11, 0.09) * hs * (0.85 + 0.15 * t), Vector3(0, -fore - 0.04 * hs, -0.005), L.skin)
-		var hand := _joint(StringName("Hand" + s), elbow, Vector3(0, -fore - 0.05 * hs, 0))
-		_sockets[StringName("hand_" + s.to_lower())] = hand
-		if L.top == CharacterLook.Top.RUGBY_SHIRT:
-			_cyl(shoulder, 0.074 * t, 0.05, Vector3(0, -upper * 0.55, 0), L.top_trim)
-		if L.top == CharacterLook.Top.POLICE and L.hat == CharacterLook.Hat.POLICE_CAP:
-			# Sergeant's stripes.
-			for i in 3:
-				_box(shoulder, Vector3(0.02, 0.012, 0.1), Vector3(0.072 * t * side, -0.1 - i * 0.025, 0), L.top_trim)
+func _all_meshes(n: Node, out: Array[MeshInstance3D] = []) -> Array[MeshInstance3D]:
+	if n is MeshInstance3D:
+		out.append(n)
+	for c in n.get_children():
+		_all_meshes(c, out)
+	return out
 
-	# Legs.
-	for side in [-1.0, 1.0]:
-		var s := "L" if side < 0 else "R"
-		var hip := _joint(StringName("Hip" + s), hips, Vector3(hip_w * 0.27 * side, -0.04, 0))
-		var knee := _joint(StringName("Knee" + s), hip, Vector3(0, -thigh, 0))
-		_capsule(hip, 0.09 * t * (0.9 + 0.1 * L.girth), thigh + 0.12, Vector3(0, -thigh * 0.5, 0), legs_col)
-		var shin_col := legs_col
-		if L.wellies:
-			shin_col = L.boots_color
-		elif L.shorts:
-			shin_col = L.skin
-		_capsule(knee, 0.075 * t, shin + 0.08, Vector3(0, -shin * 0.5, 0), shin_col)
-		if L.shorts:
-			_cyl(knee, 0.08 * t, 0.1, Vector3(0, -shin + 0.04, 0), Color("6a6a60"))  # walking socks
-		_box(knee, Vector3(0.13, 0.09, 0.27) * (0.9 + 0.1 * t), Vector3(0, -shin - 0.035, -0.05), L.boots_color)
 
-	_sockets[&"head"] = head
-	_sockets[&"chest"] = chest
+func _build_sockets() -> void:
+	for pair in [[&"hand_r", &"HandR"], [&"hand_l", &"HandL"], [&"head", &"Head"], [&"chest", &"Chest"]]:
+		var ba := BoneAttachment3D.new()
+		ba.name = "Socket_" + String(pair[0])
+		ba.bone_name = pair[1]
+		skeleton.add_child(ba)
+		_sockets[pair[0]] = ba
+	# Where a held enemy goes: in front of the chest.
+	var chest_rest: Transform3D = _rest_global[_bone[&"Chest"]]
 	var hold := Node3D.new()
 	hold.name = "HoldPoint"
-	hold.position = Vector3(0, 0.0, -torso_d - 0.32)
-	chest.add_child(hold)
+	var want := Transform3D(Basis(), chest_rest.origin + Vector3(0, 0.1, -(0.25 * look.model_girth + 0.32)) * _scale)
+	hold.transform = chest_rest.affine_inverse() * want
+	(_sockets[&"chest"] as Node3D).add_child(hold)
 	_sockets[&"hold_point"] = hold
 
 
-func _build_head(head: Node3D, r: float) -> void:
-	var L := look
-	var c := r * 1.05  # head centre height above the neck joint
-	var skull := _sphere(head, r, Vector3(0, c, 0), L.skin)
-	skull.scale = Vector3(1.0, 1.1, 1.05)
-	# Brow ridge, ears, eyes, mouth.
-	var brow_col := L.skin.darkened(0.08)
-	_box(head, Vector3(r * 1.5, r * (0.18 + 0.2 * L.brow), r * (0.3 + 0.4 * L.brow) * (0.7 if L.feminine else 1.0)),
-		Vector3(0, c + r * 0.38, -r * 0.82), brow_col)
-	var bald_brows := L.hair_color if L.hair != CharacterLook.Hair.BALD else L.beard_color
-	for side in [-1.0, 1.0]:
-		_box(head, Vector3(r * 0.45, r * 0.1, r * 0.12), Vector3(r * 0.38 * side, c + r * (0.5 + 0.1 * L.brow), -r * (0.93 + 0.2 * L.brow)), bald_brows.darkened(0.2))
-		_box(head, Vector3(r * 0.16, r * 0.14, r * 0.06), Vector3(r * 0.36 * side, c + r * 0.25, -r * 0.98), Color("161210"))
-		_box(head, Vector3(r * 0.16, r * 0.38, r * 0.3), Vector3(r * 1.0 * side, c + r * 0.05, 0.0), L.skin.darkened(0.05))
-		_sphere(head, r * 0.22, Vector3(r * 0.55 * side, c - r * 0.1, -r * 0.82), L.flush.lerp(L.skin, 0.5))
-	_nose = Node3D.new()
-	_nose.name = "Nose"
-	_nose.position = Vector3(0, c + r * 0.05, -r * 1.02)
-	head.add_child(_nose)
-	var ns := L.nose_size
-	_box(_nose, Vector3(r * 0.32, r * 0.42, r * 0.36) * ns, Vector3(0, 0, -r * 0.1 * ns), L.flush)
-	if L.beard != CharacterLook.Beard.FULL:
-		var lips := Color("a8474a") if L.feminine else Color("5a2a24")
-		_box(head, Vector3(r * 0.55, r * (0.12 if L.feminine else 0.08), r * 0.1), Vector3(0, c - r * 0.42, -r * 0.94), lips)
+# --- Ragdoll ---------------------------------------------------------------
 
-	_build_hair(head, r, c)
-	if L.feminine and L.hair in [CharacterLook.Hair.BUN, CharacterLook.Hair.PONYTAIL]:
-		for side in [-1.0, 1.0]:
-			_box(head, Vector3(r * 0.3, r * 0.9, r * 0.35), Vector3(r * 0.9 * side, c + r * 0.05, -r * 0.45), L.hair_color)
-	_build_beard(head, r, c)
-
-	if L.glasses:
-		var frame := Color("1a1a1a")
-		for side in [-1.0, 1.0]:
-			_box(head, Vector3(r * 0.4, r * 0.3, r * 0.04), Vector3(r * 0.38 * side, c + r * 0.25, -r * 1.06), frame).transparency = 0.35
-		_box(head, Vector3(r * 0.3, r * 0.05, r * 0.04), Vector3(0, c + r * 0.3, -r * 1.06), frame)
-
-	_build_hat(head, r, c)
-
-	# Blood, hidden until set_blood() asks for it.
-	var blood := Color("8a0d0d")
-	var drip := _box(_nose, Vector3(r * 0.2, r * 0.5, r * 0.06), Vector3(0, -r * 0.4, -r * 0.18), blood)
-	var face := _box(head, Vector3(r * 1.0, r * 0.55, r * 0.08), Vector3(0, c - r * 0.35, -r * 1.0), blood)
-	var cheek := _box(head, Vector3(r * 0.35, r * 0.5, r * 0.08), Vector3(r * 0.55, c + r * 0.15, -r * 0.88), blood.darkened(0.15))
-	var shirt := _box(_joints[&"Chest"], Vector3(0.18, 0.22, 0.03) * look.girth, Vector3(0.0, 0.22, -0.13 * look.girth - 0.01), blood)
-	_blood_nodes.assign([drip, face, shirt, cheek])
-
-
-func _build_hair(head: Node3D, r: float, c: float) -> void:
-	var L := look
-	var col := L.hair_color
-	match L.hair:
-		CharacterLook.Hair.BALD:
-			# Horseshoe round the back for the old boys.
-			_box(head, Vector3(r * 1.7, r * 0.45, r * 0.5), Vector3(0, c + r * 0.05, r * 0.8), col)
-		CharacterLook.Hair.SHAVED:
-			_cap(head, r * 1.03, Vector3(0, c + r * 0.05, r * 0.04), 20.0, L.skin.lerp(col, 0.45))
-		CharacterLook.Hair.SHORT, CharacterLook.Hair.SIDE_PARTING:
-			_cap(head, r * 1.07, Vector3(0, c + r * 0.08, r * 0.05), 22.0, col)
-			_box(head, Vector3(r * 1.6, r * 0.7, r * 0.5), Vector3(0, c + r * 0.15, r * 0.75), col)
-			if L.hair == CharacterLook.Hair.SIDE_PARTING:
-				var sweep := _box(head, Vector3(r * 1.2, r * 0.3, r * 0.6), Vector3(r * 0.2, c + r * 0.82, -r * 0.55), col)
-				sweep.rotation_degrees.z = -12
-		CharacterLook.Hair.MOP:
-			var mop := _cap(head, r * 1.18, Vector3(0, c + r * 0.05, r * 0.02), 14.0, col)
-			mop.scale.y = 0.95
-			_box(head, Vector3(r * 1.7, r * 0.35, r * 0.4), Vector3(0, c + r * 0.62, -r * 0.82), col)
-			_box(head, Vector3(r * 2.1, r * 0.9, r * 0.9), Vector3(0, c - r * 0.05, r * 0.55), col)
-		CharacterLook.Hair.COMB_OVER:
-			_box(head, Vector3(r * 2.05, r * 0.5, r * 0.9), Vector3(0, c + r * 0.05, r * 0.45), col)
-			for i in 3:
-				var strand := _box(head, Vector3(r * 1.9, r * 0.06, r * 0.12), Vector3(0, c + r * (1.05 - i * 0.04), r * (-0.3 + i * 0.3)), col)
-				strand.rotation_degrees.z = 8
-		CharacterLook.Hair.BUN:
-			_cap(head, r * 1.07, Vector3(0, c + r * 0.06, r * 0.05), 22.0, col)
-			_box(head, Vector3(r * 2.0, r * 0.8, r * 0.7), Vector3(0, c + r * 0.05, r * 0.65), col)
-			_sphere(head, r * 0.42, Vector3(0, c + r * 0.85, r * 0.85), col)
-		CharacterLook.Hair.PONYTAIL:
-			_cap(head, r * 1.07, Vector3(0, c + r * 0.06, r * 0.05), 22.0, col)
-			_box(head, Vector3(r * 2.0, r * 0.8, r * 0.7), Vector3(0, c + r * 0.05, r * 0.65), col)
-			var tail := _capsule(head, r * 0.22, r * 1.6, Vector3(0, c - r * 0.2, r * 1.15), col)
-			tail.rotation_degrees.x = 25
-		CharacterLook.Hair.FLOPPY:
-			_cap(head, r * 1.12, Vector3(0, c + r * 0.1, r * 0.04), 18.0, col)
-			var fringe := _box(head, Vector3(r * 1.3, r * 0.5, r * 0.35), Vector3(-r * 0.3, c + r * 0.6, -r * 0.85), col)
-			fringe.rotation_degrees.z = 18
-			_box(head, Vector3(r * 2.0, r * 0.8, r * 0.7), Vector3(0, c, r * 0.65), col)
+func _build_ragdoll() -> void:
+	_sim = PhysicalBoneSimulator3D.new()
+	_sim.name = "Ragdoll"
+	_sim.active = false
+	skeleton.add_child(_sim)
+	var t := look.limb_thickness * _scale
+	var g := look.girth * _scale
+	# bone: [radius, cone swing degrees, twist degrees, mass]
+	var spec := {
+		&"Hips": [0.12 * g, 0.0, 0.0, 12.0], &"Spine": [0.12 * g, 25.0, 15.0, 9.0], &"Chest": [0.14 * g, 25.0, 15.0, 12.0],
+		&"Head": [0.15 * look.head_size * _scale, 40.0, 40.0, 5.0],
+		&"ShoulderL": [0.065 * t, 80.0, 30.0, 2.5], &"ShoulderR": [0.065 * t, 80.0, 30.0, 2.5],
+		&"ElbowL": [0.055 * t, 70.0, 10.0, 1.8], &"ElbowR": [0.055 * t, 70.0, 10.0, 1.8],
+		&"HipL": [0.085 * t, 60.0, 20.0, 7.0], &"HipR": [0.085 * t, 60.0, 20.0, 7.0],
+		&"KneeL": [0.07 * t, 60.0, 5.0, 4.0], &"KneeR": [0.07 * t, 60.0, 5.0, 4.0],
+	}
+	for bone_name in spec:
+		var i: int = _bone[bone_name]
+		var length := _bone_length(i)
+		var radius: float = spec[bone_name][0]
+		var pb := PhysicalBone3D.new()
+		pb.name = "PB_" + String(bone_name)
+		pb.bone_name = bone_name
+		pb.collision_layer = RAGDOLL_LAYER
+		pb.collision_mask = RAGDOLL_MASK
+		pb.mass = spec[bone_name][3]
+		pb.friction = 0.8
+		pb.linear_damp = 0.4
+		pb.angular_damp = 2.5
+		# The body sits halfway along the bone; the joint sits at the bone's root.
+		pb.body_offset = Transform3D(Basis(), Vector3(0, length * 0.5, 0))
+		pb.joint_offset = Transform3D(Basis(), Vector3(0, -length * 0.5, 0))
+		if bone_name != &"Hips":
+			pb.joint_type = PhysicalBone3D.JOINT_TYPE_CONE
+		var col := CollisionShape3D.new()
+		var cap := CapsuleShape3D.new()
+		cap.radius = radius
+		cap.height = maxf(length + radius * 0.5, radius * 2.0)
+		col.shape = cap
+		pb.add_child(col)
+		_sim.add_child(pb)
+		if bone_name != &"Hips":
+			pb.set("joint_constraints/swing_span", spec[bone_name][1])
+			pb.set("joint_constraints/twist_span", spec[bone_name][2])
+			pb.set("joint_constraints/softness", 0.8)
+			pb.set("joint_constraints/relaxation", 1.0)
+		_physical[bone_name] = pb
 
 
-func _build_beard(head: Node3D, r: float, c: float) -> void:
-	var L := look
-	var col := L.beard_color
-	match L.beard:
-		CharacterLook.Beard.STUBBLE:
-			_box(head, Vector3(r * 1.7, r * 0.75, r * 1.3), Vector3(0, c - r * 0.45, -r * 0.32), L.skin.lerp(col, 0.4))
-		CharacterLook.Beard.FULL:
-			_box(head, Vector3(r * 1.9, r * 0.95, r * 1.35), Vector3(0, c - r * 0.45, -r * 0.35), col)
-			_box(head, Vector3(r * 1.1, r * 0.6, r * 0.6), Vector3(0, c - r * 1.0, -r * 0.65), col)
-			_box(head, Vector3(r * 0.9, r * 0.18, r * 0.25), Vector3(0, c - r * 0.18, -r * 1.0), col)
-		CharacterLook.Beard.GOATEE:
-			_box(head, Vector3(r * 0.55, r * 0.7, r * 0.35), Vector3(0, c - r * 0.7, -r * 0.82), col)
-			_box(head, Vector3(r * 0.8, r * 0.12, r * 0.2), Vector3(0, c - r * 0.28, -r * 1.0), col)
-		CharacterLook.Beard.MUTTON_CHOPS:
-			for side in [-1.0, 1.0]:
-				_box(head, Vector3(r * 0.5, r * 1.0, r * 0.95), Vector3(r * 0.78 * side, c - r * 0.25, -r * 0.25), col)
-			_box(head, Vector3(r * 1.1, r * 0.2, r * 0.25), Vector3(0, c - r * 0.25, -r * 1.0), col)
-		CharacterLook.Beard.MOUSTACHE:
-			_box(head, Vector3(r * 1.0, r * 0.2, r * 0.25), Vector3(0, c - r * 0.25, -r * 1.0), col)
-
-
-func _build_hat(head: Node3D, r: float, c: float) -> void:
-	var L := look
-	var col := L.hat_color
-	match L.hat:
-		CharacterLook.Hat.FLAT_CAP:
-			var crown := _sphere(head, r * 1.15, Vector3(0, c + r * 0.72, -r * 0.05), col)
-			crown.scale = Vector3(1.0, 0.42, 1.08)
-			crown.rotation_degrees.x = -10
-			_box(head, Vector3(r * 1.5, r * 0.08, r * 0.6), Vector3(0, c + r * 0.55, -r * 1.05), col.darkened(0.15)).rotation_degrees.x = 10
-		CharacterLook.Hat.BEANIE, CharacterLook.Hat.BOBBLE_HAT:
-			var b := _cap(head, r * 1.16, Vector3(0, c + r * 0.3, r * 0.02), 12.0, col)
-			b.scale.y = 1.25
-			_cyl(head, r * 1.17, r * 0.35, Vector3(0, c + r * 0.4, r * 0.0), col.darkened(0.15)).rotation_degrees.x = 12
-			if L.hat == CharacterLook.Hat.BOBBLE_HAT:
-				_sphere(head, r * 0.35, Vector3(0, c + r * 1.75, r * 0.1), Color("f2efe6"))
-		CharacterLook.Hat.TRILBY:
-			var tilt := Node3D.new()
-			tilt.position = Vector3(0, c + r * 0.62, 0)
-			tilt.rotation_degrees = Vector3(-6, 0, 9)
-			head.add_child(tilt)
-			_cyl(tilt, r * 1.75, r * 0.07, Vector3.ZERO, col)
-			_cyl(tilt, r * 0.95, r * 0.75, Vector3(0, r * 0.38, 0), col, r * 0.8)
-			_cyl(tilt, r * 0.97, r * 0.18, Vector3(0, r * 0.12, 0), Color("2a1a14"))
-		CharacterLook.Hat.BASEBALL_CAP:
-			_cap(head, r * 1.12, Vector3(0, c + r * 0.15, r * 0.03), 8.0, col)
-			_box(head, Vector3(r * 1.2, r * 0.07, r * 0.85), Vector3(0, c + r * 0.55, -r * 1.25), col.darkened(0.1))
-		CharacterLook.Hat.POLICE_HELMET:
-			var dome := _sphere(head, r * 1.15, Vector3(0, c + r * 0.85, r * 0.05), col)
-			dome.scale = Vector3(1.0, 1.55, 1.12)
-			_cyl(head, r * 1.25, r * 0.08, Vector3(0, c + r * 0.45, 0), col)
-			_box(head, Vector3(r * 0.35, r * 0.45, r * 0.06), Vector3(0, c + r * 0.95, -r * 1.25), Color("c8ccd4"))
-			_sphere(head, r * 0.18, Vector3(0, c + r * 2.55, r * 0.05), Color("c8ccd4"))
-		CharacterLook.Hat.POLICE_CAP:
-			_cyl(head, r * 1.3, r * 0.32, Vector3(0, c + r * 0.85, -r * 0.05), col, r * 1.08)
-			_cyl(head, r * 1.11, r * 0.16, Vector3(0, c + r * 0.62, -r * 0.03), Color("e8e8e8"))
-			_box(head, Vector3(r * 1.1, r * 0.06, r * 0.55), Vector3(0, c + r * 0.52, -r * 1.12), Color("0b0b0b")).rotation_degrees.x = 15
-			_box(head, Vector3(r * 0.3, r * 0.3, r * 0.05), Vector3(0, c + r * 0.85, -r * 1.33), Color("c8ccd4"))
-		CharacterLook.Hat.HEADSCARF:
-			_cap(head, r * 1.12, Vector3(0, c + r * 0.12, r * 0.04), 18.0, col)
-			var knot := _box(head, Vector3(r * 0.4, r * 0.3, r * 0.3), Vector3(0, c - r * 0.6, -r * 0.7), col)
-			knot.rotation_degrees.z = 45
-
-
-func _build_clothes(spine: Node3D, chest: Node3D, hips: Node3D, tw: float, td: float, hw: float, shx: float) -> void:
-	var L := look
-	var front := -td * 0.52 - 0.012  # just proud of the chest front
-	match L.top:
-		CharacterLook.Top.SHIRT:
-			_collar(chest, td, L.top_color.lightened(0.1))
-			# A check pattern in the trim colour.
-			for i in [-1.0, 1.0]:
-				_box(chest, Vector3(0.025, 0.34, 0.01), Vector3(tw * 0.25 * i, 0.19, front), L.top_trim).transparency = 0.45
-				_box(chest, Vector3(tw * 1.02, 0.025, 0.01), Vector3(0, 0.19 + 0.08 * i, front), L.top_trim).transparency = 0.45
-		CharacterLook.Top.JUMPER:
-			_collar(chest, td, L.top_trim)
-			_box(spine, Vector3(tw * 1.02, 0.06, td * 1.04), Vector3(0, 0.0, 0), L.top_color.darkened(0.15))
-		CharacterLook.Top.BOILER_SUIT:
-			_collar(chest, td, L.top_trim)
-			_box(chest, Vector3(0.02, 0.36, 0.01), Vector3(0, 0.19, front), Color("b8b8b8"))
-			_box(spine, Vector3(0.02, 0.22, 0.01), Vector3(0, 0.08, front), Color("b8b8b8"))
-			_box(chest, Vector3(0.1, 0.08, 0.01), Vector3(tw * 0.25, 0.25, front), L.top_trim)
-		CharacterLook.Top.WAX_JACKET:
-			_box(chest, Vector3(tw * 1.12, 0.38, td * 1.12), Vector3(0, 0.19, 0), L.top_color)
-			_box(spine, Vector3(tw * 1.1, 0.3, td * 1.12), Vector3(0, 0.03, 0), L.top_color)
-			_collar(chest, td * 1.1, L.top_trim)
-			for i in [-1.0, 1.0]:
-				_box(spine, Vector3(0.11, 0.09, 0.02), Vector3(tw * 0.3 * i, 0.02, -td * 0.58), L.top_color.darkened(0.2))
-		CharacterLook.Top.FLEECE, CharacterLook.Top.CAGOULE:
-			_collar(chest, td, L.top_color.darkened(0.12), 0.09)
-			_box(chest, Vector3(0.018, 0.34, 0.01), Vector3(0, 0.19, front), L.top_trim)
-			if L.top == CharacterLook.Top.CAGOULE:
-				_box(chest, Vector3(tw * 0.9, 0.1, td * 0.5), Vector3(0, 0.37, td * 0.45), L.top_color.darkened(0.1))
-		CharacterLook.Top.RUGBY_SHIRT:
-			for y in [0.06, 0.2, 0.32]:
-				_box(chest, Vector3(tw * 1.06, 0.05, td * 1.06), Vector3(0, y, 0), L.top_trim)
-			_box(spine, Vector3(tw * 1.0, 0.05, td * 1.02), Vector3(0, 0.1, 0), L.top_trim)
-			_collar(chest, td, Color("f2efe6"), 0.08)
-		CharacterLook.Top.POLICE:
-			_collar(chest, td, L.top_color.lightened(0.1))
-			for i in [-1.0, 1.0]:
-				_box(chest, Vector3(0.12, 0.02, 0.1), Vector3(shx * 0.8 * i, 0.39, 0), L.top_color.lightened(0.15))
-		CharacterLook.Top.BAR_SHIRT:
-			_collar(chest, td, L.top_color.lightened(0.05))
-			_box(chest, Vector3(0.1, 0.04, 0.03), Vector3(0, 0.34, front - 0.01), L.top_trim)
-		CharacterLook.Top.HOODIE:
-			_box(chest, Vector3(tw * 0.75, 0.14, 0.12), Vector3(0, 0.36, td * 0.55), L.top_color)
-			_box(spine, Vector3(tw * 0.6, 0.12, 0.02), Vector3(0, 0.07, front), L.top_trim)
-			for i in [-1.0, 1.0]:
-				_box(chest, Vector3(0.012, 0.12, 0.012), Vector3(0.04 * i, 0.3, front), Color("e8e8e8"))
-
-	match L.over:
-		CharacterLook.Over.GILET:
-			_open_shell(chest, tw * 1.1, 0.38, td * 1.14, 0.19, L.over_color)
-			_open_shell(spine, tw * 1.08, 0.24, td * 1.12, 0.06, L.over_color)
-			for y in [0.08, 0.2, 0.32]:
-				_box(chest, Vector3(tw * 1.12, 0.008, td * 1.16), Vector3(0, y, 0), L.over_color.darkened(0.25))
-			_collar(chest, td * 1.1, L.over_color, 0.07)
-		CharacterLook.Over.WAISTCOAT:
-			_open_shell(chest, tw * 1.08, 0.3, td * 1.1, 0.15, L.over_color)
-			_open_shell(spine, tw * 1.06, 0.22, td * 1.1, 0.07, L.over_color)
-			for y in [0.06, 0.13, 0.2]:
-				_box(chest, Vector3(0.025, 0.025, 0.02), Vector3(tw * 0.12, y, -td * 0.57), Color("c9a24a"))
-		CharacterLook.Over.OVERALLS:
-			_box(spine, Vector3(tw * 1.04, 0.24, td * 1.06), Vector3(0, 0.07, 0), L.over_color)
-			_box(chest, Vector3(tw * 0.7, 0.22, 0.03), Vector3(0, 0.1, front - 0.005), L.over_color)
-			_box(chest, Vector3(0.12, 0.08, 0.01), Vector3(0, 0.12, front - 0.02), L.over_color.darkened(0.15))
-			for i in [-1.0, 1.0]:
-				_box(chest, Vector3(0.05, 0.03, td * 1.1), Vector3(tw * 0.28 * i, 0.38, 0), L.over_color)
-				_box(chest, Vector3(0.05, 0.24, 0.02), Vector3(tw * 0.28 * i, 0.26, front), L.over_color)
-				_box(chest, Vector3(0.05, 0.36, 0.02), Vector3(tw * 0.28 * i, 0.2, td * 0.53), L.over_color)
-				_box(chest, Vector3(0.03, 0.03, 0.02), Vector3(tw * 0.28 * i, 0.2, front - 0.01), Color("c9c9c9"))
-		CharacterLook.Over.HI_VIS:
-			_box(chest, Vector3(tw * 1.1, 0.34, td * 1.12), Vector3(0, 0.17, 0), L.over_color)
-			_box(spine, Vector3(tw * 1.08, 0.22, td * 1.1), Vector3(0, 0.07, 0), L.over_color)
-			for y in [0.06, 0.24]:
-				_box(chest, Vector3(tw * 1.12, 0.03, td * 1.14), Vector3(0, y, 0), Color("b9bcc4"))
-			_box(chest, Vector3(0.22, 0.05, 0.01), Vector3(0, 0.3, -td * 0.57 - 0.01), Color("1a1d24"))  # POLICE panel
-		CharacterLook.Over.APRON:
-			_box(chest, Vector3(tw * 0.75, 0.24, 0.02), Vector3(0, 0.1, front), L.over_color)
-			_box(spine, Vector3(tw * 0.8, 0.24, 0.02), Vector3(0, 0.08, front), L.over_color)
-			_box(hips, Vector3(hw * 0.95, 0.3, 0.02), Vector3(0, -0.18, -td * 0.52), L.over_color)
-			_box(spine, Vector3(tw * 1.0, 0.03, td * 1.04), Vector3(0, -0.02, 0), L.over_color)
-		CharacterLook.Over.BRACES:
-			for i in [-1.0, 1.0]:
-				_box(chest, Vector3(0.035, 0.42, 0.012), Vector3(tw * 0.25 * i, 0.17, front - 0.004), L.over_color)
-				_box(chest, Vector3(0.035, 0.42, 0.012), Vector3(tw * 0.22 * i, 0.17, td * 0.54), L.over_color)
-				_box(spine, Vector3(0.035, 0.22, 0.012), Vector3(tw * 0.25 * i, 0.06, -td * 0.52 - 0.04 * L.belly - 0.006), L.over_color)
-
-	if L.tool_belt:
-		_box(hips, Vector3(hw * 1.08, 0.06, td * 1.08), Vector3(0, 0.05, 0), Color("6b4a2a"))
-		for i in [-1.0, 1.0]:
-			_box(hips, Vector3(0.1, 0.13, 0.09), Vector3(hw * 0.5 * i, -0.04, -td * 0.15), Color("5a3a1e"))
-		var hammer := _box(hips, Vector3(0.03, 0.22, 0.03), Vector3(hw * 0.6, -0.12, 0.05), Color("8a6a3a"))
-		hammer.rotation_degrees.z = 8
-		_box(hips, Vector3(0.1, 0.035, 0.04), Vector3(hw * 0.61, -0.005, 0.05), Color("5a5a5a"))
-	if L.neckerchief:
-		var n := _box(chest, Vector3(0.16, 0.12, 0.04), Vector3(0, 0.36, -td * 0.5 - 0.02), L.neckerchief_color)
-		n.rotation_degrees.z = 45
-		_cyl(chest, 0.085 * L.girth, 0.05, Vector3(0, 0.4, 0), L.neckerchief_color)
-
-
-func _collar(chest: Node3D, td: float, col: Color, h := 0.05) -> void:
-	_box(chest, Vector3(0.22 * look.girth, h, td * 0.75), Vector3(0, 0.38 + h * 0.4, 0), col)
-
-
-## A jacket shell over the torso with a gap down the front.
-func _open_shell(parent: Node3D, w: float, h: float, d: float, y: float, col: Color) -> void:
-	var gap := 0.08
-	_box(parent, Vector3(w, h, d * 0.55), Vector3(0, y, d * 0.22), col)
-	for i in [-1.0, 1.0]:
-		_box(parent, Vector3((w - gap) * 0.5, h, d * 0.5), Vector3((w + gap) * 0.25 * i, y, -d * 0.25), col)
+func _bone_length(i: int) -> float:
+	var kids := skeleton.get_bone_children(i)
+	var best := 0.0
+	for k in kids:
+		var n := skeleton.get_bone_name(k)
+		if n == "Nose":
+			continue
+		best = maxf(best, skeleton.get_bone_rest(k).origin.length())
+	if best > 0.0:
+		return best
+	match skeleton.get_bone_name(i):
+		"Head":
+			return 0.3 * look.head_size * _scale
+		_:
+			return 0.12 * _scale
 
 
 # --- Animation -------------------------------------------------------------
@@ -577,7 +492,7 @@ func _build_animations() -> void:
 	anim = AnimationPlayer.new()
 	anim.name = "AnimationPlayer"
 	add_child(anim)
-	anim.root_node = anim.get_path_to(_body)
+	anim.root_node = anim.get_path_to(_model)
 	var lib := AnimationLibrary.new()
 	var defs := _anim_defs()
 	for anim_name in defs:
@@ -588,35 +503,46 @@ func _build_animations() -> void:
 
 func _on_animation_finished(anim_name: StringName) -> void:
 	animation_finished.emit(anim_name)
+	if ragdolling:
+		return
 	if CHAINS.has(anim_name):
 		play(CHAINS[anim_name], 0.15)
 	elif auto_return_to_idle and RETURNS_TO_IDLE.has(anim_name):
 		play(&"walk" if _moving else &"idle", 0.15)
 
 
+## Pose data rotates each joint about the character's own axes (x right, y up, z back),
+## composing down the chain. A bone's local pose rotation that gives the same result is
+## rest_local * (M^-1 * q * M), where M is the bone's rest orientation in skeleton space.
 func _make_animation(def: Dictionary) -> Animation:
 	var a := Animation.new()
 	a.length = def["length"]
-	a.loop_mode = Animation.LOOP_LINEAR if def.get("loop", false) else Animation.LOOP_NONE
+	var looping: bool = def.get("loop", false)
+	a.loop_mode = Animation.LOOP_LINEAR if looping else Animation.LOOP_NONE
 	var keys: Array = def["keys"]
+	var skel_path := String(_model.get_path_to(skeleton))
 	for joint in ANIM_JOINTS:
+		var i: int = _bone[joint]
+		var rest_local := skeleton.get_bone_rest(i).basis.get_rotation_quaternion()
+		var m := (_rest_global[i] as Transform3D).basis.get_rotation_quaternion()
 		var tr := a.add_track(Animation.TYPE_ROTATION_3D)
-		a.track_set_path(tr, _body.get_path_to(_joints[joint]))
-		a.track_set_interpolation_type(tr, Animation.INTERPOLATION_CUBIC if def.get("loop", false) else Animation.INTERPOLATION_LINEAR)
+		a.track_set_path(tr, NodePath("%s:%s" % [skel_path, joint]))
+		a.track_set_interpolation_type(tr, Animation.INTERPOLATION_CUBIC if looping else Animation.INTERPOLATION_LINEAR)
 		for k in keys:
 			var pose: Dictionary = k[1]
 			var deg: Vector3 = pose.get(joint, Vector3.ZERO)
-			a.rotation_track_insert_key(tr, k[0], Quaternion.from_euler(deg * (PI / 180.0)))
+			var q := Quaternion.from_euler(deg * (PI / 180.0))
+			a.rotation_track_insert_key(tr, k[0], rest_local * (m.inverse() * q * m))
+	var hips: int = _bone[&"Hips"]
 	var pos := a.add_track(Animation.TYPE_POSITION_3D)
-	a.track_set_path(pos, _body.get_path_to(_joints[&"Hips"]))
-	var rest: Vector3 = (_joints[&"Hips"] as Node3D).position
+	a.track_set_path(pos, NodePath("%s:Hips" % skel_path))
+	var rest := skeleton.get_bone_rest(hips).origin
 	for k in keys:
 		var pose: Dictionary = k[1]
-		a.position_track_insert_key(pos, k[0], rest + (pose.get(&"_hips", Vector3.ZERO) as Vector3))
+		a.position_track_insert_key(pos, k[0], rest + (pose.get(&"_hips", Vector3.ZERO) as Vector3) * _scale)
 	return a
 
 
-## Swaps left and right, so right-handed poses can be reused for the left.
 static func _mirror(pose: Dictionary) -> Dictionary:
 	var out := {}
 	for key in pose:
@@ -836,78 +762,3 @@ func _anim_defs() -> Dictionary:
 	return defs
 
 
-# --- Primitives ------------------------------------------------------------
-
-func _joint(joint_name: StringName, parent: Node3D, pos: Vector3) -> Node3D:
-	var j := Node3D.new()
-	j.name = joint_name
-	j.position = pos
-	parent.add_child(j)
-	_joints[joint_name] = j
-	return j
-
-
-func _mat(color: Color) -> StandardMaterial3D:
-	var key := color.to_html()
-	if not _mats.has(key):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = color
-		m.roughness = 0.85
-		_mats[key] = m
-	return _mats[key]
-
-
-func _mesh(parent: Node3D, mesh: Mesh, pos: Vector3, color: Color) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.position = pos
-	mi.material_override = _mat(color)
-	parent.add_child(mi)
-	return mi
-
-
-func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
-	var m := BoxMesh.new()
-	m.size = size
-	return _mesh(parent, m, pos, color)
-
-
-func _sphere(parent: Node3D, radius: float, pos: Vector3, color: Color) -> MeshInstance3D:
-	var m := SphereMesh.new()
-	m.radius = radius
-	m.height = radius * 2.0
-	m.radial_segments = 10
-	m.rings = 6
-	return _mesh(parent, m, pos, color)
-
-
-## A hemisphere tipped back so it sits on the crown of the head (hair, hats).
-func _cap(parent: Node3D, radius: float, pos: Vector3, tilt: float, color: Color) -> MeshInstance3D:
-	var m := SphereMesh.new()
-	m.radius = radius
-	m.height = radius
-	m.is_hemisphere = true
-	m.radial_segments = 10
-	m.rings = 4
-	var mi := _mesh(parent, m, pos, color)
-	mi.rotation_degrees.x = tilt
-	return mi
-
-
-func _capsule(parent: Node3D, radius: float, height: float, pos: Vector3, color: Color) -> MeshInstance3D:
-	var m := CapsuleMesh.new()
-	m.radius = radius
-	m.height = maxf(height, radius * 2.0)
-	m.radial_segments = 8
-	m.rings = 2
-	return _mesh(parent, m, pos, color)
-
-
-func _cyl(parent: Node3D, radius: float, height: float, pos: Vector3, color: Color, top := -1.0) -> MeshInstance3D:
-	var m := CylinderMesh.new()
-	m.bottom_radius = radius
-	m.top_radius = radius if top < 0.0 else top
-	m.height = height
-	m.radial_segments = 10
-	m.rings = 1
-	return _mesh(parent, m, pos, color)
