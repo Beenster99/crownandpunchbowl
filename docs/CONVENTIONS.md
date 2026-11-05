@@ -175,3 +175,29 @@ Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/ai_test.gd
 - **Queries other workstreams use:** `director.heat` (0..1, HUD meter),
   `director.punters_left()`. Events emitted: `fight_started`, `reinforcements_arrived`,
   `police_called`, `pub_cleared`, `banner`. `all_players_down` belongs to co-op rules, not the Director.
+
+### Pub chatter
+
+`Chatter` (`scripts/ai/chatter.gd`) is added by the Director as `Director/Chatter` (export
+`chatter`, on by default). While the pub is calm, second-homers pair up with someone standing
+within `talk_distance` and talk at them. Tests:
+`godot --headless --fixed-fps 60 --path . --script res://tests/chatter_test.gd`.
+
+- **Lines** live in `ChatterLines` (`scripts/ai/chatter_lines.gd`): topics with `open`, `reply` and
+  `more` lines, plus shared pools (`reply`, `segue`, `close`, `local`, `interrupt`). A local or rugby
+  lad who gets cornered only answers from `local`. Add new lines at the end of an array so keys stay stable.
+  The joke is always on the speaker, never on whoever they're talking about.
+- **When:** only when `director.heat <= quiet_heat` and nobody has been hit for `resume_after`
+  seconds. Any hit, `fight_started` or `police_called` ends every conversation, and a talker may
+  yelp an `interrupt` line. A talker leaving CALM ends theirs too.
+- **Npc hook:** `Npc.chatting_with` makes a calm NPC stop wandering and face its partner.
+  `engage()` and `alert()` clear it.
+- **Networking:** the host picks speakers and lines and sends `_say` / `_hush` RPCs. Every peer shows
+  the bubble (`ChatterBubble`, a Label3D over the head, hidden when `gameplay/subtitles` is off) and
+  plays the voice on the `Voice` bus. Cosmetic only.
+- **Voice:** a recording at `ChatterLines.voice_path(key)` (e.g.
+  `assets/audio/voice/chatter/dogs_open_03.ogg`, shared lines as `shared_<part>_NN.ogg`) wins.
+  Otherwise `ChatterVoice` plays a synthesised posh murmur, or the OS text-to-speech voice when
+  `voice_mode` is `TTS` and `audio/general/text_to_speech` is enabled. Male or female follows the
+  fighter's `voice` property or meta (`"m"` / `"f"`, the FX convention).
+  `ChatterLines.all_keys()` lists every line for a recording script.

@@ -51,6 +51,8 @@ enum Police { NONE, WAITING, CALLED, ARRIVED }
 @export var rng_seed := 0
 ## Spawn the starting crowd by itself. Turn off to call start() yourself.
 @export var auto_start := true
+## Add a Chatter child so calm second-homers talk while the pub is quiet.
+@export var chatter := true
 
 var heat := 0.0
 var fight_on := false
@@ -86,6 +88,11 @@ func _ready() -> void:
 		_spawner.spawn_path = _spawner.get_path_to(actors)
 	Events.hit_landed.connect(_on_hit_landed)
 	Events.fighter_knocked_out.connect(_on_knocked_out)
+	if chatter:
+		var c := Chatter.new()
+		c.name = "Chatter"
+		c.director = self
+		add_child(c)
 	if auto_start:
 		if Net.has_signal(&"all_peers_loaded"):
 			Net.connect(&"all_peers_loaded", start, CONNECT_ONE_SHOT)
