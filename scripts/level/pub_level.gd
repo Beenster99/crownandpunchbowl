@@ -47,6 +47,8 @@ const ITEM_SCENE_PATH := "res://scenes/items/%s.tscn"
 @export var spawn_placeholders := true
 ## Spawn the AI crowd (bar staff, punters, waves, police). Tests can turn it off.
 @export var crowd := true
+## Global switch for tests that want empty pubs (set before the pub loads).
+static var crowd_enabled := true
 
 var phase := Phase.ARRIVING
 var builder: PubBuilder
@@ -105,7 +107,7 @@ func _ready() -> void:
 	coop.name = "CoopRules"
 	coop.handle_pub_flow = false  # this level runs the pub-to-pub flow itself
 	add_child(coop)
-	if crowd:
+	if crowd and crowd_enabled:
 		_setup_director()
 	camera.snap()
 	var pub := GameData.current_pub()

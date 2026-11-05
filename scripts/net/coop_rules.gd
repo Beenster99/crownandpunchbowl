@@ -5,7 +5,7 @@ extends Node
 ## clients only report whether they're holding the revive button.
 ##
 ## Reviving: stand next to a downed mate and hold `interact` for `revive_time` seconds.
-## Downed means Fighter.is_down() (DOWN, CRAWL or KO). The host calls
+## Downed means knocked out (Fighter.is_ko()). The host calls
 ## Fighter.revive(fraction) if the fighter has it, else heal(max_hp * fraction).
 ## If every player is down at once the pub restarts; if the pub is cleared the
 ## group moves on to the next one.
@@ -76,7 +76,11 @@ func _physics_process(delta: float) -> void:
 		_on_wipe()
 
 
+## Out of the fight until a mate picks them up: knocked out (Fighter.is_ko). A normal
+## knockdown or a crawl doesn't count, or a single knockdown in solo would be a wipe.
 static func is_downed(p: Node) -> bool:
+	if p.has_method("is_ko"):
+		return p.is_ko()
 	return p.has_method("is_down") and p.is_down()
 
 

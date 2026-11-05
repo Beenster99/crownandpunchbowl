@@ -102,11 +102,16 @@ func _client_fight(me: Node3D) -> bool:
 		return _fail("client: no punters replicated")
 	var npc: Node3D = _punter()
 	var hp_before: float = npc.hp
-	for attempt in 5:
-		var dir: Vector3 = Vector3(1, 0, 0)
-		me.global_position = npc.global_position - dir * 0.9
+	var dirs := [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0)]
+	for attempt in dirs.size():
+		var dir: Vector3 = dirs[attempt]
+		me.global_position = npc.global_position - dir * 0.9 + Vector3(0, 0.05, 0)
+		me.velocity = Vector3.ZERO
 		me.rotation.y = atan2(-dir.x, -dir.z)
 		await create_timer(0.3).timeout
+		if absf(me.global_position.y - npc.global_position.y) > 0.3 or me.is_down():
+			await _wait(func(): return me.can_act(), 4.0)
+			continue  # landed somewhere else (furniture, off an edge); try another side
 		me.request_grab(npc)
 		if await _wait(func(): return me.state == me.State.GRABBING, 1.5):
 			break
@@ -126,7 +131,8 @@ func _client_fight(me: Node3D) -> bool:
 
 func _punter() -> Node3D:
 	for n in get_nodes_in_group("npcs"):
-		if n.is_inside_tree() and not n.is_in_group("staff") and n.state == n.State.IDLE:
+		if n.is_inside_tree() and not n.is_in_group("staff") and n.state == n.State.IDLE \
+				and n.global_position.y < 0.2:
 			return n
 	return null
 

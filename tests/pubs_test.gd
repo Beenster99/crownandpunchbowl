@@ -13,6 +13,7 @@ func _initialize() -> void:
 	var events := root.get_node("Events")
 	root.get_node("Net").start_solo("Tester", 0)
 	game_data.start_crawl(0)
+	load("res://scripts/level/pub_level.gd").crowd_enabled = false  # empty pubs: nothing to land on
 	var cleared := []
 	events.pub_cleared.connect(func(id): cleared.append(id))
 
@@ -110,12 +111,25 @@ func _check_stairs(level, player: Node3D, id: String) -> void:
 		if ledge.get_meta("railing") or float(ledge.get_meta("drop")) < 1.5:
 			continue
 		var n: Vector3 = ledge.get_meta("normal")
+		# Skip edges with stairs or furniture right below: we want a clean drop.
+		var below: Vector3 = ledge.global_position + n * 1.2
+		var q := PhysicsRayQueryParameters3D.create(below + Vector3.UP * 0.2, Vector3(below.x, -1.0, below.z), 1)
+		var hit := player.get_world_3d().direct_space_state.intersect_ray(q)
+		if hit and (hit["position"] as Vector3).y > 0.3:
+			continue
 		player.global_position = ledge.global_position - n * 0.6 + Vector3(0, 0.05, 0)
 		player.velocity = Vector3.ZERO
+		await physics_frame
+		var start_y := player.global_position.y
 		Input.action_press(actions_by_normal[n])
+		# Let go once they're over the edge, so a fast farmer doesn't run on to the stairs.
 		for _f in 90:
 			await physics_frame
+			if player.global_position.y < start_y - 1.0:
+				break
 		Input.action_release(actions_by_normal[n])
+		for _f in 60:
+			await physics_frame
 		_check(player.global_position.y < 0.3, "%s: walking off an open edge drops you to the floor (y %.2f)" % [id, player.global_position.y])
 		break
 	player.global_position = level.get_markers("PlayerSpawns")[0].global_position

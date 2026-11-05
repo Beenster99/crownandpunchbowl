@@ -106,6 +106,8 @@ func start() -> void:
 		var spot := punter_spots[i % punter_spots.size()] if not punter_spots.is_empty() \
 			else Vector3.ZERO
 		var jitter := Vector3(_rng.randf_range(-0.6, 0.6), 0.0, _rng.randf_range(-0.6, 0.6))
+		if spot.y > 0.1:
+			jitter = Vector3.ZERO  # raised galleries: don't nudge anyone off the edge
 		spawn(NpcTypes.pick_weighted(punter_mix, _rng), spot + jitter)
 
 
