@@ -6,6 +6,9 @@ extends Node3D
 const GAME_UI_SCENE := preload("res://scenes/ui/game_ui.tscn")
 const ROOM := Vector2(16.0, 12.0)
 
+## Spawn the AI crowd (Director). Sandboxes with their own opponents turn this off.
+@export var crowd := true
+
 
 func _ready() -> void:
 	_build_room()
@@ -23,8 +26,23 @@ func _ready() -> void:
 	var rules := CoopRules.new()
 	rules.name = "CoopRules"
 	add_child(rules)
+	if crowd:
+		_add_director()
 	Events.banner.emit("%s — %s" % [GameData.current_pub()["name"], GameData.current_pub()["era"]], 3.0)
 	Net.level_ready()
+
+
+## The crowd: staff behind the bar, punters round the tables and bar, newcomers by the door.
+func _add_director() -> void:
+	var director := Director.new()
+	director.name = "Director"
+	director.actors = $Actors
+	director.door = Vector3(ROOM.x * 0.5 - 1.0, 0.0, 1.5)
+	director.staff_spots = [Vector3(0.0, 0.0, -ROOM.y * 0.5 + 0.7)]
+	director.punter_spots = [Vector3(-4, 0, -1.2), Vector3(4, 0, -1.2), Vector3(-5.3, 0, 3),
+		Vector3(5.3, 0, 3), Vector3(-2, 0, -3.4), Vector3(2, 0, -3.4), Vector3(-2.6, 0, 1.5),
+		Vector3(2.6, 0, 1.5)]
+	add_child(director)
 
 
 func _build_room() -> void:

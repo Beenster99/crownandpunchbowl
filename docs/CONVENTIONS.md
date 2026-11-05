@@ -148,3 +148,21 @@ Rules other workstreams rely on:
   lets go. A held fighter who goes down is dropped.
 - **Health thresholds.** Below `crawl_fraction`, a knocked-down fighter gets up only to crawl.
   At 0 hp they are KO'd: out of targeting and collision. Staff go down but never out.
+
+## AI and Director
+
+Implemented in `scripts/ai/`: `Npc` (`npc.gd`, extends Fighter), `Director` (`director.gd`) and
+`NpcTypes` (`npc_types.gd`, stats and personality per kind). NPC scene: `scenes/actors/npc.tscn`.
+Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/ai_test.gd`.
+
+- **One Director per pub scene**, in group `director`. It spawns NPCs (named `N<n>`) through its
+  own `MultiplayerSpawner` under `actors`, and thinks on the host only.
+- **Markers.** Pubs place `Marker3D` nodes in groups `npc_door`, `punter_spot` and `staff_spot`.
+- **Kinds:** `second_homer`, `local`, `rugby_lad` (group `npcs`), `police` (`npcs` and `police`),
+  `staff` (`staff` only; never a knockout target).
+- **Moods:** `Npc.Mood.CALM / ALERT / ENGAGED`. Punters engage only when hit, when a mate nearby is
+  hit, in a gang-up, or walking in on a hot fight. They cool off when it goes quiet.
+- **Queries other workstreams use:** `director.heat` (0..1, HUD meter),
+  `director.is_refused_service(player)` (the bar: true after a player hits the staff),
+  `director.punters_left()`. Events emitted: `fight_started`, `reinforcements_arrived`,
+  `police_called`, `pub_cleared`, `banner`. `all_players_down` belongs to co-op rules, not the Director.
