@@ -111,7 +111,7 @@ func _on_move_started(move_id: StringName) -> void:
 
 
 func _on_hit_taken(info: Dictionary) -> void:
-	if fighter.is_ko():
+	if fighter.is_down():
 		return
 	var from_front := true
 	var dir := Vector3.ZERO
