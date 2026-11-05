@@ -25,6 +25,7 @@ const DOORS := "DoorSpawns"
 const POLICE := "PoliceSpawns"
 const PROPS := "PropSpawns"
 const BAR_ZONES := "BarZones"
+const LEDGES := "Ledges"
 
 const GAME_UI_SCENE := preload("res://scenes/ui/game_ui.tscn")
 const MENU_SCENE := "res://scenes/main/main_menu.tscn"
