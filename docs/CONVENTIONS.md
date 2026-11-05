@@ -150,10 +150,9 @@ Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/ai_test.gd
   own `MultiplayerSpawner` under `actors`, and thinks on the host only.
 - **Markers.** Pubs place `Marker3D` nodes in groups `npc_door`, `punter_spot` and `staff_spot`.
 - **Kinds:** `second_homer`, `local`, `rugby_lad` (group `npcs`), `police` (`npcs` and `police`),
-  `staff` (`staff` only; never a knockout target).
+  `staff` (`staff` only; nobody hits them and the Director ignores any hit on them).
 - **Moods:** `Npc.Mood.CALM / ALERT / ENGAGED`. Punters engage only when hit, when a mate nearby is
   hit, in a gang-up, or walking in on a hot fight. They cool off when it goes quiet.
 - **Queries other workstreams use:** `director.heat` (0..1, HUD meter),
-  `director.is_refused_service(player)` (the bar: true after a player hits the staff),
   `director.punters_left()`. Events emitted: `fight_started`, `reinforcements_arrived`,
   `police_called`, `pub_cleared`, `banner`. `all_players_down` belongs to co-op rules, not the Director.

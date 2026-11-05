@@ -5,8 +5,7 @@ extends Node
 ## One per pub scene. It exists on every peer (so the NPC spawner replicates), but only
 ## the host thinks.
 ##
-## Heat (0..1) is the pace dial. Players raise it by fighting (hits, knockouts, smacking the
-## barman); it decays when they ease off. Heat sets:
+## Heat (0..1) is the pace dial. Players raise it by fighting (hits and knockouts); it decays when they ease off. Heat sets:
 ##   - how many attack tokens are out (1 up to the difficulty's max_attackers)
 ##   - how likely onlookers are to wade in
 ##   - how likely a gang-up rush is (difficulty gang_up_chance)
@@ -64,7 +63,6 @@ var _rng := RandomNumberGenerator.new()
 var _spawner: MultiplayerSpawner
 var _next_id := 0
 var _tokens: Array[Npc] = []
-var _refused := {}
 var _wave_t := 0.0
 var _rush_t := 0.0
 var _police_t := 0.0
@@ -177,11 +175,6 @@ func release_token(npc: Npc) -> void:
 func tokens_out() -> int:
 	_prune_tokens()
 	return _tokens.size()
-
-
-## Players who hit the bar staff don't get served in this pub (read by the bar).
-func is_refused_service(player: Node) -> bool:
-	return _refused.has(player)
 
 
 ## NPCs (punters and police) still to be knocked out, counting ones not yet through the door.
@@ -338,13 +331,13 @@ func _on_hit_landed(info: Dictionary) -> void:
 	var victim := info.get("victim") as Fighter
 	if attacker == null or victim == null:
 		return
+	# Nobody hits the bar staff: a stray hit on them never counts towards the fight.
+	if victim.team == Fighter.Team.STAFF:
+		return
 	if attacker.team == Fighter.Team.PLAYERS and victim.team != Fighter.Team.PLAYERS:
 		_start_fight()
 		heat = minf(heat + (0.08 if bool(info.get("heavy", false)) else 0.05), 1.0)
-		if victim.team == Fighter.Team.STAFF:
-			_on_staff_hit(attacker, victim)
-		else:
-			_rouse_mates(victim, attacker)
+		_rouse_mates(victim, attacker)
 	elif attacker.team != Fighter.Team.PLAYERS and victim.team == Fighter.Team.PLAYERS:
 		heat = minf(heat + 0.02, 1.0)
 
@@ -385,24 +378,6 @@ func _rouse_mates(victim: Fighter, attacker: Fighter) -> void:
 			continue
 		if _rng.randf() < float(npc.type_value("bravery")):
 			npc.engage(attacker)
-		else:
-			npc.alert()
-
-
-func _on_staff_hit(player: Fighter, staff: Fighter) -> void:
-	heat = minf(heat + 0.1, 1.0)
-	if not _refused.has(player):
-		_refused[player] = true
-		Events.banner.emit("You're barred! No more service.", 2.5)
-	# The regulars don't take kindly to it.
-	for node in get_tree().get_nodes_in_group(&"npcs"):
-		var npc := node as Npc
-		if npc == null or npc.is_down():
-			continue
-		if npc.global_position.distance_to(staff.global_position) > MATE_RADIUS * 1.5:
-			continue
-		if _rng.randf() < float(npc.type_value("bravery")) * 1.5:
-			npc.engage(player)
 		else:
 			npc.alert()
 

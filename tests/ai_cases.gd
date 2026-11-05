@@ -234,13 +234,13 @@ func test_bar_staff() -> void:
 	var punter := d.spawn(&"local", Vector3(3, 0, -3))
 	await _wait(0.1)
 	_check(not p.is_hostile_to(staff) and not staff.is_hostile_to(p), "staff are nobody's enemy")
-	_check(not d.is_refused_service(p), "served until you hit the staff")
+	# Combat stops players hitting staff; even if a stray hit gets through, it changes nothing.
 	for i in 5:
 		_hit(staff, p, 80.0)
 		await _wait(0.2)
 	_check(not staff.is_ko(), "staff can't be knocked out")
-	_check(d.is_refused_service(p), "hitting the staff gets you barred")
-	_check(punter.mood != Npc.Mood.CALM, "the regulars notice")
+	_check(not d.fight_on and is_equal_approx(d.heat, 0.0), "a hit on staff never starts a fight")
+	_check(punter.mood == Npc.Mood.CALM, "punters ignore it")
 	_check(_swinging([staff]) == 0 and staff.foe == null, "staff never fight")
 
 
