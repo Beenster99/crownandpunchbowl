@@ -7,6 +7,7 @@ extends Node
 ##   F7  headbutt + broken nose F8  start crawling (moans, blood trail)
 ##   F9  knock out              F10 smash a bottle
 ##   F11 order a pint           F12 police whistle
+##   Shift+F7 thrown through a railing and falls 2.5 m
 ##
 ## Hits land on a red dummy that appears in front of the first player.
 
@@ -27,6 +28,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_hit(player, "punch", 9.0, false, true)
 		KEY_F6:
 			_hit(player, "kick", 16.0, true, false)
+		KEY_F7 when k.shift_pressed:
+			var d := _get_dummy(player)
+			_emit_optional("fighter_thrown_off_ledge", [d, player, true])
+			get_tree().create_timer(0.6).timeout.connect(_emit_optional.bind("fighter_fell", [d, 2.5]))
 		KEY_F7:
 			_hit(player, "headbutt", 18.0, true, true)
 			Events.nose_broken.emit(_get_dummy(player))
@@ -52,6 +57,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			handled = false
 	if handled:
 		get_viewport().set_input_as_handled()
+
+
+func _emit_optional(signal_name: String, args: Array) -> void:
+	if Events.has_signal(signal_name):
+		Events.emit_signal.callv([signal_name] + args)
 
 
 func _process(delta: float) -> void:

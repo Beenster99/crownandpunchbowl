@@ -64,6 +64,20 @@ func _initialize() -> void:
 	events.drink_ordered.emit(player)
 	events.police_called.emit()
 
+	# Ledge throws and falls (signals come from the combat PR; call the handlers if absent).
+	var faller := Node3D.new()
+	current_scene.add_child(faller)
+	faller.global_position = player.global_position + Vector3(1.5, 0, 0)
+	var marks_before: int = fx.blood.decal_count()
+	if events.has_signal("fighter_fell"):
+		events.emit_signal("fighter_thrown_off_ledge", faller, player, true)
+		events.emit_signal("fighter_fell", faller, 3.0)
+	else:
+		fx._on_thrown_off_ledge(faller, player, true)
+		fx._on_fell(faller, 3.0)
+	_check(fx.blood.decal_count() > marks_before, "no landing blood after a fall")
+	_check(faller.get_node_or_null("FxFaceBlood") != null, "no face blood after a fall")
+
 	# 3. Blood off means no new blood.
 	settings.values["gameplay"]["blood"] = 0
 	var before: int = fx.blood.decal_count()

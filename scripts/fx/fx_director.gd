@@ -46,6 +46,10 @@ const GLASS_WORDS := ["bottle", "glass", "pint", "jug", "mirror", "window"]
 @export var face_blood_per_face_hit := 0.12
 @export var crawl_smear_step := 0.45
 
+@export_group("Falls")
+@export var fall_shake_per_metre := 0.15
+@export var fall_blood_per_metre := 0.45
+
 @export_group("Pools")
 @export var sfx_voices := 24
 @export var voice_voices := 12
@@ -88,6 +92,10 @@ func _ready() -> void:
 	Events.food_ordered.connect(_on_food)
 	Events.police_called.connect(func(): play_flat("police_whistle"))
 	Events.reinforcements_arrived.connect(func(_n): play_flat("door_bang"))
+	# Added by the combat PR; connected by name so this works before and after it lands.
+	_connect_optional("fighter_thrown_off_ledge", _on_thrown_off_ledge)
+	_connect_optional("fighter_fell", _on_fell)
+	_connect_optional("fighter_got_up", _on_got_up)
 	if OS.is_debug_build() and DisplayServer.get_name() != "headless":
 		add_child(FxDebug.new())
 
@@ -307,7 +315,55 @@ func _on_food(player: Node) -> void:
 		play("munch", head_position(player))
 
 
+func _on_thrown_off_ledge(fighter: Node, thrower: Node, railing: bool) -> void:
+	if not _valid(fighter):
+		return
+	var pos := (fighter as Node3D).global_position + Vector3.UP * 0.9
+	if railing:
+		play("wood_break", pos, 3.0)
+		play("wood_hit", pos)
+		shake(shake_heavy)
+		if _is_local_player(fighter) or _is_local_player(thrower):
+			hit_stop(hit_stop_heavy)
+	else:
+		play("whoosh", pos, 6.0)
+	say(fighter, "oof", 2)
+	if _valid(thrower) and randf() < 0.6:
+		say(thrower, "grunt", 0)
+
+
+func _on_fell(fighter: Node, height: float) -> void:
+	if not _valid(fighter):
+		return
+	var feet := (fighter as Node3D).global_position
+	var h := maxf(height, 0.5)
+	play("body_fall", feet, clampf(h * 1.5, 2.0, 8.0))
+	play("kick", feet, -2.0)  # extra low-end thump under the fall
+	play("blood_splat", feet)
+	_later(0.25, say.bind(fighter, "groan", 2))
+	var head := head_position(fighter)
+	var amount := clampf(h * fall_blood_per_metre, 0.4, 2.0)
+	blood.spray(feet + Vector3.UP * 0.3, Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)), amount)
+	blood.floor_decal(Vector3(head.x, feet.y, head.z), randf_range(0.5, 0.8) * minf(amount, 1.5), "splat")
+	blood.add_face_blood(fighter, clampf(h * 0.12, 0.1, 0.5))
+	var local := _is_local_player(fighter)
+	shake(clampf(h * fall_shake_per_metre, shake_light, 1.0) * (shake_local_victim if local else 1.0))
+	if local:
+		hit_stop(hit_stop_heavy)
+
+
+func _on_got_up(fighter: Node) -> void:
+	if _valid(fighter):
+		_crawlers.erase(fighter.get_instance_id())
+		_knocked_out.erase(fighter.get_instance_id())
+
+
 # --------------------------------------------------------------------------- helpers
+
+func _connect_optional(signal_name: String, fn: Callable) -> void:
+	if Events.has_signal(signal_name):
+		Events.connect(signal_name, fn)
+
 
 static func impact_cue(move: String, to_face: bool) -> String:
 	for pair in MOVE_CUES:
