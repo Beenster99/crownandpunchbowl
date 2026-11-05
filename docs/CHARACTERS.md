@@ -90,6 +90,9 @@ These names are the contract with gameplay. Real art must keep them.
   | GRABBING | `grab` then `hold` | |
   | DODGE | `dodge` | Duck and weave |
 
+- **Moves** (`CharacterRig.MOVE_ANIMS`): every move id in `scripts/combat/moves.gd` (jab, cross,
+  hook, uppercut, haymaker, kick, knee, stomp, headbutt, counter, shove, throw, swing, baton)
+  maps to an animation. Until there are dedicated ones, several share the nearest animation.
 - **Chains**: `knockdown` → `down`, `grab` → `hold`. Attacks, hit reacts, `get_up`,
   `drink`, `eat`, `cheer` and `taunt` return to idle (turn off with `auto_return_to_idle`).
 - **Sockets** (`get_socket`): `hand_r`, `hand_l`, `head`, `chest`, `hold_point` (where a

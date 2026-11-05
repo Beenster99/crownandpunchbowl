@@ -86,7 +86,8 @@ func _check_state_and_move_mapping() -> void:
 	for s in FIGHTER_STATES:
 		if not CharacterRig.STATE_ANIMS.has(s.to_lower()):
 			_fail("no animation for Fighter state %s" % s)
-	for move in ["punch", "kick", "headbutt", "swing", "throw", "grab", "drink", "eat"]:
+	for move in ["punch", "kick", "headbutt", "swing", "throw", "grab", "drink", "eat", "jab", "cross", "hook",
+			"uppercut", "stomp", "counter", "counter_whiff", "knee", "haymaker", "shove", "baton"]:
 		if move != "punch" and not CharacterRig.MOVE_ANIMS.has(move):
 			_fail("no animation for move %s" % move)
 	var rig := CharacterRig.new()

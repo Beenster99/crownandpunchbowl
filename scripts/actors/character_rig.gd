@@ -34,6 +34,10 @@ const MOVE_ANIMS := {
 	"punch_l": &"punch_l", "punch_r": &"punch_r", "kick": &"kick", "headbutt": &"headbutt",
 	"swing": &"swing", "throw": &"throw", "grab": &"grab", "drink": &"drink", "eat": &"eat",
 	"cheer": &"cheer", "taunt": &"taunt",
+	# Move ids from scripts/combat/moves.gd. Placeholders reuse the nearest animation.
+	"jab": &"punch_l", "cross": &"punch_r", "hook": &"punch_r", "uppercut": &"punch_r",
+	"haymaker": &"punch_r", "counter": &"punch_r", "counter_whiff": &"dodge", "shove": &"punch_l",
+	"knee": &"kick", "stomp": &"kick", "baton": &"swing",
 }
 
 ## One-shots that hand over to another animation when they finish.
