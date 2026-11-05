@@ -1,0 +1,270 @@
+extends Node
+## Test cases for the Fighter API and core combat rules. Loaded by combat_test.gd once the
+## autoloads exist (SceneTree scripts compile before autoloads are registered).
+
+signal finished(failures: int)
+
+var _failures := 0
+var _arena: Node3D
+
+
+func run() -> void:
+	GameData.difficulty_index = 1  # Session Ale: multipliers of 1.0
+	var tests := [
+		"test_jab_hits_and_lunges", "test_held_takes_bonus_damage", "test_counter",
+		"test_knockdown_crawl_ko", "test_grab_escape_and_throw", "test_dodge_iframes",
+		"test_staff_never_ko", "test_no_friendly_fire", "test_heal_gets_up_from_crawl",
+		"test_ground_moves", "test_weapon_hooks",
+	]
+	for t in tests:
+		_arena = Node3D.new()
+		add_child(_arena)
+		_floor()
+		await call(t)
+		_arena.queue_free()
+		await get_tree().process_frame
+	if _failures == 0:
+		print("COMBAT OK: %d tests" % tests.size())
+	finished.emit(_failures)
+
+
+# --- Helpers ---------------------------------------------------------------------------
+
+func _floor() -> void:
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	shape.shape = BoxShape3D.new()
+	shape.shape.size = Vector3(40, 0.2, 40)
+	body.add_child(shape)
+	body.position.y = -0.1
+	_arena.add_child(body)
+
+
+func _fighter(team: int, pos: Vector3, face_toward := Vector3.INF) -> Fighter:
+	var f := Fighter.new()
+	f.team = team
+	f.collision_layer = 2 if team == Fighter.Team.PLAYERS else 4
+	f.collision_mask = 7
+	var shape := CollisionShape3D.new()
+	shape.shape = CapsuleShape3D.new()
+	shape.shape.radius = 0.35
+	shape.position.y = 0.875
+	f.add_child(shape)
+	f.position = pos
+	_arena.add_child(f)
+	if face_toward != Vector3.INF:
+		var d := face_toward - pos
+		f.rotation.y = atan2(-d.x, -d.z)
+	return f
+
+
+func _wait(seconds: float) -> void:
+	var frames := int(ceil(seconds * 60.0))
+	for i in frames:
+		await get_tree().physics_frame
+
+
+func _check(cond: bool, what: String) -> void:
+	if not cond:
+		_failures += 1
+		push_error("FAIL: " + what)
+		print("FAIL: " + what)
+
+
+# --- Tests -----------------------------------------------------------------------------
+
+func test_jab_hits_and_lunges() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -4))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -3.5))
+	await _wait(0.1)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	p.request_attack(&"jab")
+	_check(p.state == Fighter.State.WINDUP, "jab starts a windup")
+	_check(p.target == e, "freeflow picks the enemy in front")
+	await _wait(0.6)
+	_check(hits.size() == 1, "jab landed once after lunging (got %d)" % hits.size())
+	_check(is_equal_approx(e.hp, e.max_hp - 5.0), "jab did 5 damage (hp %.1f)" % e.hp)
+	_check(p.global_position.distance_to(e.global_position) < 2.0, "player lunged to the enemy")
+
+
+func test_held_takes_bonus_damage() -> void:
+	var holder := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var mate := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -2.6), Vector3(0, 0, 0))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
+	await _wait(0.1)
+	holder.request_grab()
+	_check(holder.state == Fighter.State.GRABBING and e.state == Fighter.State.HELD, "grab holds")
+	_check(e.held_by == holder and holder.holding == e, "grab links holder and victim")
+	await _wait(0.1)
+	mate.request_attack(&"cross", e)
+	await _wait(0.5)
+	_check(is_equal_approx(e.hp, e.max_hp - 7.0 * Moves.HELD_DAMAGE_MULT),
+		"held victim takes bonus damage (hp %.1f)" % e.hp)
+	_check(e.state == Fighter.State.HELD, "a light hit doesn't free the held victim")
+	holder.request_attack(&"jab")  # becomes a knee
+	await _wait(0.1)
+	_check(e.hp < e.max_hp - 10.5, "holder knees the held victim")
+
+
+func test_counter() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	await _wait(0.1)
+	var telegraphs := []
+	var counters := []
+	var tel_cb := func(a, _t, s): telegraphs.append(s)
+	var cnt_cb := func(d, a): counters.append([d, a])
+	Events.attack_telegraphed.connect(tel_cb)
+	Events.attack_countered.connect(cnt_cb)
+	e.request_attack(&"swing", p)
+	_check(telegraphs.size() == 1, "enemy swing is telegraphed")
+	_check(e.is_counterable_by(p), "swing is counterable by its target")
+	await _wait(0.1)
+	p.request_counter()
+	_check(counters.size() == 1, "counter registered")
+	_check(e.state == Fighter.State.STAGGER, "countered enemy is staggered")
+	await _wait(0.8)
+	_check(is_equal_approx(p.hp, p.max_hp), "countered swing never lands")
+	_check(e.hp < e.max_hp, "counter hits back")
+	Events.attack_telegraphed.disconnect(tel_cb)
+	Events.attack_countered.disconnect(cnt_cb)
+	# Without a counter the swing lands after the telegraph time.
+	await _wait(0.6)
+	e.request_attack(&"swing", p)
+	await _wait(1.0)
+	_check(p.hp < p.max_hp, "uncountered swing lands")
+
+
+func test_knockdown_crawl_ko() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2))
+	await _wait(0.1)
+	e.take_hit({"attacker": p, "damage": 10.0, "direction": Vector3.FORWARD, "knockdown": true})
+	_check(e.state == Fighter.State.DOWN, "knockdown puts them down")
+	await _wait(e.get_up_time + 0.2)
+	_check(e.state == Fighter.State.IDLE, "healthy fighter gets up")
+	e.hp = e.max_hp * 0.2
+	await _wait(0.5)
+	e.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3.FORWARD, "knockdown": true})
+	await _wait(e.get_up_time + 0.2)
+	_check(e.state == Fighter.State.CRAWL, "nearly-out fighter crawls (state %d)" % e.state)
+	_check(e.can_be_targeted(), "crawlers can still be targeted")
+	e.take_hit({"attacker": p, "damage": 100.0, "direction": Vector3.FORWARD})
+	_check(e.state == Fighter.State.KO and e.is_down(), "KO at zero hp")
+	_check(not e.can_be_targeted() and e.collision_layer == 0, "KO'd fighter is out of play")
+
+
+func test_grab_escape_and_throw() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
+	await _wait(0.1)
+	p.request_grab()
+	for i in 12:
+		e.request_struggle()
+	_check(e.state == Fighter.State.STAGGER and p.state == Fighter.State.IDLE, "struggling frees")
+	_check(e.held_by == null and p.holding == null, "release clears links")
+	await _wait(0.6)
+	p.request_grab(e)
+	_check(p.state == Fighter.State.GRABBING, "re-grab")
+	p.request_throw()
+	_check(e.state == Fighter.State.DOWN, "thrown fighter is knocked down")
+	_check(p.state == Fighter.State.IDLE, "thrower is free")
+	# Hold times out on its own.
+	await _wait(e.get_up_time + 0.5)
+	p.global_position = e.global_position + Vector3(0, 0, 1.0)
+	p.rotation.y = 0.0
+	await _wait(0.05)
+	p.request_grab(e)
+	await _wait(Moves.HOLD_TIME * p.grip + 0.2)
+	_check(p.state != Fighter.State.GRABBING, "hold times out")
+
+
+func test_dodge_iframes() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2))
+	await _wait(0.1)
+	p.request_dodge(Vector3.RIGHT)
+	_check(p.state == Fighter.State.DODGE, "dodge starts")
+	_check(not p.can_be_hit(), "dodge has i-frames")
+	p.take_hit({"attacker": e, "damage": 10.0, "direction": Vector3.BACK})
+	_check(is_equal_approx(p.hp, p.max_hp), "hit during i-frames misses")
+	await _wait(0.5)
+	_check(p.global_position.x > 1.5, "dodge moves the fighter")
+	_check(p.state == Fighter.State.IDLE, "dodge ends")
+
+
+func test_staff_never_ko() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0))
+	var s := _fighter(Fighter.Team.STAFF, Vector3(0, 0, -1.2))
+	s.can_be_knocked_out = false
+	await _wait(0.1)
+	_check(not p.is_hostile_to(s), "staff are not targeting enemies")
+	_check(p.can_hit(s), "players can still hit staff on purpose")
+	s.take_hit({"attacker": p, "damage": 500.0, "direction": Vector3.FORWARD})
+	_check(s.state == Fighter.State.DOWN and s.hp >= 1.0, "staff go down but not out")
+
+
+func test_no_friendly_fire() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var mate := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -1.0))
+	var police := _fighter(Fighter.Team.POLICE, Vector3(3, 0, 0))
+	var punter := _fighter(Fighter.Team.PUNTERS, Vector3(-3, 0, 0))
+	await _wait(0.1)
+	p.request_attack(&"hook", mate)
+	await _wait(0.5)
+	_check(is_equal_approx(mate.hp, mate.max_hp), "no friendly fire")
+	_check(not police.is_hostile_to(punter), "police and punters are on the same side")
+	_check(police.is_hostile_to(p), "police are hostile to players")
+
+
+func test_heal_gets_up_from_crawl() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0))
+	await _wait(0.1)
+	p.hp = 10.0
+	p.take_hit({"attacker": null, "damage": 1.0, "direction": Vector3.FORWARD, "knockdown": true})
+	await _wait(p.get_up_time + 0.2)
+	_check(p.state == Fighter.State.CRAWL, "player crawls when nearly out")
+	p.heal(50.0)
+	_check(p.state == Fighter.State.IDLE and is_equal_approx(p.hp, 59.0), "a pint gets you up")
+
+
+func test_ground_moves() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2))
+	await _wait(0.1)
+	e.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3.FORWARD, "knockdown": true})
+	var before := e.hp
+	p.request_attack(&"jab", e)
+	await _wait(0.4)
+	_check(is_equal_approx(e.hp, before), "punches miss fighters on the floor")
+	p.request_attack(&"stomp")
+	_check(p.target == e, "stomp targets the downed fighter")
+	await _wait(0.5)
+	_check(e.hp < before, "stomp hits the floor")
+
+
+class FakeChair extends Node:
+	var hits := 0
+	func modify_move(m: Dictionary) -> Dictionary:
+		m["damage"] = float(m["damage"]) * 3.0
+		m["sweep"] = true
+		m["arc"] = 140.0
+		return m
+	func on_hit(_info: Dictionary) -> void:
+		hits += 1
+
+
+func test_weapon_hooks() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var a := _fighter(Fighter.Team.PUNTERS, Vector3(-0.4, 0, -0.9))
+	var b := _fighter(Fighter.Team.PUNTERS, Vector3(0.4, 0, -0.9))
+	await _wait(0.1)
+	var chair := FakeChair.new()
+	_arena.add_child(chair)
+	p.equip(chair)
+	p.request_attack(&"jab")
+	await _wait(0.5)
+	_check(chair.hits == 2, "sweeping weapon hits both (got %d)" % chair.hits)
+	_check(is_equal_approx(a.hp, a.max_hp - 15.0), "weapon modifies damage (hp %.1f)" % a.hp)
+	_check(p.unequip() == chair and p.weapon == null, "unequip returns the item")

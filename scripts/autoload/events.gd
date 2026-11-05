@@ -2,7 +2,8 @@ extends Node
 ## Global signal bus. Systems talk to each other through these signals so that
 ## workstreams (combat, AI, audio, gore, HUD) stay decoupled.
 ## Add new signals here rather than reaching across the scene tree.
-## Emit on the peer that owns the event (usually the server); FX listeners run everywhere.
+## Combat signals fire on every peer (the Fighter replicates them), so FX and HUD work on
+## clients. Gameplay listeners (AI, scoring, pub flow) must check multiplayer.is_server().
 
 # --- Combat ---------------------------------------------------------------
 ## A hit landed. `info` keys: attacker, victim (Node), move (String), damage (float),
@@ -11,6 +12,12 @@ signal hit_landed(info: Dictionary)
 signal fighter_knocked_down(fighter: Node)
 signal fighter_crawling(fighter: Node)
 signal fighter_knocked_out(fighter: Node)
+## A fighter stood back up after a knockdown (or healed out of a crawl).
+signal fighter_got_up(fighter: Node)
+## An enemy started a counterable attack. `seconds` is the counter window.
+signal attack_telegraphed(attacker: Node, target: Node, seconds: float)
+## `defender` countered `attacker`'s tell.
+signal attack_countered(defender: Node, attacker: Node)
 signal nose_broken(fighter: Node)
 signal grab_started(holder: Node, victim: Node)
 signal grab_ended(holder: Node, victim: Node)
