@@ -10,14 +10,16 @@ then knock out everyone in the building except the bar staff.
 
 ## Running
 
-Open the folder in Godot 4.7 and press Play. The main menu lets you pick a pub and difficulty
-and start a solo session in the greybox test pub. Move with WASD or the left stick. Press Esc
-to go back to the menu.
+Open the folder in Godot 4.7 and press Play. From the main menu, **Play solo** takes you to
+farmer select, where you also pick the starting pub and difficulty. **Settings** has Gameplay,
+Sound, Graphics and Keybinds (keyboard/mouse and controller, click a binding to change it).
+In the pub, move with WASD or the left stick. Esc or Start opens the pause menu.
 
 ## Tests
 
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
+godot --headless --path . --script res://tests/ui_test.gd
 ```
 
 The current state is the M0 skeleton: shared data, settings and keybind storage, a placeholder

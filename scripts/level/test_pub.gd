@@ -4,11 +4,13 @@ extends Node3D
 ## BrawlCamera at them. The pubs workstream replaces this with authored scenes.
 
 const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
+const GAME_UI_SCENE := preload("res://scenes/ui/game_ui.tscn")
 const ROOM := Vector2(16.0, 12.0)
 
 
 func _ready() -> void:
 	_build_room()
+	add_child(GAME_UI_SCENE.instantiate())  # HUD and pause menu
 	var cam := BrawlCamera.new()
 	add_child(cam)
 	var i := 0
@@ -21,12 +23,6 @@ func _ready() -> void:
 		cam.targets.append(p)
 		i += 1
 	Events.banner.emit("%s — %s" % [GameData.current_pub()["name"], GameData.current_pub()["era"]], 3.0)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause"):
-		Net.leave()
-		get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")
 
 
 func _build_room() -> void:
