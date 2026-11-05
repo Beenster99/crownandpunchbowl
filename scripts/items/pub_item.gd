@@ -324,6 +324,8 @@ func _flight_victim() -> Fighter:
 		var f := node as Fighter
 		if f == null or f == thrower or not f.can_be_hit() or f.is_down():
 			continue
+		if f.team == Fighter.Team.STAFF:  # nobody hits the bar staff, not even by accident
+			continue
 		if thrower != null and is_instance_valid(thrower) and not thrower.can_hit(f):
 			continue
 		var to := f.global_position - global_position

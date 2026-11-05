@@ -58,7 +58,7 @@ A fighter who is knocked down, held or KO'd drops what they're holding.
 
 - Pints take 1.2 s to pour and food 4 s, then appear on the counter in front of whoever ordered.
   Anyone can take them. One order at a time each.
-- While all bar staff near the counter are on the floor, nobody is served (and a banner says so).
+- Nobody hits the bar staff: thrown items fly straight past them, and the bar always serves.
 - **Tipsy** (`Fighter.tipsy`, 0 to 1) wears off at 0.008 a second. At full tipsy: +15% damage,
   +25% toughness, -15% speed, and you sway off your line.
 - Traits: Barrow (`seasoned_drinker`) gets double from ale, Dicky (`drunken_master`) gets +45%

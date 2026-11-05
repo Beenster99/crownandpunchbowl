@@ -14,7 +14,7 @@ func run() -> void:
 		"test_pick_up_and_swap", "test_bottle_breaks_into_broken_bottle",
 		"test_chair_sweeps_and_breaks", "test_throw_bottle", "test_darts_one_at_a_time",
 		"test_thrown_leg_lands", "test_pint_heals_tipsy_and_leaves_glass", "test_food_heals_over_time",
-		"test_bar_orders", "test_bar_closed_when_staff_down", "test_drop_when_knocked_down",
+		"test_bar_orders", "test_throws_miss_bar_staff", "test_drop_when_knocked_down",
 		"test_poker_never_breaks", "test_handyman_and_seasoned_drinker",
 	]
 	for t in tests:
@@ -266,21 +266,18 @@ func test_bar_orders() -> void:
 	_check(drinks.size() == 1, "can't order from across the room")
 
 
-func test_bar_closed_when_staff_down() -> void:
-	var bar := Bar.new()
-	bar.position = Vector3(0, 0, -2)
-	_items.add_child(bar)
+func test_throws_miss_bar_staff() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3.ZERO, Vector3(0, 0, -1))
 	var barman := _fighter(Fighter.Team.STAFF, Vector3(0, 0, -3))
-	barman.can_be_knocked_out = false
-	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -1.2), Vector3(0, 0, -3))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -6))
+	var bottle := _items.add_item(&"bottle", Vector3(0, 0, -0.3))
 	await _wait(0.1)
-	barman.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3.BACK, "knockdown": true})
-	await _wait(0.05)
-	_check(barman.is_down(), "barman is down")
-	_check(not bar.server_order(p, &"pint"), "no service while the barman's down")
-	await _wait(barman.get_up_time + 0.2)
-	_check(bar.server_order(p, &"pint"), "service resumes when he's up")
-
+	bottle.server_give(p)
+	await _wait(0.02)
+	_hands(p).request_throw_item()
+	await _wait(0.8)
+	_check(is_equal_approx(barman.hp, barman.max_hp), "a thrown bottle flies past the barman")
+	_check(e.hp < e.max_hp, "and hits the punter behind him (hp %.1f)" % e.hp)
 
 func test_drop_when_knocked_down() -> void:
 	var p := _fighter(Fighter.Team.PLAYERS, Vector3.ZERO, Vector3(0, 0, -1))
