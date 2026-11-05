@@ -402,6 +402,15 @@ func bar_counter(rect: Rect2, staff_dir: Vector3, brass := false) -> void:
 	var zone_pos := centre + punter_dir * ((size.z if long_x else size.x) * 0.5 + 0.6)
 	zone_pos.y = 1.0
 	bar_zone(zone_size, zone_pos)
+	# Ordering logic from the items workstream: local +Z faces the customers.
+	var order_bar := Bar.new()
+	order_bar.name = "OrderBar%d" % _bar_count()
+	order_bar.length = length
+	order_bar.depth = size.z if long_x else size.x
+	order_bar.top_height = size.y
+	order_bar.position = Vector3(centre.x, 0.0, centre.z)
+	order_bar.basis = Basis.looking_at(-punter_dir, Vector3.UP)
+	world.add_child(order_bar)
 	# Staff stand behind the middle of the bar; a second spot for wider bars.
 	var depth := size.z if long_x else size.x
 	var behind := centre + staff_dir * (depth * 0.5 + 0.7)
@@ -421,6 +430,14 @@ func bar_counter(rect: Rect2, staff_dir: Vector3, brass := false) -> void:
 		var along := Vector3(length * k, 0, 0) if long_x else Vector3(0, 0, length * k)
 		prop("bottle", centre + along + Vector3(0, 0.62, 0))
 	prop("glass", centre + Vector3(0, 0.62, 0))
+
+
+func _bar_count() -> int:
+	var n := 0
+	for c in world.get_children():
+		if c is Bar:
+			n += 1
+	return n
 
 
 ## Shelving and optics against a wall behind the bar. `facing` points into the room.

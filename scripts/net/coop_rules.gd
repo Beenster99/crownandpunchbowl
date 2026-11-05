@@ -21,6 +21,9 @@ signal player_revived(downed: Node3D, reviver: Node3D)
 @export var revive_hp_fraction := 0.35
 @export var wipe_restart_delay := 4.0
 @export var next_pub_delay := 6.0
+## Move the group on when a pub is cleared. PubLevel turns this off and runs the
+## crawl itself (it knows when the last pub is done).
+@export var handle_pub_flow := true
 
 ## Host: peer_id -> holding interact.
 var _holding := {}
@@ -138,7 +141,7 @@ func _announce_wipe() -> void:
 
 
 func _on_pub_cleared(_pub_id: String) -> void:
-	if not multiplayer.is_server() or _flow_pending:
+	if not handle_pub_flow or not multiplayer.is_server() or _flow_pending:
 		return
 	_flow_pending = true
 	var next: Dictionary = GameData.PUBS[(GameData.current_pub_index + 1) % GameData.PUBS.size()]

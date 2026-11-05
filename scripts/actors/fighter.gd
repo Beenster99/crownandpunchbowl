@@ -51,6 +51,8 @@ const _RELEASE_SILENT := 1  # victim's state is set by whatever happens next (hi
 ## Bar staff can't be knocked out.
 @export var can_be_knocked_out := true
 @export var get_up_time := 1.5
+## Dress this fighter in a CharacterRig (FighterVisual) instead of the capsule placeholder.
+@export var use_rig := true
 
 var hp: float
 var state: State = State.IDLE
@@ -97,6 +99,8 @@ func _ready() -> void:
 	hp = max_hp
 	_poise = Moves.POISE * toughness
 	_saved_layer = collision_layer
+	if use_rig:
+		FighterVisual.attach(self)
 
 
 # --- Queries --------------------------------------------------------------------------
@@ -169,6 +173,15 @@ func is_counterable_by(defender: Fighter) -> bool:
 ## Seconds left before a winding-up attack lands (for HUD counter prompts).
 func windup_remaining() -> float:
 	return _windup_left if state == State.WINDUP else 0.0
+
+
+## World position of the head, for FX (blood, sounds) and UI.
+func get_head_position() -> Vector3:
+	var v := get_node_or_null(FighterVisual.NODE_NAME) as FighterVisual
+	if v != null and v.rig != null:
+		return v.head_position()
+	var head := get_node_or_null("Head") as Node3D
+	return head.global_position if head else global_position + Vector3.UP * 1.5
 
 
 func get_facing() -> Vector3:

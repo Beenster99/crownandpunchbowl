@@ -26,7 +26,7 @@ const POLICE := "PoliceSpawns"
 const PROPS := "PropSpawns"
 const BAR_ZONES := "BarZones"
 
-const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
+const GAME_UI_SCENE := preload("res://scenes/ui/game_ui.tscn")
 const MENU_SCENE := "res://scenes/main/main_menu.tscn"
 const ITEM_SCENE_PATH := "res://scenes/items/%s.tscn"
 
@@ -44,11 +44,17 @@ const ITEM_SCENE_PATH := "res://scenes/items/%s.tscn"
 @export var camera_front_margin := 3.5
 ## Drop greybox stand-ins on prop markers that have no item scene yet.
 @export var spawn_placeholders := true
+## Spawn the AI crowd (bar staff, punters, waves, police). Tests can turn it off.
+@export var crowd := true
 
 var phase := Phase.ARRIVING
 var builder: PubBuilder
 var camera: BrawlCamera
 var fader: OccluderFader
+var items: PubItems
+var spawner: PlayerSpawner
+var coop: CoopRules
+var director: Director
 ## AI director sets this while more punters (or police) are still on their way in,
 ## so the pub doesn't count as cleared between waves.
 var arrivals_pending := 0
@@ -74,7 +80,9 @@ func _ready() -> void:
 	builder = PubBuilder.new(self, $World, $Markers, PubEra.get_style(era))
 	_build(builder)
 	_build_environment()
+	items = PubItems.install(self)
 	_spawn_props()
+	add_child(GAME_UI_SCENE.instantiate())  # HUD and pause menu
 	camera = BrawlCamera.new()
 	camera.name = "BrawlCamera"
 	# Keep the framing centre inside the room. The front margin is bigger because the
@@ -85,16 +93,28 @@ func _ready() -> void:
 	fader.name = "OccluderFader"
 	fader.camera = camera
 	add_child(fader)
-	_spawn_players()
-	camera.snap()
 	Events.fight_started.connect(_on_fight_started)
 	Events.hit_landed.connect(_on_hit_landed)
 	Events.fighter_knocked_out.connect(_on_knocked_out)
+	# Connected before CoopRules exists so the crawl count is updated before anyone reacts.
+	Events.pub_cleared.connect(_on_pub_cleared)
+	Events.all_players_down.connect(_on_all_players_down)
+	_setup_players()
+	coop = CoopRules.new()
+	coop.name = "CoopRules"
+	coop.handle_pub_flow = false  # this level runs the pub-to-pub flow itself
+	add_child(coop)
+	if crowd:
+		_setup_director()
+	camera.snap()
 	var pub := GameData.current_pub()
 	Events.banner.emit("%s  ·  %s" % [pub["name"], pub["era"]], arrival_time)
 	get_tree().create_timer(arrival_time).timeout.connect(func():
 		if phase == Phase.ARRIVING:
 			_set_phase(Phase.CALM))
+	# Tell the host this peer has the pub loaded; it spawns players (and the crowd)
+	# once every peer has.
+	Net.level_ready()
 
 
 ## Override in each pub: build the room with `b` (a PubBuilder).
@@ -165,9 +185,9 @@ func _on_knocked_out(fighter: Node) -> void:
 	_knocked_out[fighter] = true
 	if not multiplayer.is_server():
 		return
-	if fighter.is_in_group("players"):
-		_check_lost()
-	else:
+	# Wipes are CoopRules' job (downed counts, not just KO). With an AI director in
+	# the pub it owns the win condition (waves and police still to come).
+	if not fighter.is_in_group("players") and director == null:
 		check_cleared()
 
 
@@ -209,73 +229,84 @@ func check_cleared() -> void:
 func pub_cleared() -> void:
 	if phase == Phase.CLEARED:
 		return
+	Events.pub_cleared.emit(pub_id)
+
+
+func _on_pub_cleared(_id: String) -> void:
+	if phase == Phase.CLEARED:
+		return
 	_set_phase(Phase.CLEARED)
 	GameData.pubs_cleared += 1
-	Events.pub_cleared.emit(pub_id)
 	if not multiplayer.is_server():
 		return
 	if GameData.crawl_finished():
-		Events.banner.emit("Every pub in the village is yours. Time, gentlemen, please!", clear_delay)
-		get_tree().create_timer(clear_delay).timeout.connect(_back_to_menu)
+		_announce.rpc("Every pub in the village is yours. Time, gentlemen, please!", clear_delay)
+		get_tree().create_timer(clear_delay).timeout.connect(func(): _back_to_menu.rpc())
 		return
 	var next := GameData.next_pub_index()
-	Events.banner.emit("%s is cleared. On to %s!" % [GameData.current_pub()["name"], GameData.PUBS[next]["name"]], clear_delay)
-	get_tree().create_timer(clear_delay).timeout.connect(func(): travel_to.rpc(next, GameData.pubs_cleared))
-
-
-func _check_lost() -> void:
-	var players := get_tree().get_nodes_in_group("players")
-	if players.is_empty() or phase == Phase.CLEARED or phase == Phase.LOST:
-		return
-	for p in players:
-		if not _is_out(p):
-			return
-	_set_phase(Phase.LOST)
-	Events.all_players_down.emit()
-	Events.banner.emit("You've been thrown out of %s. Have another go." % GameData.current_pub()["name"], clear_delay)
+	_announce.rpc("%s is cleared. On to %s!" % [GameData.current_pub()["name"], GameData.PUBS[next]["name"]], clear_delay)
 	get_tree().create_timer(clear_delay).timeout.connect(func():
-		travel_to.rpc(GameData.current_pub_index, GameData.pubs_cleared))
+		_sync_cleared.rpc(GameData.pubs_cleared)
+		Net.next_pub())
 
 
-## Host tells every peer to load a pub. `cleared` keeps the crawl count in sync.
+func _on_all_players_down() -> void:
+	if phase != Phase.CLEARED:
+		_set_phase(Phase.LOST)
+
+
 @rpc("authority", "call_local", "reliable")
-func travel_to(pub_index: int, cleared: int) -> void:
-	GameData.current_pub_index = pub_index
+func _announce(text: String, seconds: float) -> void:
+	Events.banner.emit(text, seconds)
+
+
+## Keeps clients' crawl count in step with the host before the next pub loads.
+@rpc("authority", "call_remote", "reliable")
+func _sync_cleared(cleared: int) -> void:
 	GameData.pubs_cleared = cleared
-	get_tree().change_scene_to_file(GameData.current_pub()["scene"])
 
 
+@rpc("authority", "call_local", "reliable")
 func _back_to_menu() -> void:
 	Net.leave()
 	get_tree().change_scene_to_file(MENU_SCENE)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	# Placeholder until the pause menu exists (menus workstream).
-	if event.is_action_pressed("pause"):
-		_back_to_menu()
-
-
 # --- Spawning ------------------------------------------------------------------
 
-func _spawn_players() -> void:
-	var spawns := get_markers(PLAYERS)
-	var ids := Net.players.keys()
-	ids.sort()
-	var i := 0
-	for peer_id in ids:
-		var p := PLAYER_SCENE.instantiate()
-		p.name = "P%d" % peer_id
-		p.set_multiplayer_authority(peer_id)
-		if spawns.is_empty():
-			p.position = Vector3(-1.5 + i, 0.0, room.end.y - 1.5)
-		else:
-			var m: Marker3D = spawns[i % spawns.size()]
-			p.position = m.position
-			p.rotation.y = m.rotation.y
-		$Actors.add_child(p)
+func _setup_players() -> void:
+	spawner = PlayerSpawner.new()
+	var points: Array[Vector3] = []
+	for m in get_markers(PLAYERS):
+		points.append(m.position)
+	if points.is_empty():
+		for i in 4:
+			points.append(Vector3(-1.5 + i, 0.0, room.end.y - 1.5))
+	spawner.spawn_points = points
+	add_child(spawner)
+	spawner.setup($Actors)
+	spawner.player_spawned.connect(func(p: Node3D):
 		camera.targets.append(p)
-		i += 1
+		camera.snap())
+
+
+func _setup_director() -> void:
+	director = Director.new()
+	director.name = "Director"
+	director.actors = $Actors
+	var doors := get_markers(DOORS)
+	if not doors.is_empty():
+		director.door = doors[0].global_position
+	var spots: Array[Vector3] = []
+	for m in get_markers(PUNTER):
+		spots.append(m.global_position)
+	director.punter_spots = spots
+	var staff: Array[Vector3] = []
+	for m in get_markers(STAFF):
+		staff.append(m.global_position)
+	director.staff_spots = staff
+	director.initial_punters = mini(maxi(spots.size(), 4), 10)
+	add_child(director)
 
 
 func _spawn_props() -> void:
@@ -285,7 +316,10 @@ func _spawn_props() -> void:
 	for m in get_markers(PROPS):
 		var kind: String = m.get_meta("item", "")
 		var path := ITEM_SCENE_PATH % kind
-		if ResourceLoader.exists(path):
+		if ItemData.KINDS.has(StringName(kind)):
+			# Pickups and weapons from the items workstream, named identically on every peer.
+			items.add_item(StringName(kind), m.global_position, m.global_rotation.y)
+		elif ResourceLoader.exists(path):
 			var item := (load(path) as PackedScene).instantiate() as Node3D
 			item.name = "I%d" % _items_spawned
 			_items_spawned += 1

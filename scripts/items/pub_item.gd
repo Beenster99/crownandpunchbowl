@@ -399,6 +399,12 @@ func _follow_holder() -> void:
 	if bool(data().get("two_handed", false)):
 		local = Transform3D(Basis(), Vector3(0.0, 1.0, -0.55))
 	else:
+		# In the rig's right hand when the holder has one (characters workstream).
+		var visual := holder.get_node_or_null("Visual")
+		var hand: Node3D = visual.hand_socket() if visual != null and visual.has_method("hand_socket") else null
+		if hand != null:
+			global_transform = Transform3D(hand.global_basis.orthonormalized(), hand.global_position)
+			return
 		local = Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-70.0)), Vector3(0.32, 1.0, -0.2))
 	global_transform = holder.global_transform * local
 
