@@ -18,6 +18,7 @@ to go back to the menu.
 
 ```
 godot --headless --path . --script res://tests/smoke_test.gd
+godot --headless --path . --script res://tests/items_test.gd
 ```
 
 The current state is the M0 skeleton: shared data, settings and keybind storage, a placeholder

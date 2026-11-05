@@ -9,6 +9,7 @@ const ROOM := Vector2(16.0, 12.0)
 
 func _ready() -> void:
 	_build_room()
+	PubItems.install(self).furnish_test_pub(ROOM)  # props, bar and Hands (items workstream)
 	var cam := BrawlCamera.new()
 	add_child(cam)
 	var i := 0
