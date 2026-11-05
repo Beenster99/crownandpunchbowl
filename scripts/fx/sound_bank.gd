@@ -4,46 +4,46 @@ extends RefCounted
 ## director turns `Events` into cues, and each cue picks a random variant with a
 ## random pitch, so twenty punches in a row never sound the same.
 ##
-## To swap in real audio (M4), drop new files in with the same name pattern and
-## update `count`. Files live in res://assets/audio/<folder>/<name>_NN.wav.
+## Files live in res://assets/audio/<path>_NN.<ext>. Most are recordings (CC0 / CC BY, see
+## assets/audio/CREDITS.md, made by assets/audio/tools/import_recordings.py); grab, police
+## whistle and door bang are still synthesised (generate_placeholders.py, ext "wav").
 ## Voice cues ending in `_m` have an `_f` twin for female fighters (see FxDirector).
+## Spoken lines (barks, chatter) are not cues: see VoiceCast and BarkLines.
 
 const ROOT := "res://assets/audio/"
 
-## cue -> {path (prefix, no _NN.wav), count, bus, pitch (random pitch multiplier, >= 1),
-##         db (volume offset), range (metres to silence)}
+## cue -> {path (prefix, no _NN), count, ext (default ogg), bus, pitch (random pitch
+##         multiplier, >= 1), db (volume offset), range (metres to silence)}
 const CUES := {
 	# --- impacts
-	"punch_body": {"path": "sfx/punch_body", "count": 4, "bus": "SFX", "pitch": 1.15, "db": 0.0, "range": 30.0},
-	"punch_face": {"path": "sfx/punch_face", "count": 4, "bus": "SFX", "pitch": 1.15, "db": 1.0, "range": 30.0},
-	"kick": {"path": "sfx/kick", "count": 4, "bus": "SFX", "pitch": 1.12, "db": 1.5, "range": 30.0},
-	"headbutt": {"path": "sfx/headbutt", "count": 3, "bus": "SFX", "pitch": 1.1, "db": 2.0, "range": 30.0},
-	"nose_crunch": {"path": "sfx/nose_crunch", "count": 3, "bus": "SFX", "pitch": 1.08, "db": 3.0, "range": 35.0},
-	"body_fall": {"path": "sfx/body_fall", "count": 3, "bus": "SFX", "pitch": 1.12, "db": 0.0, "range": 30.0},
-	"glass_smash": {"path": "sfx/glass_smash", "count": 3, "bus": "SFX", "pitch": 1.1, "db": -1.0, "range": 35.0},
-	"glass_clink": {"path": "sfx/glass_clink", "count": 3, "bus": "SFX", "pitch": 1.1, "db": -2.0, "range": 25.0},
-	"wood_break": {"path": "sfx/wood_break", "count": 3, "bus": "SFX", "pitch": 1.1, "db": 0.0, "range": 35.0},
-	"wood_hit": {"path": "sfx/wood_hit", "count": 3, "bus": "SFX", "pitch": 1.12, "db": 0.0, "range": 30.0},
-	"whoosh": {"path": "sfx/whoosh", "count": 4, "bus": "SFX", "pitch": 1.2, "db": -8.0, "range": 15.0},
-	"blood_splat": {"path": "sfx/blood_splat", "count": 3, "bus": "SFX", "pitch": 1.2, "db": -6.0, "range": 15.0},
-	"grab": {"path": "sfx/grab", "count": 3, "bus": "SFX", "pitch": 1.1, "db": -3.0, "range": 20.0},
-	"gulp": {"path": "sfx/gulp", "count": 2, "bus": "SFX", "pitch": 1.08, "db": -2.0, "range": 15.0},
-	"munch": {"path": "sfx/munch", "count": 2, "bus": "SFX", "pitch": 1.1, "db": -2.0, "range": 15.0},
-	"police_whistle": {"path": "sfx/police_whistle", "count": 1, "bus": "SFX", "pitch": 1.03, "db": 0.0, "range": 80.0},
-	"door_bang": {"path": "sfx/door_bang", "count": 2, "bus": "SFX", "pitch": 1.08, "db": 0.0, "range": 60.0},
-	# --- voices (male / female)
-	"oof_m": {"path": "voice/oof_m", "count": 6, "bus": "Voice", "pitch": 1.12, "db": 0.0, "range": 30.0},
-	"oof_f": {"path": "voice/oof_f", "count": 4, "bus": "Voice", "pitch": 1.1, "db": 0.0, "range": 30.0},
-	"grunt_m": {"path": "voice/grunt_m", "count": 4, "bus": "Voice", "pitch": 1.12, "db": -4.0, "range": 20.0},
-	"grunt_f": {"path": "voice/grunt_f", "count": 3, "bus": "Voice", "pitch": 1.1, "db": -4.0, "range": 20.0},
-	"groan_m": {"path": "voice/groan_m", "count": 4, "bus": "Voice", "pitch": 1.1, "db": 0.0, "range": 30.0},
-	"groan_f": {"path": "voice/groan_f", "count": 2, "bus": "Voice", "pitch": 1.08, "db": 0.0, "range": 30.0},
-	"moan_m": {"path": "voice/moan_m", "count": 4, "bus": "Voice", "pitch": 1.1, "db": -3.0, "range": 25.0},
-	"moan_f": {"path": "voice/moan_f", "count": 2, "bus": "Voice", "pitch": 1.08, "db": -3.0, "range": 25.0},
-	"ko_m": {"path": "voice/ko_m", "count": 3, "bus": "Voice", "pitch": 1.1, "db": 1.0, "range": 30.0},
-	"ko_f": {"path": "voice/ko_f", "count": 2, "bus": "Voice", "pitch": 1.08, "db": 1.0, "range": 30.0},
-	"ahh_m": {"path": "voice/ahh_m", "count": 2, "bus": "Voice", "pitch": 1.08, "db": -2.0, "range": 20.0},
-	"ahh_f": {"path": "voice/ahh_f", "count": 2, "bus": "Voice", "pitch": 1.08, "db": -2.0, "range": 20.0},
+	"punch_body": {"path": "sfx/punch_body", "count": 12, "bus": "SFX", "pitch": 1.08, "db": 0.0, "range": 30.0},
+	"punch_face": {"path": "sfx/punch_face", "count": 15, "bus": "SFX", "pitch": 1.08, "db": 1.0, "range": 30.0},
+	"kick": {"path": "sfx/kick", "count": 6, "bus": "SFX", "pitch": 1.08, "db": 1.5, "range": 30.0},
+	"headbutt": {"path": "sfx/headbutt", "count": 5, "bus": "SFX", "pitch": 1.06, "db": 2.0, "range": 30.0},
+	"nose_crunch": {"path": "sfx/nose_crunch", "count": 6, "bus": "SFX", "pitch": 1.05, "db": 3.0, "range": 35.0},
+	"bone_crack": {"path": "sfx/bone_crack", "count": 6, "bus": "SFX", "pitch": 1.06, "db": 0.0, "range": 30.0},
+	"body_fall": {"path": "sfx/body_fall", "count": 6, "bus": "SFX", "pitch": 1.08, "db": 0.0, "range": 30.0},
+	"glass_smash": {"path": "sfx/glass_smash", "count": 7, "bus": "SFX", "pitch": 1.08, "db": -1.0, "range": 35.0},
+	"glass_clink": {"path": "sfx/glass_clink", "count": 4, "bus": "SFX", "pitch": 1.08, "db": -1.0, "range": 25.0},
+	"wood_break": {"path": "sfx/wood_break", "count": 8, "bus": "SFX", "pitch": 1.08, "db": 0.0, "range": 35.0},
+	"wood_hit": {"path": "sfx/wood_hit", "count": 6, "bus": "SFX", "pitch": 1.08, "db": 0.0, "range": 30.0},
+	"whoosh": {"path": "sfx/whoosh", "count": 2, "bus": "SFX", "pitch": 1.2, "db": -8.0, "range": 15.0},
+	"blood_splat": {"path": "sfx/blood_splat", "count": 5, "bus": "SFX", "pitch": 1.15, "db": -6.0, "range": 15.0},
+	"grab": {"path": "sfx/grab", "count": 3, "ext": "wav", "bus": "SFX", "pitch": 1.1, "db": -3.0, "range": 20.0},
+	"gulp": {"path": "sfx/gulp", "count": 5, "bus": "SFX", "pitch": 1.05, "db": -2.0, "range": 15.0},
+	"munch": {"path": "sfx/munch", "count": 7, "bus": "SFX", "pitch": 1.08, "db": -4.0, "range": 15.0},
+	"police_whistle": {"path": "sfx/police_whistle", "count": 1, "ext": "wav", "bus": "SFX", "pitch": 1.03, "db": 0.0, "range": 80.0},
+	"door_bang": {"path": "sfx/door_bang", "count": 2, "ext": "wav", "bus": "SFX", "pitch": 1.08, "db": 0.0, "range": 60.0},
+	"crowd_roar": {"path": "sfx/crowd_roar", "count": 3, "bus": "SFX", "pitch": 1.02, "db": -14.0, "range": 80.0},
+	# --- non-verbal voice (male / female). Words are barks: see VoiceCast.
+	"oof_m": {"path": "voice/oof_m", "count": 15, "bus": "Voice", "pitch": 1.06, "db": 0.0, "range": 30.0},
+	"oof_f": {"path": "voice/oof_f", "count": 6, "bus": "Voice", "pitch": 1.05, "db": 0.0, "range": 30.0},
+	"grunt_m": {"path": "voice/grunt_m", "count": 5, "bus": "Voice", "pitch": 1.06, "db": -4.0, "range": 20.0},
+	"grunt_f": {"path": "voice/grunt_f", "count": 3, "bus": "Voice", "pitch": 1.05, "db": -4.0, "range": 20.0},
+	"groan_m": {"path": "voice/groan_m", "count": 4, "bus": "Voice", "pitch": 1.05, "db": 0.0, "range": 30.0},
+	"groan_f": {"path": "voice/groan_f", "count": 1, "bus": "Voice", "pitch": 1.05, "db": 0.0, "range": 30.0},
+	"ko_m": {"path": "voice/ko_m", "count": 8, "bus": "Voice", "pitch": 1.05, "db": 1.0, "range": 30.0},
+	"ko_f": {"path": "voice/ko_f", "count": 4, "bus": "Voice", "pitch": 1.05, "db": 1.0, "range": 30.0},
 }
 
 static var _cache := {}
@@ -62,7 +62,7 @@ static func files_for(cue: String) -> PackedStringArray:
 	var out := PackedStringArray()
 	var c: Dictionary = CUES[cue]
 	for i in int(c["count"]):
-		out.append("%s%s_%02d.wav" % [ROOT, c["path"], i + 1])
+		out.append("%s%s_%02d.%s" % [ROOT, c["path"], i + 1, c.get("ext", "ogg")])
 	return out
 
 

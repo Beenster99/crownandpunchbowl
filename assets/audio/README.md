@@ -1,29 +1,34 @@
 # Audio
 
-Placeholder sound set for milestone M1. Every file in `sfx/` and `voice/` is synthesised by
-[`tools/generate_placeholders.py`](tools/generate_placeholders.py) from noise, sine partials
-and a small formant voice model. Nothing is sampled or downloaded, so there is no third-party
-licence: treat these files as CC0.
+Everything the game plays, and how to rebuild it. Sources and licences are in
+[CREDITS.md](CREDITS.md). Every file here is CC0 or CC BY, and the CC BY ones are credited.
 
-Regenerate (deterministic, needs only `numpy`):
+| Folder | What | Made by |
+| --- | --- | --- |
+| `sfx/*.ogg` | Real recordings: bare-knuckle punches (face and body), kicks, headbutts, broken-nose crunches, bone cracks, body falls, glass, wood, swings, swallows, eating, crowd roar | `tools/import_recordings.py` (downloads from OpenGameArt, trims, layers, encodes) |
+| `sfx/*.wav` | Grab scuffle, police whistle, door bang | `tools/generate_placeholders.py` (synthesised, CC0) |
+| `voice/*.ogg` | Oofs, grunts, groans and knockout cries, male and female | `tools/import_recordings.py` |
+| `voice/barks/<voice>/` | Spoken fight lines: taunts, complaints, crawling moans, "Night night!" | `tools/generate_voices.py` (Piper TTS, VCTK voices) |
+| `voice/chatter/<voice>/` | Every overheard second-homer chatter line, plus the locals' replies | `tools/generate_voices.py` |
+| `music/` | Empty until M4 | |
+
+## Rebuild
 
 ```
-python3 assets/audio/tools/generate_placeholders.py
+pip install numpy soundfile py7zr piper-tts   # and ffmpeg with libvorbis on PATH
+python3 assets/audio/tools/import_recordings.py
+godot --headless --path . --script res://tests/dump_chatter_lines.gd > /tmp/chatter.tsv
+python3 assets/audio/tools/generate_voices.py --chatter /tmp/chatter.tsv
 ```
 
-## What's here
+Fight lines and the cast (which VCTK speaker plays which farmer) are at the top of
+`generate_voices.py`. It also writes `scripts/fx/bark_lines.gd`, so don't edit that file by
+hand. Chatter text lives in `scripts/ai/chatter_lines.gd`. After changing lines there, re-run
+the last two commands. Existing chatter files are kept, so delete a file to re-record it.
 
-| Folder | Cues |
-| --- | --- |
-| `sfx/` | bare-knuckle punches (body and face), kicks, headbutt cracks, broken-nose crunches, body falls, glass smash and clink, wood break and hit, swing whoosh, blood splat, grab scuffle, gulp, munch, police whistle, door bang |
-| `voice/` | oofs, effort grunts, groans, crawling moans, knockout cries and a post-pint "ahh". `_m` and `_f` sets for male and female fighters |
-| `music/` | empty until M4 |
+## Replacing with studio recordings
 
-The cue table is `scripts/fx/sound_bank.gd`. Each cue plays a random variant at a random
-pitch through the `SFX` or `Voice` bus.
-
-## Replacing with real audio (M4)
-
-Keep the `<name>_NN.wav` pattern and update `count` in `SoundBank.CUES`. `.ogg` works too if
-the path pattern in `SoundBank.files_for()` is updated. Any sourced audio must be CC0 or have a
-licence that allows commercial use. Record the source and licence for each file here.
+Keep the file names. For barks, that's `voice/barks/<voice>/<category>_NN.ogg`, numbered in
+the order the lines appear in `BarkLines`. For chatter, it's
+`voice/chatter/<voice>/<topic>_<part>_NN.ogg`. Add any new source to `SOURCES` in
+`import_recordings.py` so CREDITS.md stays complete.

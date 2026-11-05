@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the placeholder sound set for Crown and Punchbowl.
+"""Generate the few synthesised sounds still in the game (grab, police whistle, door).
 
 Every sound is synthesised from scratch here (noise, sine partials and a small
 formant voice), so the output has no third-party licence: treat it as CC0.
@@ -424,31 +424,11 @@ def batch(folder, name, fn, count, seed, **kw):
 
 
 def main():
-	batch("sfx", "punch_body", punch, 4, 1)
-	batch("sfx", "punch_face", punch, 4, 2, face=True)
-	batch("sfx", "kick", kick, 4, 3)
-	batch("sfx", "headbutt", headbutt, 3, 4)
-	batch("sfx", "nose_crunch", nose_crunch, 3, 5)
-	batch("sfx", "body_fall", body_fall, 3, 6)
-	batch("sfx", "glass_smash", glass_smash, 3, 7)
-	batch("sfx", "glass_clink", glass_clink, 3, 8)
-	batch("sfx", "wood_break", wood_break, 3, 9)
-	batch("sfx", "wood_hit", wood_hit, 3, 10)
-	batch("sfx", "whoosh", whoosh, 4, 11)
-	batch("sfx", "blood_splat", splat, 3, 12)
+	# Most of the set was replaced by real recordings (see import_recordings.py and
+	# ../CREDITS.md). These three are still synthesised.
 	batch("sfx", "grab", grab, 3, 13)
-	batch("sfx", "gulp", gulp, 2, 14)
-	batch("sfx", "munch", munch, 2, 15)
 	batch("sfx", "police_whistle", whistle, 1, 16)
 	batch("sfx", "door_bang", door_bang, 2, 17)
-	for female, tag in ((False, "m"), (True, "f")):
-		s = 50 if female else 20
-		batch("voice", "oof_" + tag, oof, 6 if not female else 4, s + 1, female=female)
-		batch("voice", "grunt_" + tag, grunt, 4 if not female else 3, s + 2, female=female)
-		batch("voice", "groan_" + tag, groan, 4 if not female else 2, s + 3, female=female)
-		batch("voice", "moan_" + tag, moan, 4 if not female else 2, s + 4, female=female)
-		batch("voice", "ko_" + tag, ko, 3 if not female else 2, s + 5, female=female)
-		batch("voice", "ahh_" + tag, ahh, 2, s + 6, female=female)
 
 
 if __name__ == "__main__":
