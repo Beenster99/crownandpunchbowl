@@ -20,7 +20,14 @@ const ANIMATIONS: Array[StringName] = [
 	&"throw", &"grab", &"hold", &"held_struggle", &"hit_front", &"hit_back", &"stagger",
 	&"knockdown", &"down", &"get_up", &"crawl", &"ko", &"drink", &"eat", &"dodge",
 	&"cheer", &"taunt",
+	# Calm, before anyone kicks off: relaxed stances, a pint, chatting, staff polishing.
+	&"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
 ]
+
+## The calm idles a character picks from (by seed). Staff polish glasses instead.
+const CALM_IDLES: Array[StringName] = [&"idle_relaxed", &"idle_pint", &"idle_relaxed"]
+## Standing loops that guard/talk changes switch between.
+const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed"]
 
 ## Fighter state name (lower case, as in Fighter.State) -> animation.
 const STATE_ANIMS := {
@@ -85,6 +92,14 @@ const RAGDOLL_MASK := 1
 ## How hard a KO punch throws the body, in N·s per unit of hit direction.
 @export var ragdoll_impulse := 30.0
 
+## Fists up. Off while the pub is calm: idles and walking are relaxed until a fight is on.
+## FighterVisual raises it when the fighter or someone near them gets stuck in.
+var guard := false
+## Chatting with someone: gestures instead of the calm idle.
+var talking := false
+## Bar staff: polish a glass instead of the calm idles.
+var staff := false
+
 var anim: AnimationPlayer
 var skeleton: Skeleton3D
 var current: StringName = &""
@@ -135,7 +150,7 @@ func play(anim_name: StringName, blend := 0.1) -> void:
 	current = anim_name
 	anim.speed_scale = 1.0
 	anim.play(anim_name, blend)
-	if anim_name == &"idle" or anim_name == &"walk" or anim_name == &"hold":
+	if STANDING.has(anim_name) or anim_name == &"hold":
 		anim.seek(randf() * anim.current_animation_length if not Engine.is_editor_hint() else 0.0, true)
 
 
@@ -146,7 +161,7 @@ func play_state(state_name: String) -> void:
 		var dir := _last_hit if _last_hit.length() > 0.01 else global_basis.z
 		start_ragdoll(dir.normalized() * ragdoll_impulse + Vector3.UP * ragdoll_impulse * 0.25)
 	elif key == "idle":
-		play(&"walk" if _moving else &"idle")
+		play(_standing_anim())
 	elif STATE_ANIMS.has(key):
 		play(STATE_ANIMS[key])
 	else:
@@ -155,6 +170,7 @@ func play_state(state_name: String) -> void:
 
 ## Plays an attack or action by move name. "punch" alternates left and right.
 func play_move(move: String) -> void:
+	guard = true
 	if move == "punch":
 		play(&"punch_l" if _next_punch_left else &"punch_r", 0.05)
 		_next_punch_left = not _next_punch_left
@@ -167,6 +183,7 @@ func play_move(move: String) -> void:
 ## Plays a hit reaction. Pass the hit's world direction (attacker to victim) so a KO
 ## that follows throws the ragdoll the right way.
 func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> void:
+	guard = true
 	if direction != Vector3.ZERO:
 		_last_hit = direction
 	if heavy:
@@ -178,12 +195,46 @@ func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> 
 ## Call every frame with horizontal speed in m/s. Switches between idle and walk.
 func set_move_speed(speed: float) -> void:
 	_moving = speed > 0.2
-	if current == &"idle" and _moving:
-		play(&"walk", 0.15)
-	elif current == &"walk" and not _moving:
-		play(&"idle", 0.2)
-	if current == &"walk":
-		anim.speed_scale = clampf(speed / 2.6, 0.6, 2.2)
+	_refresh_standing(0.15)
+	if current == &"walk" or current == &"walk_relaxed":
+		anim.speed_scale = clampf(speed / (2.6 if current == &"walk" else 2.0), 0.6, 2.2)
+
+
+## Fists up (a fight is on) or relaxed (calm pub). Blends over if standing or walking.
+func set_guard(up: bool) -> void:
+	if up == guard:
+		return
+	guard = up
+	_refresh_standing(0.35)
+
+
+## Chatting: gestures while standing calm.
+func set_talking(on: bool) -> void:
+	if on == talking:
+		return
+	talking = on
+	_refresh_standing(0.4)
+
+
+## The idle or walk that fits right now.
+func _standing_anim() -> StringName:
+	if _moving:
+		return &"walk" if guard else &"walk_relaxed"
+	if guard:
+		return &"idle"
+	if talking:
+		return &"idle_chat"
+	if staff:
+		return &"idle_polish"
+	return CALM_IDLES[absi(look_seed) % CALM_IDLES.size()]
+
+
+func _refresh_standing(blend: float) -> void:
+	if anim == null or not STANDING.has(current):
+		return
+	var want := _standing_anim()
+	if want != current:
+		play(want, blend)
 
 
 ## A node to attach weapons, glasses or a held enemy to: hand_r, hand_l, head, chest, hold_point.
@@ -299,7 +350,8 @@ func rebuild() -> void:
 		_build_ragdoll()
 	set_blood(_blood)
 	if start_animation != &"" and anim.has_animation(start_animation):
-		play(start_animation, 0.0)
+		# The default "idle" means "standing about": relaxed unless the guard is up.
+		play(_standing_anim() if start_animation == &"idle" else start_animation, 0.0)
 		anim.advance(0.0)
 
 
@@ -508,7 +560,7 @@ func _on_animation_finished(anim_name: StringName) -> void:
 	if CHAINS.has(anim_name):
 		play(CHAINS[anim_name], 0.15)
 	elif auto_return_to_idle and RETURNS_TO_IDLE.has(anim_name):
-		play(&"walk" if _moving else &"idle", 0.15)
+		play(_standing_anim(), 0.15)
 
 
 ## Pose data rotates each joint about the character's own axes (x right, y up, z back),
@@ -608,6 +660,7 @@ func _anim_defs() -> Dictionary:
 	}
 
 	var defs := {}
+	_calm_defs(defs, relaxed)
 	defs[&"idle"] = {"length": 2.0, "loop": true, "keys": [
 		[0.0, guard],
 		[1.0, _with(guard, {&"Chest": Vector3(-4, 0, 0), &"Spine": Vector3(-7, 3, 0), &"_hips": Vector3(0, -0.018, 0), &"ElbowL": Vector3(105, 0, 0)})],
@@ -762,3 +815,54 @@ func _anim_defs() -> Dictionary:
 	return defs
 
 
+
+
+## The calm set: how people stand about in a pub before it kicks off.
+func _calm_defs(defs: Dictionary, relaxed: Dictionary) -> void:
+	var stand := _with(relaxed, {&"Spine": Vector3(3, 0, 0), &"HipL": Vector3(2, 0, -3), &"HipR": Vector3(-2, 0, 3),
+		&"KneeL": Vector3(-4, 0, 0), &"KneeR": Vector3(-2, 0, 0)})
+	# Hands in pockets, weight shifting from foot to foot, glancing about.
+	var pockets := _with(stand, {&"ShoulderL": Vector3(-6, 0, -9), &"ElbowL": Vector3(32, 0, 0),
+		&"ShoulderR": Vector3(-6, 0, 9), &"ElbowR": Vector3(32, 0, 0)})
+	defs[&"idle_relaxed"] = {"length": 4.0, "loop": true, "keys": [
+		[0.0, _with(pockets, {&"_hips": Vector3(0.02, 0, 0), &"Spine": Vector3(3, 0, -2), &"KneeR": Vector3(-10, 0, 0)})],
+		[1.3, _with(pockets, {&"_hips": Vector3(0.01, -0.004, 0), &"Head": Vector3(0, 18, 0), &"KneeR": Vector3(-8, 0, 0)})],
+		[2.0, _with(pockets, {&"_hips": Vector3(-0.02, 0, 0), &"Spine": Vector3(3, 0, 2), &"KneeL": Vector3(-10, 0, 0)})],
+		[3.2, _with(pockets, {&"_hips": Vector3(-0.01, -0.004, 0), &"Head": Vector3(-4, -14, 0), &"KneeL": Vector3(-8, 0, 0)})],
+		[4.0, _with(pockets, {&"_hips": Vector3(0.02, 0, 0), &"Spine": Vector3(3, 0, -2), &"KneeR": Vector3(-10, 0, 0)})],
+	]}
+	# Pint held at the belly, the odd sip.
+	var hold_pint := _with(stand, {&"ShoulderR": Vector3(22, 0, -8), &"ElbowR": Vector3(92, 0, 0)})
+	var sip := _with(hold_pint, {&"ShoulderR": Vector3(100, 0, -26), &"ElbowR": Vector3(136, 0, 0),
+		&"Head": Vector3(22, 0, 0), &"Spine": Vector3(8, 0, 0)})
+	defs[&"idle_pint"] = {"length": 5.0, "loop": true, "keys": [
+		[0.0, hold_pint], [1.5, _with(hold_pint, {&"Head": Vector3(0, 15, 0), &"_hips": Vector3(0.015, 0, 0)})],
+		[2.6, hold_pint], [3.1, sip], [3.7, sip], [4.3, hold_pint], [5.0, hold_pint],
+	]}
+	# Chatting: one hand talking, nods, the other hand on a pint.
+	var chat := _with(stand, {&"ShoulderL": Vector3(22, 0, -6), &"ElbowL": Vector3(92, 0, 0)})
+	defs[&"idle_chat"] = {"length": 3.0, "loop": true, "keys": [
+		[0.0, _with(chat, {&"ShoulderR": Vector3(30, 0, 10), &"ElbowR": Vector3(72, 0, 0)})],
+		[0.6, _with(chat, {&"ShoulderR": Vector3(48, 0, 22), &"ElbowR": Vector3(48, 0, 0), &"Head": Vector3(-6, 12, 0)})],
+		[1.2, _with(chat, {&"ShoulderR": Vector3(26, 0, 6), &"ElbowR": Vector3(88, 0, 0), &"Head": Vector3(6, -4, 0)})],
+		[1.9, _with(chat, {&"ShoulderR": Vector3(12, 0, 8), &"ElbowR": Vector3(30, 0, 0), &"Head": Vector3(-8, 0, 0), &"Spine": Vector3(6, 0, 0)})],
+		[2.5, _with(chat, {&"ShoulderR": Vector3(40, 0, 18), &"ElbowR": Vector3(60, 0, 0), &"Head": Vector3(4, 8, 0)})],
+		[3.0, _with(chat, {&"ShoulderR": Vector3(30, 0, 10), &"ElbowR": Vector3(72, 0, 0)})],
+	]}
+	# Bar staff polishing a glass that is already clean.
+	var polish := _with(stand, {&"Head": Vector3(-14, 0, 0), &"ShoulderL": Vector3(32, 0, 14), &"ElbowL": Vector3(72, 0, 0),
+		&"ShoulderR": Vector3(36, 0, -14), &"ElbowR": Vector3(70, 0, 0)})
+	defs[&"idle_polish"] = {"length": 1.6, "loop": true, "keys": [
+		[0.0, polish], [0.4, _with(polish, {&"ShoulderR": Vector3(42, 0, -6), &"ElbowR": Vector3(60, 0, 0)})],
+		[0.8, _with(polish, {&"ShoulderR": Vector3(36, 0, -22), &"ElbowR": Vector3(80, 0, 0)})],
+		[1.2, _with(polish, {&"ShoulderR": Vector3(30, 0, -12), &"ElbowR": Vector3(74, 0, 0)})], [1.6, polish],
+	]}
+	# Strolling, arms swinging loose.
+	var step := _with(relaxed, {&"Spine": Vector3(-2, 6, 0), &"HipL": Vector3(24, 0, -3), &"KneeL": Vector3(-6, 0, 0),
+		&"HipR": Vector3(-22, 0, 3), &"KneeR": Vector3(-26, 0, 0), &"ShoulderL": Vector3(-16, 0, -6),
+		&"ElbowL": Vector3(14, 0, 0), &"ShoulderR": Vector3(18, 0, 6), &"ElbowR": Vector3(24, 0, 0)})
+	var passing := _with(relaxed, {&"HipL": Vector3(4, 0, -3), &"KneeL": Vector3(-8, 0, 0), &"HipR": Vector3(6, 0, 3),
+		&"KneeR": Vector3(-52, 0, 0), &"_hips": Vector3(0, 0.025, 0)})
+	defs[&"walk_relaxed"] = {"length": 0.9, "loop": true, "keys": [
+		[0.0, step], [0.225, passing], [0.45, _mirror(step)], [0.675, _mirror(passing)], [0.9, step],
+	]}

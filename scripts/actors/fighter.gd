@@ -929,7 +929,8 @@ func _update_placeholder(_delta: float) -> void:
 	body.position.y = 0.3 if lying else 0.875
 	var nose := get_node_or_null("Facing") as Node3D
 	if nose != null:
-		nose.visible = not lying
+		# Once a character rig is on, the placeholder nose stays hidden for good.
+		nose.visible = not lying and not has_node(FighterVisual.NODE_NAME)
 	var mat := body.material_override as StandardMaterial3D
 	if mat == null:
 		mat = StandardMaterial3D.new()

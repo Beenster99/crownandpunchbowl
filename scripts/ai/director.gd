@@ -143,7 +143,8 @@ func _spawn_npc(data: Variant) -> Node:
 	# The networking workstream's NetSync adds position/state synchronisers when present.
 	var net_sync: Variant = _global_class(&"NetSync")
 	if net_sync != null:
-		net_sync.attach(npc, 1)
+		var extra: Array[String] = ["mood"]  # clients need mood for calm vs guarded idles
+		net_sync.attach(npc, 1, extra)
 	return npc
 
 
