@@ -324,6 +324,7 @@ func _setup_director() -> void:
 	for m in get_markers(STAFF):
 		staff.append(m.global_position)
 	director.staff_spots = staff
+	director.stairs = builder.stairs_built.duplicate()
 	director.initial_punters = mini(maxi(spots.size(), 4), 10)
 	add_child(director)
 

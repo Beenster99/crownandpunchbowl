@@ -424,7 +424,7 @@ func _think(delta: float) -> void:
 		State.BLOCK:
 			_guard_t -= delta
 			if _counter_pending and foe != null and is_instance_valid(foe) \
-					and _flat_dist(foe) < 1.7 and foe.can_be_targeted():
+					and _flat_dist(foe) < 1.7 and same_level(foe) and foe.can_be_targeted():
 				_counter_pending = false
 				request_attack(&"counter_jab", foe)
 				return
@@ -552,6 +552,22 @@ func _think_engaged(delta: float) -> void:
 		return
 	if _read_foe():
 		_stance_guard = false
+		return
+	if not same_level(foe) or (_flat_dist(foe) > 1.5 and _on_stairs()):
+		# Foe's upstairs (or down): blows can't reach, so take the stairs instead of
+		# standing underneath them. Once on a flight, finish it before squaring up, or
+		# he steps off the side of the stairs.
+		_drop_token()
+		var other := _nearest_player(30.0, true, true)
+		if other != null and other != foe and has_room_for(other):
+			foe = other
+			return
+		var way: Variant = _stairs_waypoint(foe.global_position)
+		if way != null:
+			var step: Vector3 = way - global_position
+			step.y = 0.0
+			move_input = step.normalized() if step.length() > 0.05 else Vector3.ZERO
+			_look_at = way
 		return
 	var to := foe.global_position - global_position
 	to.y = 0.0
@@ -759,7 +775,7 @@ func _drop_token() -> void:
 		d.release_token(self)
 
 
-func _nearest_player(max_dist: float, standing_only := false) -> Fighter:
+func _nearest_player(max_dist: float, standing_only := false, same_floor := false) -> Fighter:
 	var best: Fighter = null
 	var best_d := max_dist
 	for node in get_tree().get_nodes_in_group(Fighter.GROUP):
@@ -768,10 +784,99 @@ func _nearest_player(max_dist: float, standing_only := false) -> Fighter:
 			continue
 		if standing_only and f.is_down():
 			continue
+		if same_floor and not same_level(f):
+			continue
 		var d := f.global_position.distance_to(global_position)
+		if not same_level(f):
+			d += 8.0  # someone on this floor beats someone a flight of stairs away
 		if d < best_d:
 			best_d = d
 			best = f
+	return best
+
+
+func has_room_for(who: Fighter) -> bool:
+	var d := _find_director()
+	return d == null or d.has_room(who)
+
+
+## Partway up (or down) a flight of stairs.
+func _on_stairs() -> bool:
+	var d := _find_director()
+	if d == null or not ("stairs" in d):
+		return false
+	var here := global_position
+	for flight in d.stairs:
+		var base: Vector3 = flight["base"]
+		var top: Vector3 = flight["top"]
+		var fdir: Vector3 = flight["dir"]
+		var rel := here - base
+		var side := absf(rel.x * fdir.z - rel.z * fdir.x)
+		if side < float(flight.get("width", 1.4)) * 0.5 + 0.4 and here.y > base.y + 0.05 \
+				and here.y < top.y - 0.05:
+			return true
+	return false
+
+
+## Where to walk next to reach `target` on another floor: the foot (or head) of the best
+## flight of stairs, then up (or down) it and off the end. Null if no flight joins the
+## two floors.
+func _stairs_waypoint(target: Vector3) -> Variant:
+	var d := _find_director()
+	if d == null or not ("stairs" in d):
+		return null
+	var here := global_position
+	var going_up := target.y > here.y
+	var best: Variant = null
+	var best_cost := INF
+	for flight in d.stairs:
+		var base: Vector3 = flight["base"]
+		var top: Vector3 = flight["top"]
+		var fdir: Vector3 = flight["dir"]
+		var half := float(flight.get("width", 1.4)) * 0.5
+		var near := base if going_up else top
+		var far := top if going_up else base
+		if absf(far.y - target.y) > MAX_LEVEL_GAP:
+			continue
+		var run := Vector2(top.x - base.x, top.z - base.z).length()
+		var rel := here - base
+		var along := rel.x * fdir.x + rel.z * fdir.z
+		var side := absf(rel.x * fdir.z - rel.z * fdir.x)
+		var way: Vector3
+		var cost: float
+		var on_flight := side < half + 0.6 and (along > -0.8 and along < run + 0.2 if going_up \
+			else along > -0.2 and along < run + 0.8)
+		if not on_flight and absf(near.y - here.y) > MAX_LEVEL_GAP:
+			continue
+		if on_flight:
+			# Aim a step ahead on the centre line, so the climb stays in the middle of
+			# the flight, then off the end.
+			var ahead := along + 1.2 if going_up else along - 1.2
+			if ahead >= run:
+				way = far + fdir * 0.8
+			elif ahead <= 0.0:
+				way = far - fdir * 0.8
+			else:
+				way = base + fdir * ahead
+			cost = 0.0
+		elif going_up and along > -0.3 and along < run + 1.5:
+			# Beside the flight, or under the floor it climbs to: walk round to the foot
+			# rather than into the side or back of the stairs.
+			var sidev := Vector3(-fdir.z, 0.0, fdir.x)
+			var sgn := 1.0 if rel.x * sidev.x + rel.z * sidev.z >= 0.0 else -1.0
+			if side < half + 0.7:
+				way = here + sidev * sgn
+			else:
+				way = base - fdir * 0.6 + sidev * sgn * (half + 0.7)
+			cost = Vector2(base.x - here.x, base.z - here.z).length() \
+				+ Vector2(far.x - target.x, far.z - target.z).length()
+		else:
+			way = near - fdir * 0.6 if going_up else near + fdir * 0.6
+			cost = Vector2(way.x - here.x, way.z - here.z).length() \
+				+ Vector2(far.x - target.x, far.z - target.z).length()
+		if cost < best_cost:
+			best_cost = cost
+			best = way
 	return best
 
 

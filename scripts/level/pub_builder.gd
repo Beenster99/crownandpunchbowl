@@ -906,7 +906,7 @@ func barrel(pos: Vector3, on_side := false) -> void:
 
 # --- Levels: galleries, platforms and stairs -------------------------------------
 
-## Every flight of stairs built, as {"base": Vector3, "top": Vector3, "dir": Vector3}.
+## Every flight of stairs built, as {"base": Vector3, "top": Vector3, "dir": Vector3, "width": float}.
 ## Used by tests and handy for AI pathing.
 var stairs_built: Array[Dictionary] = []
 
@@ -1047,7 +1047,7 @@ func stairs(base: Vector3, dir: Vector3, run: float, rise: float, width := 1.4) 
 		var h := step_rise * float(i + 1)
 		var centre := dir * (tread * (float(i) + 0.5)) + Vector3(0, h * 0.5, 0)
 		deco(root, Vector3(tread, h, width) if along_x else Vector3(width, h, tread), centre, wood)
-	stairs_built.append({"base": base, "top": base + far + up, "dir": dir})
+	stairs_built.append({"base": base, "top": base + far + up, "dir": dir, "width": width})
 	return occluder(root)
 
 

@@ -35,6 +35,9 @@ enum Police { NONE, WAITING, CALLED, ARRIVED }
 @export var door := Vector3(7.0, 0.0, 3.0)
 @export var punter_spots: Array[Vector3] = []
 @export var staff_spots: Array[Vector3] = []
+## Flights of stairs between floors, as PubBuilder.stairs_built: NPCs whose foe is on
+## another floor walk up or down these.
+var stairs: Array = []
 ## Kinds and weights for this pub's crowd.
 @export var punter_mix: Dictionary = NpcTypes.DEFAULT_MIX
 @export var initial_punters := 8

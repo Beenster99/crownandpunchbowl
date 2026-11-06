@@ -40,6 +40,8 @@ signal power_charging(on: bool)
 enum State { IDLE, ATTACK, WINDUP, STAGGER, DOWN, CRAWL, KO, HELD, GRABBING, DODGE, BLOCK, DOUBLED }
 enum Team { PLAYERS, PUNTERS, POLICE, STAFF }
 
+## Furthest apart in height two fighters can be and still trade blows.
+const MAX_LEVEL_GAP := 1.2
 const GROUP := &"fighters"
 const GRAVITY := 20.0
 const _RELEASE_PLAIN := 0   # victim stumbles free
@@ -949,8 +951,16 @@ func _in_arc(f: Fighter, m: Dictionary) -> bool:
 func _valid_victim(f: Fighter, m: Dictionary) -> bool:
 	if f == null or f == self or not can_hit(f) or not f.can_be_hit():
 		return false
+	if not same_level(f):
+		return false  # reach is measured flat, so no punching through a gallery floor
 	var on_floor := f.state == State.DOWN or f.state == State.CRAWL
 	return on_floor == bool(m["ground"])
+
+
+## True if `other` is on the same floor as us (a gallery is 2.5 m up; stairs and a low
+## dais are within reach).
+func same_level(other: Node3D) -> bool:
+	return other != null and absf(other.global_position.y - global_position.y) <= MAX_LEVEL_GAP
 
 
 func _flat_dist(f: Fighter) -> float:
