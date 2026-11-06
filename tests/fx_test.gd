@@ -115,9 +115,19 @@ func _initialize() -> void:
 	events.hit_landed.emit({"attacker": player, "victim": target, "move": "counter", "damage": 12.0,
 		"position": target.global_position + Vector3.UP * 1.5, "direction": Vector3.LEFT,
 		"heavy": true, "to_face": true, "clean": true})
-	_check(_count_particles() >= particles_before + 2, "clean hit didn't spray droplets")
-	await create_timer(0.8).timeout
-	_check(fx.blood.decal_count() > marks_clean + 1, "clean hit left no splats")
+	_check(_count_particles() >= particles_before + 50, "clean hit didn't spray fine droplets")
+	var drops: Node = fx.blood.droplets()
+	var landed_before: int = drops.marks_left()
+	await create_timer(1.5).timeout
+	_check(fx.blood.decal_count() > marks_clean + 20, "clean hit left no fine splats")
+	# The blood flew with the punch (LEFT = -x), not straight down or at random.
+	var landed: PackedVector3Array = drops.recent_landings(drops.marks_left() - landed_before)
+	var mean_x := 0.0
+	for at in landed:
+		mean_x += at.x
+	mean_x /= maxf(landed.size(), 1)
+	_check(landed.size() > 20 and mean_x < target.global_position.x - 0.3,
+		"blood didn't follow the punch (%d landed, mean x %.2f vs head %.2f)" % [landed.size(), mean_x, target.global_position.x])
 	var blocker := Node3D.new()
 	current_scene.add_child(blocker)
 	var p_before := _count_particles()
@@ -155,12 +165,10 @@ func _initialize() -> void:
 	quit(0)
 
 
+## Blood droplets thrown so far.
 func _count_particles() -> int:
-	var n := 0
-	for c in current_scene.get_children():
-		if c is CPUParticles3D:
-			n += 1
-	return n
+	var fx: Node = root.get_node("Fx")
+	return fx.blood.droplets().drops_thrown()
 
 
 func _check(ok: bool, msg: String) -> void:

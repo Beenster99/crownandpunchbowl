@@ -269,6 +269,37 @@ func is_clean_hit(info: Dictionary) -> bool:
 	return false
 
 
+## Which way blood leaves the victim: along the punch, swept across by a hook, lifted by an
+## uppercut. Moves can say so directly with "side" (-1..1) and "lift" (0..1) in the hit info.
+static func spray_direction(info: Dictionary, dir: Vector3, victim: Variant) -> Vector3:
+	var d := Vector3(dir.x, 0.0, dir.z)
+	if d.length() < 0.01:
+		d = -(victim as Node3D).global_basis.z if victim is Node3D else Vector3.FORWARD
+	d = d.normalized()
+	var move := String(info.get("move", "")).to_lower()
+	var m: Dictionary = Moves.DATA.get(StringName(move), {})
+	var side := float(info.get("side", m.get("side", 0.0)))
+	var lift := float(info.get("lift", 0.0))
+	if move.contains("hook"):
+		side = side if absf(side) > 0.01 else 1.0
+	if move.contains("uppercut"):
+		lift = maxf(lift, 0.9)
+	elif move.contains("headbutt"):
+		lift = maxf(lift, 0.2)
+	# A hook carries the face sideways, so the blood flies across as well as back.
+	return (d + d.cross(Vector3.UP) * side * 0.7 + Vector3.UP * lift).normalized()
+
+
+## How hard the hit was, on the knockback scale (a jab is about 1, an uppercut 3).
+static func hit_force(info: Dictionary) -> float:
+	if info.has("knockback"):
+		return float(info["knockback"])
+	var m: Dictionary = Moves.DATA.get(StringName(String(info.get("move", "")).to_lower()), {})
+	if m.has("knockback"):
+		return float(m["knockback"])
+	return clampf(float(info.get("damage", 10.0)) / 5.0, 0.5, 3.0) * (1.4 if bool(info.get("heavy", false)) else 1.0)
+
+
 ## Freeze the action for a few frames. Only real time is used, so it can't get stuck.
 func hit_stop(seconds: float) -> void:
 	if seconds <= 0.0:
@@ -346,17 +377,18 @@ func _on_hit_landed(info: Dictionary) -> void:
 			say(victim, "oof", 1)
 
 	var clean := has_victim and is_clean_hit(info)
+	var spray_dir := spray_direction(info, dir, victim if has_victim else null)
+	var force := hit_force(info)
 	if clean:
 		var head := head_position(victim)
-		blood.face_burst(head, dir if dir.length() > 0.01 else -(victim as Node3D).global_basis.z,
-			clampf(damage / 10.0, 0.8, 2.0))
+		blood.face_burst(head, spray_dir, clampf(damage / 10.0, 0.8, 2.0), force)
 		blood.add_face_blood(victim, face_blood_per_face_hit)
 		play("blood_splat", head, 2.0)
 
 	# Blood: faces bleed, heavy body shots sometimes do.
 	if has_victim and (to_face or (heavy and randf() < 0.4)):
 		var intensity := clampf(damage / 12.0, 0.3, 1.6) * (1.3 if heavy else 1.0)
-		blood.spray(pos, dir, intensity)
+		blood.spray(pos, spray_dir, intensity, force * 0.8)
 		if to_face:
 			blood.add_face_blood(victim, face_blood_per_face_hit * (1.5 if heavy else 1.0))
 		if heavy:
