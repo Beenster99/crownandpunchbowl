@@ -7,15 +7,18 @@ extends HBoxContainer
 
 var action := ""
 var caption := ""
+## Optional button held with `action` ("LB + X"). Empty for a single button.
+var modifier := ""
 var _cap: PanelContainer
 var _cap_label: Label
 var _caption_label: Label
 
 
-static func make(p_action: String, p_caption := "") -> ButtonPrompt:
+static func make(p_action: String, p_caption := "", p_modifier := "") -> ButtonPrompt:
 	var b := ButtonPrompt.new()
 	b.action = p_action
 	b.caption = p_caption
+	b.modifier = p_modifier
 	return b
 
 
@@ -54,6 +57,8 @@ func refresh() -> void:
 		return
 	var pad := Settings.device == "pad"
 	_cap_label.text = Settings.prompt(action)
+	if modifier != "":
+		_cap_label.text = "%s + %s" % [Settings.prompt(modifier), _cap_label.text]
 	# Keycaps are square-ish cream tiles; controller buttons are round and tinted like the pad.
 	var box := StyleBoxFlat.new()
 	box.bg_color = _pad_colour(_cap_label.text) if pad else UiTheme.CREAM

@@ -15,7 +15,10 @@ then knock out everyone in the building except the bar staff.
 Open the folder in Godot 4.7 and press Play. From the main menu, **Play solo** takes you to
 farmer select, where you also pick the starting pub and difficulty. **Settings** has Gameplay,
 Sound, Graphics and Keybinds (keyboard/mouse and controller, click a binding to change it).
-In the pub, move with WASD or the left stick. Esc or Start opens the pause menu.
+In the pub, move with WASD or the left stick. Esc or Start opens the pause menu. Zoom the
+camera with the mouse wheel, + and -, or D-pad up and down (hold to keep zooming); the zoom is
+remembered. **Players can hit each other** (friendly fire, under Gameplay and in the lobby) is
+the host's choice and applies to everyone; nobody can hit the bar staff either way.
 
 ## Tests
 

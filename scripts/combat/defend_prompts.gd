@@ -1,12 +1,15 @@
 extends Node
 ## Defend prompts: when an enemy winds up an attack on the local player, a prompt pops up
 ## over their head saying how to defend it and which button to press, for the device the
-## player is using ("Shift  BLOCK" on keyboard, "LB  BLOCK" on a pad). Punches say Block,
-## guard breakers (kicks, haymakers, shoves, batons) say Dodge. The prompt shrinks as
+## player is using ("LB  BLOCK HIGH" for a punch at the head, "RB  BLOCK LOW" for one at the
+## body, "A  DODGE" for guard breakers: kicks, haymakers, shoves, batons). The prompt shrinks as
 ## the hit gets closer and turns green on a parry. Respects the "counter_prompts" setting.
 ## PlayerFighter adds one of these for the local player.
 
-const COLOURS := {"block": Color(1.0, 0.85, 0.2), "dodge": Color(1.0, 0.35, 0.25)}
+const COLOURS := {"guard_head": Color(1.0, 0.85, 0.2), "guard_body": Color(1.0, 0.6, 0.15),
+	"dodge": Color(1.0, 0.35, 0.25)}
+## Defence hint (an action name, from Fighter.defend_hint()) -> the word on the prompt.
+const WORDS := {"guard_head": "BLOCK HIGH", "guard_body": "BLOCK LOW", "dodge": "DODGE"}
 
 var player: Fighter
 ## "kb" or "pad", from the last real input (Settings.device is used when it exists).
@@ -33,14 +36,14 @@ func current_device() -> String:
 	return String(d) if d is String and d != "" else device
 
 
-## The prompt text for a defence ("block" or "dodge") on the current device.
+## The prompt text for a defence ("guard_head", "guard_body" or "dodge") on the current device.
 func prompt_text(hint: String) -> String:
 	var key := ""
 	if Settings.has_method("prompt"):
 		key = String(Settings.call("prompt", hint))
 	else:
 		key = Settings.action_label(hint, current_device())
-	return "%s  %s" % [key, hint.to_upper()]
+	return "%s  %s" % [key, WORDS.get(hint, hint.to_upper())]
 
 
 func _on_telegraphed(attacker: Node, target: Node, _seconds: float) -> void:

@@ -214,14 +214,30 @@ func test_gang_up_rush() -> void:
 	_check(grabbed, "the rugby lad grabs the player for his mates")
 
 
+func _until_can_act(f: Fighter) -> void:
+	var n := 0
+	while not f.can_act() and n < 240:
+		await get_tree().physics_frame
+		n += 1
+
+
 func test_held_punter_struggles_free() -> void:
 	var d := _director()
 	var p := _player(Vector3(0, 0, 0))
 	var npc := d.spawn(&"rugby_lad", Vector3(0, 0, -1.0))
 	await _wait(0.1)
 	p.rotation.y = 0.0
-	p.request_grab(npc)
-	_check(npc.state == Fighter.State.HELD, "player grabs the punter")
+	# Rugby lads often shrug a grab off (combat tests cover that); keep trying until one sticks.
+	_check(npc.hold_resist > 0.4, "rugby lads are hard to hold")
+	var tries := 0
+	while npc.state != Fighter.State.HELD and tries < 30:
+		await _until_can_act(p)
+		npc.global_position = Vector3(0, 0, -1.0)
+		p.global_position = Vector3.ZERO
+		p.rotation.y = 0.0
+		p.request_grab(npc)
+		tries += 1
+	_check(npc.state == Fighter.State.HELD, "player grabs the punter (%d tries)" % tries)
 	var freed_at := -1.0
 	for i in 240:
 		if npc.state != Fighter.State.HELD:
