@@ -345,6 +345,33 @@ anisotropic highlights, eyes a glossy clearcoat. Untextured surfaces (the older 
 models, the modelled extras) fall back to a tiling noise mapped triplanar into the colour and
 roughness (`SURFACES`).
 
+### Wounds: bruises, swelling and cuts
+
+Punches leave marks where they land, and they build up (`scripts/fx/wounds.gd`). Every
+fighter has 16 spots: forehead, both brows, eyes, cheeks and jaws, the nose, lips and chin,
+and the chest, gut and both sets of ribs. A hit marks one spot, picked from the move (a jab
+goes for the nose, lips or an eye; a hook for the cheek, eye or jaw on the side it comes in
+from; an uppercut for the chin), and a little of it spreads to the spots next door.
+
+- **Bruise** darkens with every hit, fresh red at first and purple once it's had half a minute.
+- **Swelling** grows faster each time the same spot is hit again, and pushes the skin out:
+  an eye closes, a lip fattens.
+- **Cuts** open on bony spots (brows, cheekbones, nose, lips, chin, forehead) once they've
+  soaked up about three crosses, or at once from a big clean shot or a bottle, then get
+  worse and bleed down the face. With blood off they show as a dark split, no running blood.
+- Blocked, parried and slipped punches leave nothing, nor does a kick in the groin. A broken
+  nose swells at once and blackens both eyes. Staff can't be hit, so they never mark.
+
+The host decides where each hit lands and sends the new values of the spots it changed;
+a late joiner asks the host for the lot. `WoundSkin` (`scripts/fx/wound_skin.gd`) draws it:
+it copies the `Body` mesh with each vertex's rest position in `CUSTOM0` (cached per model)
+and adds `wounds.gdshader` as the skin material's next pass, so marks follow the bones, the
+head snap and the ragdoll. Spots are found per model by aiming rays out from eye level (and
+the chest), so they land on the right features of every look. Body marks only show on bare
+skin. To look at it: `xvfb-run -s "-screen 0 1600x900x24" godot --path . --rendering-driver
+opengl3 --script res://tools/capture_wounds.gd -- <out_dir>`. Tests:
+`godot --headless --fixed-fps 60 --path . --script res://tests/wounds_test.gd`.
+
 ## Performance
 
 Models are 15k to 50k faces with every variant included (only the shown pieces draw), and

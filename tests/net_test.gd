@@ -161,10 +161,14 @@ func _client_fight(me: Node3D) -> bool:
 	me.request_attack(&"knee")
 	if not await _wait(func(): return npc.hp < hp_before, 5.0):
 		return _fail("client: knee didn't hurt the punter (hp %s)" % npc.hp)
+	# The host marks where the knee landed and the client sees the same bruise.
+	var wounds: Node = npc.get_node_or_null("Wounds")
+	if wounds == null or not await _wait(func(): return wounds.is_marked(), 3.0):
+		return _fail("client: the knee left no mark on the punter's face")
 	me.request_throw()
 	if not await _wait(func(): return me.state != me.State.GRABBING, 3.0):
 		return _fail("client: throw didn't release the punter")
-	print("NET client grabbed, kneed and threw %s (hp %.0f -> %.0f)" % [npc.name, hp_before, npc.hp])
+	print("NET client grabbed, kneed and threw %s (hp %.0f -> %.0f), marked %s" % [npc.name, hp_before, npc.hp, wounds.worst()])
 	return true
 
 
