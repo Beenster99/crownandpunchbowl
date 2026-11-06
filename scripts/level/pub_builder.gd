@@ -208,6 +208,22 @@ func solid(size: Vector3, pos: Vector3, mat: Material, rot_y := 0.0, parent: Nod
 	return body
 
 
+## A small loose cylinder (bottle, glass) as a physics prop under `parent` at local `pos`.
+## `pinned` keeps it fixed (on a shelf) until PubPhysics.disturb() knocks it loose.
+func loose_cylinder(parent: Node3D, prop_name: String, radius: float, height: float, pos: Vector3,
+		mat: Material, mass := 0.5, fragile := true, pinned := false) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.name = prop_name
+	var cs := CollisionShape3D.new()
+	cs.shape = PubPhysics.shape_for(Vector2(radius, height))
+	body.add_child(cs)
+	cylinder(body, radius, height, Vector3.ZERO, mat)
+	PubPhysics.setup_prop(body, mass, false, fragile, pinned)
+	parent.add_child(body, true)
+	body.position = pos
+	return body
+
+
 func occluder(node: Node3D) -> Node3D:
 	node.add_to_group("camera_occluders")
 	return node
@@ -514,7 +530,7 @@ func back_bar(centre: Vector3, length: float, facing: Vector3, carved := false) 
 			if pool.is_empty():
 				continue
 			var pick: String = pool[rng.randi() % pool.size()]
-			decor(pick, body.position + p, rad_to_deg(atan2(facing.x, facing.z)) + rng.randf_range(-25.0, 25.0), true)
+			decor(pick, body.position + p, rad_to_deg(atan2(facing.x, facing.z)) + rng.randf_range(-25.0, 25.0), true, "ShelfBottle")
 	if carved:
 		# Victorian gantry: mirror panel and carved crest.
 		deco(body, (Vector3(length * 0.8, 0.5, 0.02) if along_x else Vector3(0.02, 0.5, length * 0.8)),
@@ -590,7 +606,8 @@ func dartboard(pos: Vector3, facing: Vector3) -> void:
 	var root := Node3D.new()
 	root.name = "Dartboard"
 	root.position = pos
-	root.add_to_group("dartboards")
+	# DartsBoard finds playable boards by this group and reads which way they face.
+	root.add_to_group(DartsBoard.GROUP)
 	root.set_meta("facing", facing)
 	world.add_child(root, true)
 	var along := Vector3(1, 0, 0) if absf(facing.z) > 0.5 else Vector3(0, 0, 1)
@@ -623,6 +640,18 @@ func pool_table(pos: Vector3, rot_y := 0.0) -> void:
 		body.add_child(model)
 	else:
 		deco(body, Vector3(2.2, 0.04, 1.1), Vector3(0, 0.41, 0), material(Color("1f6a35"), 0.0, 0.95))
+	var balls := [Color("e8e2d0"), Color("c22a1a"), Color("e0b81a"), Color("141414"), Color("c22a1a"), Color("e0b81a")]
+	for i in balls.size():
+		var ball := RigidBody3D.new()
+		var cs := CollisionShape3D.new()
+		cs.shape = PubPhysics.shape_for(0.03)
+		ball.add_child(cs)
+		sphere(ball, 0.03, Vector3.ZERO, material(balls[i], 0.0, 0.2)).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ball.name = "PoolBall"
+		PubPhysics.setup_prop(ball, 0.17)
+		ball.linear_damp = 0.6
+		body.add_child(ball, true)
+		ball.position = Vector3(-0.3 + (i % 3) * 0.08, 0.431, -0.1 + (i / 3) * 0.09)
 	_keep_out(AABB(Vector3(pos.x - 2.2, 0, pos.z - 2.0), Vector3(4.4, 2.0, 4.0)))
 	var basis := Basis(Vector3.UP, deg_to_rad(rot_y))
 	prop("pool_cue", pos + basis * Vector3(0.0, 0.85, 0.55), rot_y)
@@ -852,9 +881,9 @@ func chandelier(pos: Vector3, arms := 6) -> void:
 	flicker_lights.append(light)
 
 
-## Ale barrel, solid scenery. `on_side` lays it on a cradle.
+## Ale barrel, a heavy physics body: a body flung into it rocks it, and one on its side rolls.
 func barrel(pos: Vector3, on_side := false) -> void:
-	var body := StaticBody3D.new()
+	var body := RigidBody3D.new()
 	body.position = pos + Vector3(0, 0.45 if not on_side else 0.4, 0)
 	var shape := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
@@ -863,6 +892,7 @@ func barrel(pos: Vector3, on_side := false) -> void:
 	shape.shape = cyl
 	body.add_child(shape)
 	body.name = "Barrel"
+	PubPhysics.setup_prop(body, 55.0, true)
 	world.add_child(body, true)
 	var wood := material(Color("6a4524"))
 	var hoop := material(Color("2a2a2a"), 0.7, 0.5)
@@ -1050,8 +1080,9 @@ const MAX_FURNITURE := 11
 
 ## A loose decor prop (PropLibrary.spawn) at `pos` on the floor or a surface, turned
 ## `rot_y` degrees. Named D<n> in build order, so names match on every peer. `pinned`
-## freezes it until the physics knocks it loose (shelf bottles).
-func decor(prop_name: String, pos: Vector3, rot_y := 0.0, pinned := false) -> RigidBody3D:
+## freezes it until the physics knocks it loose (shelf bottles). `prefix` replaces "D" in
+## the name (back-bar bottles are ShelfBottle<n>, which the physics test looks for).
+func decor(prop_name: String, pos: Vector3, rot_y := 0.0, pinned := false, prefix := "D") -> RigidBody3D:
 	if not PropLibrary.has(prop_name):
 		return null
 	var body := PropLibrary.spawn(prop_name, 0, Transform3D(Basis(Vector3.UP, deg_to_rad(rot_y)), pos))
@@ -1065,7 +1096,7 @@ func decor(prop_name: String, pos: Vector3, rot_y := 0.0, pinned := false) -> Ri
 		_decor_root = Node3D.new()
 		_decor_root.name = "Decor"
 		world.add_child(_decor_root)
-	body.name = "D%d" % _decor_count
+	body.name = "%s%d" % [prefix, _decor_count]
 	_decor_count += 1
 	_decor_root.add_child(body)
 	return body

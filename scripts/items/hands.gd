@@ -216,6 +216,10 @@ func _physics_process(delta: float) -> void:
 
 
 func _read_input() -> void:
+	if Input.is_action_just_pressed("interact") and DartsBoard.handle_local_interact(fighter):
+		return  # chalked up at the oche, or stepped away from the darts
+	if DartsBoard.local_input_locked():
+		return  # the darts panel has the controls
 	if Input.is_action_just_pressed("interact"):
 		request_interact()
 	if Input.is_action_just_pressed("order_food"):

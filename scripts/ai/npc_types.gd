@@ -11,6 +11,11 @@ extends RefCounted
 ##   watch_distance: float metres an ALERT NPC keeps from the nearest player. Cowards keep more.
 ##   circle_distance: float ring an ENGAGED NPC circles on while waiting for an attack token
 ##   struggle_interval: float seconds between struggles while held (lower escapes faster)
+##   defence: float      0..1 chance to read a punch being lined up at them and cover up
+##                       (or step back from a kick)
+##   guard_skill: float  0..1 chance that cover is the right one (head or body)
+##   parry: float        0..1 chance a last-moment cover parries (Fighter.parry_skill)
+##   hold_resist: float  0..1 how hard they are to hold (Fighter.hold_resist)
 ##   moves: Dictionary   move id -> weight. Enemy moves are telegraphed (see Moves.DATA).
 ##   grabs: bool         can grab a player during a gang-up so mates can lay into them
 ##   always_engaged: bool police never calm down
@@ -21,31 +26,35 @@ const DATA := {
 	&"second_homer": {
 		"max_hp": 60.0, "power": 0.75, "move_speed": 3.9, "toughness": 0.8, "grip": 0.8,
 		"crawl_fraction": 0.35, "bravery": 0.25, "aggression": 0.7, "watch_distance": 5.5,
-		"circle_distance": 3.2, "struggle_interval": 0.5,
-		"moves": {&"shove": 3, &"swing": 2}, "grabs": false, "always_engaged": false,
+		"circle_distance": 3.2, "struggle_interval": 0.5, "defence": 0.25, "guard_skill": 0.5,
+		"parry": 0.0, "hold_resist": 0.05,
+		"moves": {&"shove": 3, &"swing": 2, &"body_swing": 1}, "grabs": false, "always_engaged": false,
 		"colour": Color("9aa77a"),
 	},
 	## Locals who side with the incomers (or just fancy a scrap).
 	&"local": {
 		"max_hp": 90.0, "power": 1.0, "move_speed": 4.1, "toughness": 1.0, "grip": 1.0,
 		"crawl_fraction": 0.25, "bravery": 0.6, "aggression": 1.0, "watch_distance": 4.0,
-		"circle_distance": 2.8, "struggle_interval": 0.35,
-		"moves": {&"swing": 3, &"haymaker": 1, &"shove": 1}, "grabs": false,
+		"circle_distance": 2.8, "struggle_interval": 0.35, "defence": 0.45, "guard_skill": 0.65,
+		"parry": 0.1, "hold_resist": 0.25,
+		"moves": {&"swing": 3, &"body_swing": 2, &"haymaker": 1, &"shove": 1}, "grabs": false,
 		"always_engaged": false, "colour": Color("b9824f"),
 	},
 	## Rugby lads down for the weekend. Hard to put down, love a gang-up.
 	&"rugby_lad": {
 		"max_hp": 140.0, "power": 1.3, "move_speed": 4.4, "toughness": 1.6, "grip": 1.3,
 		"crawl_fraction": 0.2, "bravery": 0.9, "aggression": 1.25, "watch_distance": 3.2,
-		"circle_distance": 2.6, "struggle_interval": 0.2,
-		"moves": {&"haymaker": 2, &"swing": 2, &"shove": 1}, "grabs": true,
+		"circle_distance": 2.6, "struggle_interval": 0.2, "defence": 0.4, "guard_skill": 0.6,
+		"parry": 0.05, "hold_resist": 0.6,
+		"moves": {&"haymaker": 2, &"swing": 2, &"body_swing": 2, &"shove": 1}, "grabs": true,
 		"always_engaged": false, "colour": Color("8c2f39"),
 	},
 	## The Old Bill. Batons, always on the job.
 	&"police": {
 		"max_hp": 130.0, "power": 1.15, "move_speed": 4.6, "toughness": 1.4, "grip": 1.4,
 		"crawl_fraction": 0.2, "bravery": 1.0, "aggression": 1.2, "watch_distance": 3.0,
-		"circle_distance": 2.6, "struggle_interval": 0.25,
+		"circle_distance": 2.6, "struggle_interval": 0.25, "defence": 0.55, "guard_skill": 0.75,
+		"parry": 0.15, "hold_resist": 0.45,
 		"moves": {&"baton": 3, &"shove": 1}, "grabs": true, "always_engaged": true,
 		"colour": Color("1f2d5c"),
 	},
@@ -53,7 +62,8 @@ const DATA := {
 	&"staff": {
 		"max_hp": 100.0, "power": 0.0, "move_speed": 2.5, "toughness": 1.5, "grip": 1.0,
 		"crawl_fraction": 0.0, "bravery": 0.0, "aggression": 0.0, "watch_distance": 0.0,
-		"circle_distance": 0.0, "struggle_interval": 0.3, "moves": {}, "grabs": false,
+		"circle_distance": 0.0, "struggle_interval": 0.3, "defence": 0.0, "guard_skill": 0.0,
+		"parry": 0.0, "hold_resist": 0.0, "moves": {}, "grabs": false,
 		"always_engaged": false, "colour": Color("d9d2c0"),
 	},
 }

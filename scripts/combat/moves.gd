@@ -30,6 +30,16 @@ extends RefCounted
 ##   self_damage: float damage the attacker takes on a hit (headbutts sting)
 ##   guard_break: bool  can't be blocked: a blocking victim is staggered (kicks, headbutts,
 ##                      haymakers). Telegraphed guard breakers are prompted as "dodge".
+##   zone: StringName   where it lands: &"head" (default), &"body" or &"groin". A head guard
+##                      (LB) only stops head shots and a body guard (RB) body and groin shots.
+##                      A fresh slip of the head (right stick) makes head shots miss.
+##   side: float        a hook's sideways push (-1 from the left hand, +1 from the right). The
+##                      victim's head is knocked that way instead of straight back.
+##   charge: bool       a shoulder charge: after the wind-up the attacker drives forward at
+##                      CHARGE_SPEED for `active` seconds and hits the first enemy it meets.
+##   clinch: bool       the attacker grabs the victim's head with both hands first (the clinch
+##                      knee): it ignores a guard and pulls the victim in.
+##   doubles: bool      a hit doubles the victim over (on all fours, holding their crotch).
 
 const HELD_DAMAGE_MULT := 1.5      ## held fighters take this much more damage from everyone
 const GROUND_DAMAGE_MULT := 0.7    ## fighters on the floor take less (stomps excepted)
@@ -57,9 +67,31 @@ const GUARD_BREAK_STAGGER := 0.7   ## a blocker hit by a guard breaker reels thi
 const ENGAGE_RANGE := 3.2          ## a player within this of an active enemy takes a stance
 const STANCE_MOVE_SCALE := 0.6     ## speed in a fighting stance (footwork, not sprinting)
 const STANCE_HOLD := 4.0           ## seconds a stance lasts after the last exchange
-const POISE := 30.0                ## default poise, scaled by Fighter.toughness
-const POISE_REGEN := 15.0          ## per second, when not being hit
-const POISE_REGEN_DELAY := 1.2
+## Poise is how much punishment a fighter soaks before going down. It's high, and comes back
+## quickly once they get a breather, so a fight is a series of exchanges with people backing
+## off to recover, not one punch and they're on the floor.
+const POISE := 70.0                ## default poise, scaled by Fighter.toughness
+const POISE_REGEN := 24.0          ## per second, when not being hit
+const POISE_REGEN_DELAY := 0.9
+## Hits on a fighter who's still reeling chip less poise, so you can't stun-lock them down.
+const STAGGER_POISE_SCALE := 0.6
+## A head guard (LB) stops head shots; a body guard (RB) stops body and groin shots.
+const GUARD_HEAD := &"head"
+const GUARD_BODY := &"body"
+## Slipping: a flick of the right stick moves the head. For this long after the flick, head
+## shots miss, and slipping one right as it lands (SLIP_COUNTER_WINDOW) sets up a counter.
+const SLIP_WINDOW := 0.35
+const SLIP_COUNTER_WINDOW := 0.2
+const SLIP_COOLDOWN := 0.25        ## a second flick this soon doesn't slip (no stick wiggling)
+const SLIP_THRESHOLD := 0.6        ## stick deflection that counts as a flick
+## Doubled over from a kick in the groin: on all fours for this long (divided by toughness).
+const DOUBLED_TIME := 2.6
+## Shoulder charge.
+const CHARGE_SPEED := 8.5
+const CHARGE_HIT_RANGE := 0.95     ## metres from the charger's centre that a body is hit
+## Holds: a victim with hold_resist shrugs a grab off with this chance (resist / holder grip),
+## halved if they're reeling or doubled over. Resist also makes them wriggle free faster.
+const SHRUG_STAGGER := 0.45        ## the would-be holder reels this long when shrugged off
 const NOSE_BREAK_DAMAGE := 9.0     ## a face hit this hard can break a nose
 const CRAWL_SPEED := 0.7
 const GRAB_MOVE_SCALE := 0.45      ## holder's speed multiplier
@@ -74,20 +106,45 @@ const MAX_FALL := 12.0             ## sanity cap on a reported fall
 const DATA := {
 	# --- Player bare-knuckle ---------------------------------------------------
 	# Paced to read as weighty, not frantic: every punch has a visible load and a recovery
-	# you have to respect. Heavier punches commit you for longer.
-	&"jab": {"damage": 6.0, "windup": 0.12, "active": 0.06, "recover": 0.3, "reach": 1.3,
-		"arc": 70.0, "stagger": 0.3, "poise": 6.0, "knockback": 1.4, "to_face": true},
+	# you have to respect. Heavier punches commit you for longer. Poise is the knockdown
+	# meter: no single punch drops a fresh man, a good combination or a body-head mix does.
+	&"jab": {"damage": 5.0, "windup": 0.12, "active": 0.06, "recover": 0.3, "reach": 1.3,
+		"arc": 70.0, "stagger": 0.25, "poise": 6.0, "knockback": 1.2, "to_face": true},
 	&"cross": {"damage": 9.0, "windup": 0.2, "active": 0.06, "recover": 0.4, "reach": 1.35,
-		"arc": 70.0, "stagger": 0.4, "poise": 10.0, "knockback": 2.4, "to_face": true},
+		"arc": 70.0, "stagger": 0.4, "poise": 12.0, "knockback": 2.2, "to_face": true},
 	&"hook": {"damage": 11.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.25,
-		"arc": 90.0, "stagger": 0.55, "poise": 15.0, "knockback": 3.2, "heavy": true, "to_face": true},
-	&"uppercut": {"damage": 15.0, "windup": 0.3, "active": 0.07, "recover": 0.55, "reach": 1.15,
-		"arc": 70.0, "stagger": 0.7, "poise": 30.0, "knockback": 4.2, "heavy": true, "to_face": true},
-	&"kick": {"damage": 12.0, "windup": 0.3, "active": 0.08, "recover": 0.5, "reach": 1.65,
-		"arc": 70.0, "stagger": 0.6, "poise": 18.0, "knockback": 5.5, "heavy": true, "guard_break": true},
-	&"headbutt": {"damage": 15.0, "windup": 0.26, "active": 0.06, "recover": 0.5, "reach": 1.05,
-		"arc": 60.0, "stagger": 0.8, "poise": 22.0, "knockback": 3.0, "heavy": true,
+		"arc": 90.0, "stagger": 0.5, "poise": 16.0, "knockback": 2.4, "heavy": true,
+		"to_face": true, "side": 1.0},
+	&"uppercut": {"damage": 14.0, "windup": 0.3, "active": 0.07, "recover": 0.55, "reach": 1.15,
+		"arc": 70.0, "stagger": 0.6, "poise": 22.0, "knockback": 3.0, "heavy": true, "to_face": true},
+	# Body shots (RB + punch): less damage, but they sap poise and slow a man down, and a
+	# fighter covering his head is open to them.
+	&"body_jab": {"damage": 4.0, "windup": 0.13, "active": 0.06, "recover": 0.32, "reach": 1.25,
+		"arc": 70.0, "stagger": 0.25, "poise": 10.0, "knockback": 0.9, "zone": &"body"},
+	&"body_hook": {"damage": 8.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.2,
+		"arc": 90.0, "stagger": 0.45, "poise": 22.0, "knockback": 1.6, "zone": &"body", "side": 1.0},
+	&"body_uppercut": {"damage": 10.0, "windup": 0.28, "active": 0.07, "recover": 0.5, "reach": 1.1,
+		"arc": 70.0, "stagger": 0.55, "poise": 26.0, "knockback": 1.8, "heavy": true, "zone": &"body"},
+	&"kick": {"damage": 11.0, "windup": 0.3, "active": 0.08, "recover": 0.5, "reach": 1.65,
+		"arc": 70.0, "stagger": 0.55, "poise": 20.0, "knockback": 4.0, "heavy": true,
+		"guard_break": true, "zone": &"body"},
+	# The end of "Below the belt": a kick to the crotch that drops them on all fours.
+	&"groin_kick": {"damage": 12.0, "windup": 0.26, "active": 0.08, "recover": 0.5, "reach": 1.55,
+		"arc": 70.0, "stagger": 0.4, "poise": 0.0, "knockback": 0.6, "heavy": true,
+		"zone": &"groin", "doubles": true},
+	&"headbutt": {"damage": 14.0, "windup": 0.26, "active": 0.06, "recover": 0.5, "reach": 1.05,
+		"arc": 60.0, "stagger": 0.7, "poise": 26.0, "knockback": 2.4, "heavy": true,
 		"to_face": true, "self_damage": 2.0, "guard_break": true},
+	# LB + Y: drop the shoulder and drive through them. Knocks them flat and sends them into
+	# (or over) whatever is behind them.
+	&"shoulder_charge": {"damage": 10.0, "windup": 0.28, "active": 0.42, "recover": 0.55,
+		"reach": 1.0, "arc": 60.0, "stagger": 0.6, "poise": 0.0, "knockback": 9.5,
+		"knockdown": true, "heavy": true, "guard_break": true, "lunge": false, "charge": true,
+		"zone": &"body"},
+	# LB + B: both hands behind their head, pull it down onto a rising knee.
+	&"clinch_knee": {"damage": 15.0, "windup": 0.3, "active": 0.08, "recover": 0.55, "reach": 1.1,
+		"arc": 70.0, "stagger": 0.8, "poise": 30.0, "knockback": 1.6, "heavy": true,
+		"to_face": true, "guard_break": true, "clinch": true},
 	&"stomp": {"damage": 9.0, "windup": 0.32, "active": 0.06, "recover": 0.5, "reach": 1.4,
 		"arc": 90.0, "ground": true, "heavy": true},
 	&"knee": {"damage": 8.0, "windup": 0.0, "active": 0.05, "recover": 0.0, "reach": 1.4,
@@ -97,14 +154,17 @@ const DATA := {
 
 	# --- Enemy moves (telegraphed, counterable) --------------------------------
 	&"swing": {"damage": 8.0, "telegraph": true, "windup_scale": 1.0, "active": 0.06,
-		"recover": 0.7, "reach": 1.35, "arc": 70.0, "stagger": 0.35, "poise": 10.0,
-		"knockback": 2.0, "to_face": true},
+		"recover": 0.7, "reach": 1.35, "arc": 70.0, "stagger": 0.35, "poise": 12.0,
+		"knockback": 2.0, "to_face": true, "side": 1.0},
+	&"body_swing": {"damage": 7.0, "telegraph": true, "windup_scale": 1.0, "active": 0.06,
+		"recover": 0.7, "reach": 1.3, "arc": 70.0, "stagger": 0.35, "poise": 14.0,
+		"knockback": 1.4, "zone": &"body"},
 	&"haymaker": {"damage": 14.0, "telegraph": true, "windup_scale": 1.5, "active": 0.07,
 		"recover": 0.95, "reach": 1.4, "arc": 80.0, "stagger": 0.6, "poise": 30.0,
-		"knockback": 4.0, "heavy": true, "to_face": true, "guard_break": true},
+		"knockback": 4.0, "heavy": true, "to_face": true, "guard_break": true, "side": 1.0},
 	&"shove": {"damage": 3.0, "telegraph": true, "windup_scale": 0.8, "active": 0.05,
 		"recover": 0.4, "reach": 1.3, "arc": 70.0, "stagger": 0.4, "poise": 12.0, "knockback": 5.0,
-		"guard_break": true},
+		"guard_break": true, "zone": &"body"},
 	&"baton": {"damage": 12.0, "telegraph": true, "windup_scale": 1.1, "active": 0.06,
 		"recover": 0.55, "reach": 1.6, "arc": 80.0, "stagger": 0.5, "poise": 20.0,
 		"knockback": 3.0, "heavy": true, "guard_break": true},
@@ -121,26 +181,29 @@ const STAGGER_DRAG := 7.0
 ## A punch carries you forward into it (m/s on the strike).
 const FOLLOW_THROUGH := 1.4
 
-## Player punches. Left: tap for a jab, hold for a straight cross. Right: tap for a hook,
-## hold for an uppercut. The uppercut also has its own button.
-const LEFT_TAP := &"jab"
-const LEFT_HOLD := &"cross"
-const RIGHT_TAP := &"hook"
-const RIGHT_HOLD := &"uppercut"
-const PUNCH_HOLD_TIME := 0.22            ## seconds a punch button is held to throw the heavy version
-const BOTH_HANDS_WINDOW := 0.08    ## both punches pressed this close together = headbutt
+## Player buttons (controller): X jab, B hook, Y uppercut. Held with RB (body guard) they go
+## to the body. Held with LB (head guard): X kick, Y shoulder charge, B clinch knee.
+## LB + RB together is a hold. R3 headbutt. A dodges along the left stick.
+const PUNCHES := {&"jab": &"jab", &"hook": &"hook", &"uppercut": &"uppercut"}
+const BODY_PUNCHES := {&"jab": &"body_jab", &"hook": &"body_hook", &"uppercut": &"body_uppercut"}
+const LB_MOVES := {&"jab": &"kick", &"uppercut": &"shoulder_charge", &"hook": &"clinch_knee"}
+## LB and RB pressed this close together is a hold, not a guard.
+const BOTH_GUARDS_WINDOW := 0.12
 ## Strings of moves thrown in rhythm (each in the previous one's recovery, or just after)
-## that pay off on the last move. Longest matches are checked first.
+## that pay off on the last move. Longest matches are checked first. "becomes" swaps the last
+## move for another (the kick at the end of "Below the belt" goes low).
 const COMBOS := [
-	{"name": "The Full English", "seq": [&"jab", &"cross", &"hook", &"uppercut"],
+	{"name": "The Full English", "seq": [&"jab", &"jab", &"hook", &"uppercut"],
 		"bonus": 1.7, "knockdown": true},
-	{"name": "Left, right, goodnight", "seq": [&"jab", &"hook", &"uppercut"], "bonus": 1.5,
-		"knockdown": true},
+	{"name": "Below the belt", "seq": [&"jab", &"body_jab", &"kick"], "bonus": 1.0,
+		"becomes": &"groin_kick"},
+	{"name": "Up and under", "seq": [&"body_hook", &"hook", &"uppercut"], "bonus": 1.5},
+	{"name": "Left, right, goodnight", "seq": [&"jab", &"hook", &"uppercut"], "bonus": 1.45},
 	{"name": "Double jab, hook", "seq": [&"jab", &"jab", &"hook"], "bonus": 1.3},
-	{"name": "One-two-hook", "seq": [&"jab", &"cross", &"hook"], "bonus": 1.35},
+	{"name": "Downstairs, upstairs", "seq": [&"body_hook", &"hook"], "bonus": 1.3},
 	{"name": "Hook to the chin", "seq": [&"hook", &"uppercut"], "bonus": 1.3},
-	{"name": "Jab, hook", "seq": [&"jab", &"hook"], "bonus": 1.15},
-	{"name": "One-two", "seq": [&"jab", &"cross"], "bonus": 1.15},
+	{"name": "One-two", "seq": [&"jab", &"hook"], "bonus": 1.15},
+	{"name": "Jab, uppercut", "seq": [&"jab", &"uppercut"], "bonus": 1.15},
 ]
 const RHYTHM_GRACE := 0.45         ## after a move ends, the next one still continues the string
 const INPUT_BUFFER := 0.2         ## a press this close before the chain window opens is kept
@@ -159,6 +222,14 @@ static func match_combo(history: Array) -> Dictionary:
 		if history.slice(history.size() - seq.size()) == seq:
 			return c
 	return {}
+
+
+## The combo that `history` (oldest first) would complete if `move` came next, or {}.
+## Matches the move as thrown, so "becomes" combos are found before the swap.
+static func combo_for_next(history: Array, move: StringName) -> Dictionary:
+	var h := history.duplicate()
+	h.append(move)
+	return match_combo(h)
 
 
 ## A longer combo starts with `seq` (so the string isn't over yet).
@@ -181,7 +252,8 @@ static func get_move(move_id: StringName) -> Dictionary:
 		"recover": 0.3, "reach": 1.3, "arc": 70.0, "sweep": false, "lunge": true,
 		"stagger": 0.3, "poise": 8.0, "knockback": 1.0, "knockdown": false, "heavy": false,
 		"to_face": false, "ground": false, "telegraph": false, "keeps_hold": false,
-		"self_damage": 0.0,
+		"self_damage": 0.0, "guard_break": false, "zone": &"head", "side": 0.0,
+		"charge": false, "clinch": false, "doubles": false,
 	}
 	m.merge(DATA.get(move_id, {}), true)
 	return m

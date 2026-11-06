@@ -1249,12 +1249,7 @@ def _(p):
         for y in (-W / 2 + 0.15, W / 2 - 0.15):
             p.box((0.16, 0.16, 0.62), (x, y, 0.31), "M_wood_mahogany", bevel=0.02)
     p.box((0.18, 0.02, 0.12), (L / 2 - 0.01, 0, 0.66), "M_chrome")
-    cols = ["C_paint_white", "C_paint_red", "C_light_amber", "C_paint_black", "C_paint_red", "C_light_amber", "C_paint_red"]
-    for i, c in enumerate(cols):
-        row = 0 if i == 0 else 1 + (i - 1) // 2
-        x = -0.6 if i == 0 else 0.4 + row * 0.05
-        y = 0 if i == 0 else ((i - 1) % 2 - 0.5) * 0.055 * row
-        p.sphere(0.026, (x, y, 0.837), c, segs=10, rings=6)
+    # The balls are physics props (PubBuilder.pool_table), not part of the model.
 
 
 @prop("games", "pool_cue", "pool_cue", 0.5, "box")

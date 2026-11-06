@@ -148,8 +148,8 @@ Rules other workstreams rely on:
 - **Enemy tells.** AI attacks with a move that has `telegraph: true` (`swing`, `haymaker`,
   `shove`, `baton`). Its windup becomes the difficulty's `telegraph_time` times
   `Moves.ENEMY_WINDUP_SCALE` (and the move's `windup_scale`), the fighter flashes,
-  `Events.attack_telegraphed` fires, and the target's prompt says Block (punches) or Dodge
-  (moves with `guard_break`).
+  `Events.attack_telegraphed` fires, and the target's prompt says Block high (head shots),
+  Block low (body shots) or Dodge (moves with `guard_break`).
 - **Blocking.** `BLOCK` covers `Moves.BLOCK_ARC` in front for `BLOCK_CHIP` damage. A guard
   raised within `PARRY_WINDOW` of a punch landing parries it: the attacker reels,
   `Events.attack_countered` fires and the defender's next punch gets `COUNTER_BONUS`. Guard
@@ -163,9 +163,34 @@ Rules other workstreams rely on:
   you forward (`FOLLOW_THROUGH`), and knockback slides off slowly while staggered
   (`STAGGER_DRAG`). `HitLean` (scripts/combat/hit_lean.gd) tips each rig away from blows on a
   damped spring; it is cosmetic and resets when a fighter goes down.
-- **Player punches.** Left: tap jab, hold cross. Right: tap hook, hold uppercut. The
-  `uppercut` action throws one directly; both punches together headbutt. Combos are in
-  `Moves.COMBOS` and a string keeps going while a longer combo can still follow.
+- **Player controls (pad, keyboard in brackets).** X jab (LMB), B hook (RMB), Y uppercut (F),
+  R3 headbutt (Q), A dodge along the left stick (Space). LB head guard (Shift), RB body guard
+  (Ctrl). RB + a punch goes to the body (`Moves.BODY_PUNCHES`). LB + X kick, LB + Y shoulder
+  charge, LB + B clinch knee (`Moves.LB_MOVES`). LB + RB together grabs and holds; while
+  holding, punches knee, A or Throw hurls them, LB + RB again lets go. The right stick
+  (arrows) moves the head: a flick slips. Combos are in `Moves.COMBOS` and a string keeps
+  going while a longer combo can still follow; a combo's `becomes` swaps its last move (jab,
+  body jab, kick is "Below the belt", a `groin_kick`). Old saved keybinds from before this
+  layout are dropped (`Settings.KEYBIND_LAYOUT`).
+- **Head and body.** Every move has a `zone`: head (default), body or groin. A head guard only
+  covers head shots, a body guard body and groin shots, so `defend_hint()` says
+  `guard_head`, `guard_body` or `dodge`. Hit info carries `zone`, and hooks carry `side`: their
+  `direction` is skewed sideways so the head is knocked round, not back. `HeadSnap`
+  (scripts/combat/head_snap.gd) is a skeleton modifier that snaps the head (or folds the chest,
+  for body shots) on a damped spring over whatever animation plays.
+- **Slips.** `request_slip(dir)` (a right-stick flick) makes head shots miss for
+  `Moves.SLIP_WINDOW`; slipping within `SLIP_COUNTER_WINDOW` of the hit sets up a counter like a
+  parry. Missed hits arrive in `hit_landed` with `slipped: true` and damage 0.
+- **Groin kicks** (`doubles`) put the victim in `State.DOUBLED` (on all fours) for
+  `Moves.DOUBLED_TIME / toughness`. They can still be hit and held; they're not `is_down()`.
+- **Shoulder charge** (`charge`) drives forward at `CHARGE_SPEED` after the wind-up and hits the
+  first enemy within `CHARGE_HIT_RANGE`: knockdown, big knockback (for the physics thread's
+  over-the-bar vault). **Clinch knee** (`clinch`) ignores a guard and can't be slipped.
+- **Holds.** `Fighter.hold_resist` (from `NpcTypes` `hold_resist`) is the chance, over the
+  holder's grip, that a grab is shrugged off (halved on a reeling or doubled-over man;
+  `Events.grab_shrugged`), and it speeds up their escape.
+- **Going down.** Poise is high (`Moves.POISE`) and recovers fast after `POISE_REGEN_DELAY`;
+  hits on a staggered man chip less (`STAGGER_POISE_SCALE`). One punch doesn't drop a fresh man.
 - **No chasing.** A move steps in at most `Moves.MAX_LUNGE_STEP`; further away it whiffs.
 - **Stance.** `in_stance` / `stance_changed` say when a fighter is squared up for a fight
   (an exchange in the last `STANCE_HOLD` seconds or, for players, an active enemy within

@@ -21,6 +21,7 @@ Every pub has at least one raised level, so fighters can be shoved, thrown or kn
 | `scripts/level/pub_builder.gd` | `PubBuilder`, the greybox kit: floors, walls with doors and windows, beams, bar, back bar, fireplaces, dartboard, pool table, tables, lamps, markers. |
 | `scripts/level/pub_era.gd` | `PubEra`: colours, floor pattern, wall height and lighting for the 17th, 18th and 19th century. |
 | `scripts/level/pub_materials.gd`, `scripts/level/prop_library.gd` | Textured materials and the Blender prop models (tables, chairs, glasses, pictures, furniture, piano...). See [PROPS.md](PROPS.md). |
+| `scripts/physics/pub_physics.gd` | `PubPhysics`: every loose prop is a rigid body, simulated on the host and synced. See docs/PHYSICS.md. |
 | `scripts/level/occluder_fader.gd` | `OccluderFader`: fades anything in `camera_occluders` that sits between the camera and a player. |
 | `scripts/level/<pub_id>.gd` + `scenes/pubs/<pub_id>.tscn` | One per pub. The script sets `pub_id`, `era` and `room` and lays the pub out in `_build()`. |
 
@@ -53,7 +54,7 @@ host's pick) and visits each pub once, in order, wrapping round.
   `is_knocked_out() -> bool`.
 - **Items**: put a scene at `scenes/items/<item>.tscn` and the pub spawns it on every
   matching prop marker, named `I<n>`, under `items_root()`. Until a scene exists the
-  pub drops a greybox stand-in there. Stand-in tables, chairs and stools are solid.
+  pub drops a greybox stand-in there. Stand-in tables are physics bodies (see docs/PHYSICS.md).
 - **Bar**: `get_bar_zones()` returns `Area3D`s (mask: players) along the front of each bar.
 - **Net**: players are spawned on every peer as `P<peer_id>` in peer-id order on the
   `PlayerSpawns` markers. `travel_to` is the synced pub change.
