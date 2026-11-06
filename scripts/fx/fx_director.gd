@@ -312,6 +312,9 @@ func _on_hit_landed(info: Dictionary) -> void:
 	var heavy := bool(info.get("heavy", false))
 	var to_face := bool(info.get("to_face", false)) or move.contains("headbutt")
 	var damage := float(info.get("damage", 10.0))
+	if bool(info.get("slipped", false)):
+		play("whoosh", pos, -4.0)  # the fist goes past the ear
+		return
 	if bool(info.get("blocked", false)) or bool(info.get("parried", false)):
 		_on_blocked(info, victim, attacker, pos, bool(info.get("parried", false)))
 		return

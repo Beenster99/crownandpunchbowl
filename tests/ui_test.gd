@@ -18,14 +18,14 @@ func _initialize() -> void:
 
 	# Rebinding swaps a clash rather than leaving an action unbound.
 	settings.reset_binds()
-	var punch_kb: Dictionary = settings.binds["punch_left"]["kb"].duplicate()
-	var swapped: String = settings.set_bind("punch_right", "kb", punch_kb)
-	_check(swapped == "punch_left", "binding right punch to left punch's button should swap them")
-	_check(settings.binding_equals(settings.binds["punch_right"]["kb"], punch_kb), "right punch takes the new binding")
-	_check(settings.binds["punch_left"]["kb"].has("mouse") and settings.binds["punch_left"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT,
+	var punch_kb: Dictionary = settings.binds["jab"]["kb"].duplicate()
+	var swapped: String = settings.set_bind("hook", "kb", punch_kb)
+	_check(swapped == "jab", "binding hook to jab's button should swap them")
+	_check(settings.binding_equals(settings.binds["hook"]["kb"], punch_kb), "right punch takes the new binding")
+	_check(settings.binds["jab"]["kb"].has("mouse") and settings.binds["jab"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT,
 		"left punch gets right punch's old binding")
 	settings.reset_binds("kb")
-	_check(settings.binds["punch_right"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT, "reset keyboard binds")
+	_check(settings.binds["hook"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT, "reset keyboard binds")
 
 	# Event conversion respects the device column.
 	var key := InputEventKey.new()
@@ -37,8 +37,8 @@ func _initialize() -> void:
 	axis.axis = JOY_AXIS_TRIGGER_LEFT
 	axis.axis_value = 0.9
 	_check(settings.binding_from_event(axis, "pad") == {"axis": JOY_AXIS_TRIGGER_LEFT, "dir": 1}, "trigger -> pad")
-	_check(settings.action_label("punch_left", "kb") == "Left mouse", "punch label")
-	_check(settings.action_label("block", "pad") == "LB", "block pad label")
+	_check(settings.action_label("jab", "kb") == "Left mouse", "punch label")
+	_check(settings.action_label("guard_head", "pad") == "LB", "head guard pad label")
 	_check(settings.action_label("move_up", "pad") == "Left stick up", "stick label")
 	for action in settings.ACTIONS:
 		_check(InputMap.has_action(action), "input action exists: " + action)
