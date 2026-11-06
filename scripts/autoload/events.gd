@@ -24,6 +24,9 @@ signal lock_changed(player: Node, target: Node)
 signal attack_whiffed(attacker: Node, move: StringName)
 ## `defender` was blocking, but a guard breaker (kick, headbutt, haymaker) went through.
 signal guard_broken(defender: Node, attacker: Node)
+## Head shots have him on wobbly legs (Fighter.is_rocked), or body shots have winded him.
+signal fighter_rocked(fighter: Node)
+signal fighter_winded(fighter: Node)
 ## `fighter` threw the last move of a named combo ("One-two", "Counter"...).
 signal combo_performed(fighter: Node, combo_name: String)
 ## `fighter` was thrown over a railing or off an open edge.

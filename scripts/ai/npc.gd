@@ -203,7 +203,12 @@ func _on_hit_taken(info: Dictionary) -> void:
 		# Getting tagged repeatedly: shell up where it's coming from.
 		var zone := StringName(info.get("zone", Moves.GUARD_HEAD))
 		_cover_zone = Moves.GUARD_HEAD if zone == Moves.GUARD_HEAD else Moves.GUARD_BODY
-	if float(info.get("damage", 0.0)) > 0.0 and not blocked \
+	if bool(info.get("rocked", false)) and mood == Mood.ENGAGED:
+		# Out on his feet: back off behind a high guard and try to clear his head.
+		_cover_zone = Moves.GUARD_HEAD
+		_recover_t = maxf(_recover_t, _rng.randf_range(1.2, 2.0))
+		_drop_token()
+	elif float(info.get("damage", 0.0)) > 0.0 and not blocked \
 			and mood == Mood.ENGAGED and _rng.randf() < 0.6:
 		# Rocked: back off and get the guard up before coming again.
 		_recover_t = maxf(_recover_t, _rng.randf_range(0.7, 1.5))
@@ -641,7 +646,10 @@ func _wants_stance_guard(d: float) -> bool:
 	if _stance_roll_t > 0.0:
 		return false
 	_stance_roll_t = _rng.randf_range(0.6, 1.2)
-	return _rng.randf() < float(_type.get("defence", 0.0)) + 0.45
+	var chance := float(_type.get("defence", 0.0)) + 0.45
+	if is_winded():
+		chance *= 0.5  # hands keep dropping to the ribs
+	return _rng.randf() < chance
 
 
 ## Which guard to hold: where he's been getting hit, once it's clearly more one than the

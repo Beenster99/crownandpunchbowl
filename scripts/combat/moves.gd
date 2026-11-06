@@ -129,6 +129,31 @@ const POWER_STAMINA := 0.8          ## a full-power shot costs this much extra (
 ## A punch that goes into the gap in a guard (at the body of a man covering his head, or the
 ## head of one covering his body) is a clean shot: harder, heavier, and it rocks him.
 const CLEAN_BONUS := 1.35
+## Set-ups: a clean shot that follows punches to the other zone (jabs upstairs bring the hands
+## up, then a hook downstairs) is a set-up paying off: SETUP_BONUS on top of CLEAN_BONUS.
+## Strikes at the same man within SETUP_WINDOW seconds count as the set-up.
+const SETUP_BONUS := 1.25
+const SETUP_WINDOW := 1.8
+## A named combo whose finisher doesn't land clean (into a guard, or on a man who isn't open)
+## keeps only this share of its bonus: the reward is for going into the gap.
+const COMBO_UNCLEAN_SHARE := 0.5
+## Area damage. Head shots build `head_hurt`, body shots `body_hurt` (1.0 = the state kicks
+## in). A hit adds damage / (max_hp * share); clean shots count CLEAN_HURT times.
+const ROCK_SHARE := 0.3             ## head damage worth this much of max hp in a spell rocks him
+const WIND_SHARE := 0.28            ## body damage worth this much winds him
+const CLEAN_HURT := 1.5
+const HURT_DECAY := 0.12            ## per second, after HURT_DECAY_DELAY without a new hit
+const HURT_DECAY_DELAY := 1.5
+## Rocked: wobbly legs, a slow guard (it only works after ROCKED_GUARD_DELAY up), a short
+## window to finish him: a heavy or powered head shot drops him.
+const ROCKED_TIME := 3.0
+const ROCKED_SPEED := 0.55
+const ROCKED_GUARD_DELAY := 0.35
+## Winded: hands drop to the ribs, slow to get his breath back.
+const WINDED_TIME := 4.0
+const WINDED_SPEED := 0.8
+const WINDED_REGEN := 0.35          ## stamina regen multiplier
+const WINDED_DRAIN := 0.3           ## of max stamina, knocked out of him when it happens
 ## A parry or slip timed this close to the punch landing is a perfect read: time dips for a
 ## beat (solo only) and the counter window opens as usual.
 const PERFECT_WINDOW := 0.1

@@ -210,6 +210,17 @@ Rules other workstreams rely on:
   carries `opening: true` (and `clean`). Engaged punters in range hold a stance guard between
   attacks that follows where they're being hit (`Npc._zone_heat`, `guard_skill`); the foe bar
   shows the opening unless `gameplay/opening_hints` is off.
+- **Set-ups.** A clean shot that follows a strike at the same man in the other zone (head
+  vs body) within `SETUP_WINDOW` is a set-up: `SETUP_BONUS` on top, `setup: true` and a
+  `setup_name` call-out. A named combo pays its full bonus only when the finisher goes in
+  (into the gap, on a man who's open or held, or as a punish); otherwise
+  `COMBO_UNCLEAN_SHARE` of it, and a combo knockdown doesn't happen.
+- **Rocked and winded.** Landed head shots build towards rocked, body shots towards winded
+  (`ROCK_SHARE` / `WIND_SHARE` of max hp in a spell, clean shots count `CLEAN_HURT`).
+  `is_rocked()`: open, slow feet, a guard that only works after `ROCKED_GUARD_DELAY`, and a
+  heavy, powered or set-up head shot finishes him (`finish: true`, knockdown). Getting up
+  clears it. `is_winded()`: stamina knocked out, slow regen, slow feet, NPCs guard less.
+  The hit that tips it carries `rocked` / `winded`; `Events.fighter_rocked` / `fighter_winded`.
 - **Perfect reads.** A parry within `PERFECT_WINDOW` of raising the guard, or a slip that close
   to the hit, carries `perfect: true`; the local player gets slow motion (`Fx.slow_mo`, solo only).
 - **Lock-on.** `Fighter.lock_target` (players: `lock_on` toggles, `lock_next` turns to the
