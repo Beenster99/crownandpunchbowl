@@ -7,3 +7,4 @@
 Thumbs.db
 *.tmp
 build/
+__pycache__/
