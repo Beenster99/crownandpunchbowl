@@ -77,6 +77,9 @@ var stamina: float
 var state: State = State.IDLE
 ## World-space desired movement, set by the controller each physics frame.
 var move_input := Vector3.ZERO
+## When set (world XZ), the way to face while walking free instead of the way you're moving.
+## The first-person view uses it so stepping back doesn't turn you round.
+var face_override := Vector3.ZERO
 ## Who this fighter is attacking. Set when a move starts. Controllers may also set it.
 var target: Fighter = null
 ## The fighter holding this one (state HELD), or null.
@@ -1439,7 +1442,7 @@ func _tick_motion(delta: float) -> void:
 				to_foe.y = 0.0
 				_face(to_foe, delta, 10.0)
 			else:
-				_face(move_input, delta, 12.0)
+				_face(move_input if face_override == Vector3.ZERO else face_override, delta, 12.0)
 		State.GRABBING:
 			v = move_input.limit_length(1.0) * move_speed * Moves.GRAB_MOVE_SCALE
 			_face(move_input, delta, 5.0)

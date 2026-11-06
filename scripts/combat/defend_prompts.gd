@@ -121,6 +121,14 @@ func _get_label() -> Label3D:
 	return _label
 
 
+## Under the feet from overhead. In first person your feet are out of sight, so the prompt
+## sits low in the middle of the view instead, just in front of your chest.
+func _place(label: Label3D) -> void:
+	var fp := BrawlCamera.first_person and player is PlayerFighter and (player as PlayerFighter).first_person
+	label.position = Vector3(0, 0.95, -0.75) if fp else Vector3(0, 0.02, 0)
+	label.offset = Vector2.ZERO if fp else Vector2(0, -PROMPT_DROP)
+
+
 ## The enemy whose wind-up on the player lands soonest, or null.
 func most_urgent() -> Fighter:
 	var best: Fighter = null
@@ -137,6 +145,8 @@ func most_urgent() -> Fighter:
 func _process(delta: float) -> void:
 	if player == null:
 		return
+	if _label != null and is_instance_valid(_label):
+		_place(_label)
 	if _hold > 0.0:
 		_hold -= delta
 		return

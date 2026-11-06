@@ -43,7 +43,7 @@ func _initialize() -> void:
 	for action in settings.ACTIONS:
 		_check(InputMap.has_action(action), "input action exists: " + action)
 		# Typing a line is keyboard only: a pad has nothing to type with.
-		var want := 1 if action == "say_line" else 2
+		var want := 1 if action in ["say_line", "camera_view"] else 2
 		_check(InputMap.action_get_events(action).size() == want, "kb + pad events: " + action)
 
 	# Values, difficulty and section reset.
@@ -80,6 +80,8 @@ func _initialize() -> void:
 	root.add_child(cam)
 	_check(is_equal_approx(cam.zoom, clampf(settings.get_value("profile", "camera_zoom"), cam.min_zoom, cam.max_zoom)),
 		"camera starts at the saved zoom")
+	settings.set_value("gameplay", "camera_view", 0)  # overhead: at the closest zoom, + goes first person
+	cam.zoom = 0.7
 	var z0: float = cam.zoom
 	var plus := InputEventKey.new()
 	plus.physical_keycode = KEY_EQUAL

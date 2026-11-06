@@ -40,6 +40,12 @@ var _buffered: StringName = &""
 var _buffer_t := 0.0
 var _mash := 0
 var _fumble_t := 0.0
+## First-person view (local only, set by BrawlCamera): movement is relative to where you look.
+var first_person := false
+## First person: which way you're looking (radians round Y, 0 = facing -Z like rotation.y).
+var view_yaw := 0.0
+## First person: mouse turn waiting to be applied (radians), fed by BrawlCamera.
+var view_turn := 0.0
 ## Right stick, x right and y up: where the head is (drives the head-movement visual).
 var head_bob := Vector2.ZERO
 var _want_block := false
@@ -99,7 +105,12 @@ func _read_input(delta: float) -> void:
 		_set_block(false, _want_zone)
 		return
 	var stick := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	move_input = Vector3(stick.x, 0.0, stick.y)
+	var dodge_dir := Vector3(stick.x, 0.0, stick.y)
+	if first_person:
+		dodge_dir = _first_person_move(stick, delta)
+	else:
+		move_input = dodge_dir
+		face_override = Vector3.ZERO
 	set_head_bob(Input.get_vector("bob_left", "bob_right", "bob_down", "bob_up"))
 
 	var buttons := ["jab", "hook", "uppercut", "headbutt", "dodge", "guard_head", "guard_body"]
@@ -122,7 +133,7 @@ func _read_input(delta: float) -> void:
 		if state == State.GRABBING:
 			request_throw()
 		else:
-			request_dodge(move_input)
+			request_dodge(dodge_dir)
 			_buffered = &""
 		return
 	if Input.is_action_just_pressed("throw") and state == State.GRABBING:
@@ -141,6 +152,36 @@ func _read_input(delta: float) -> void:
 			if button(b, lb, rb, head_bob.y < -0.5, true):
 				_power_button = b
 	_tick_buffer(delta)
+
+
+## First-person movement. Squared up to a man (locked on or in a stance), you look at him and
+## the stick is footwork round him: forward closes in, sideways circles. Walking free, the stick
+## steers: forward and back walk, sideways turns (as does the mouse), so stepping back never
+## spins you round. Returns the world direction a dodge should go (the full stick, as seen).
+func _first_person_move(stick: Vector2, delta: float) -> Vector3:
+	var squared := stance_target != null and is_instance_valid(stance_target) \
+		and state in [State.IDLE, State.BLOCK, State.WINDUP, State.ATTACK, State.DODGE, State.STAGGER]
+	if squared:
+		view_yaw = lerp_angle(view_yaw, rotation.y, clampf(10.0 * delta, 0.0, 1.0))
+		face_override = Vector3.ZERO
+	else:
+		view_yaw = wrapf(view_yaw - stick.x * FP_TURN_SPEED * delta - view_turn, -PI, PI)
+		face_override = view_forward()
+	view_turn = 0.0
+	var fwd := view_forward()
+	var right := fwd.cross(Vector3.UP)
+	var full := right * stick.x - fwd * stick.y
+	move_input = full if squared else -fwd * stick.y
+	return full
+
+
+## First person: the flat direction you're looking.
+func view_forward() -> Vector3:
+	return Vector3(-sin(view_yaw), 0.0, -cos(view_yaw))
+
+
+## Turn rate (radians a second) of the stick or A/D in first person when not squared up.
+const FP_TURN_SPEED := 2.6
 
 
 # --- Input steps (public so tests and bots can drive them without real input) ----------
