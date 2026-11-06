@@ -54,6 +54,9 @@ headbutts, stomps and knees stay bare-knuckle. `Hands.interact_hint()` returns `
 
 A fighter who is knocked down, held or KO'd drops what they're holding.
 
+Loose items are physics bodies (`PubItem.body`): they get knocked off tables, skid on after a
+throw and smash if glass hits the floor hard. See docs/PHYSICS.md.
+
 ## Prompts and highlights
 
 `InteractPrompt` (added by `PubItems`) runs locally for the local player. Loose items within 4 m

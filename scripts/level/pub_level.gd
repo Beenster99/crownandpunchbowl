@@ -58,6 +58,8 @@ var items: PubItems
 var spawner: PlayerSpawner
 var coop: CoopRules
 var director: Director
+## Simulates and syncs every loose prop (scripts/physics/pub_physics.gd).
+var physics: PubPhysics
 ## AI director sets this while more punters (or police) are still on their way in,
 ## so the pub doesn't count as cleared between waves.
 var arrivals_pending := 0
@@ -85,6 +87,7 @@ func _ready() -> void:
 	_build_environment()
 	items = PubItems.install(self)
 	_spawn_props()
+	physics = PubPhysics.install(self)
 	add_child(GAME_UI_SCENE.instantiate())  # HUD and pause menu
 	camera = BrawlCamera.new()
 	camera.name = "BrawlCamera"
@@ -349,14 +352,24 @@ func _placeholder(parent: Node3D, kind: String, m: Marker3D) -> void:
 	var root := Node3D.new()
 	root.name = kind.to_pascal_case()
 	root.transform = m.transform
-	parent.add_child(root)
+	parent.add_child(root, true)  # readable, same on every peer (props sync by path)
 	match kind:
 		"table":
-			var body := b.solid(Vector3(1.1, 0.78, 1.1), Vector3(0, 0.39, 0), wood, 0.0, root, false)
-			b.deco(body, Vector3(1.1, 0.06, 1.1), Vector3(0, 0.36, 0), wood)
+			# A real body: top-heavy, so a fighter thrown into it tips it and sends it skidding.
+			var body := RigidBody3D.new()
+			body.name = "Body"
+			var parts := [[Vector3(1.1, 0.06, 1.1), Vector3(0, 0.75, 0)]]
 			for x in [-0.45, 0.45]:
 				for z in [-0.45, 0.45]:
-					b.deco(body, Vector3(0.07, 0.72, 0.07), Vector3(x, -0.03, z), wood)
+					parts.append([Vector3(0.07, 0.72, 0.07), Vector3(x, 0.36, z)])
+			for part in parts:
+				var cs := CollisionShape3D.new()
+				cs.shape = PubPhysics.shape_for(part[0])
+				cs.position = part[1]
+				body.add_child(cs)
+				b.deco(body, part[0], part[1], wood)
+			PubPhysics.setup_prop(body, 28.0, true)
+			root.add_child(body)
 		"chair":
 			var body := b.solid(Vector3(0.45, 0.95, 0.45), Vector3(0, 0.475, 0), wood, 0.0, root, false)
 			b.deco(body, Vector3(0.45, 0.05, 0.45), Vector3(0, -0.03, 0), wood)

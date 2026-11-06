@@ -198,7 +198,8 @@ func test_thrown_leg_lands() -> void:
 	_hands(p).request_throw_item()
 	await _wait(2.0)
 	_check(leg.is_loose(), "a thrown leg that hits nothing lands")
-	_check(leg.global_position.z < -6.0 and absf(leg.global_position.y - p.global_position.y) < 0.05,
+	# It settles on the floor (y 0) under physics; the test fighter's capsule floats a little.
+	_check(leg.global_position.z < -6.0 and leg.global_position.y < 0.1,
 		"it lands down range on the floor (%s)" % leg.global_position)
 
 

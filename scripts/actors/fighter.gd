@@ -110,6 +110,7 @@ var _vault_t := -1.0
 var _saved_mask := 0
 var _airborne := false
 var _fall_peak := 0.0
+var _impacts: BodyImpacts
 
 
 func _ready() -> void:
@@ -121,6 +122,7 @@ func _ready() -> void:
 	_saved_layer = collision_layer
 	if use_rig:
 		FighterVisual.attach(self)
+	_impacts = BodyImpacts.attach(self)  # shoves props, goes over the bar (scripts/physics)
 
 
 # --- Queries --------------------------------------------------------------------------
@@ -1084,7 +1086,10 @@ func _tick_motion(delta: float) -> void:
 		_launch_y = 0.0
 	else:
 		velocity.y = 0.0 if is_on_floor() else velocity.y - GRAVITY * delta
+	var asked := velocity
 	move_and_slide()
+	if _impacts != null:
+		_impacts.after_move(delta, asked)
 	_tick_vault(delta)
 	_track_fall()
 

@@ -15,6 +15,7 @@ const NODE_NAME := "Visual"
 var fighter: Fighter
 var rig: CharacterRig
 var lean: HitLean
+var ragdoll: RagdollDriver
 var _last_state := -1
 
 
@@ -75,6 +76,10 @@ func _ready() -> void:
 	lean.name = "HitLean"
 	lean.setup(fighter, rig)
 	add_child(lean)
+	ragdoll = RagdollDriver.new()
+	ragdoll.name = RagdollDriver.NODE_NAME
+	ragdoll.setup(fighter, rig)
+	add_child(ragdoll)
 	Events.nose_broken.connect(_on_nose_broken)
 
 
@@ -127,6 +132,9 @@ func _play_state(s: int) -> void:
 	if key == "windup":
 		return
 	if key == "stagger" and rig.current in [&"hit_front", &"hit_back"]:
+		return
+	# Knockdowns and KOs go to physics; getting up blends back out of it.
+	if ragdoll != null and ragdoll.on_state(key):
 		return
 	rig.play_state(key)
 
