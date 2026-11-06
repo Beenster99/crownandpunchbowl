@@ -44,8 +44,12 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
+	# Your farmer's health sits in the bottom left, out of the way of the fight.
 	_players_box = HBoxContainer.new()
-	_players_box.position = Vector2(20, 20)
+	_players_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_players_box.offset_left = 20
+	_players_box.offset_bottom = -20
+	_players_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_players_box.add_theme_constant_override("separation", 16)
 	root.add_child(_players_box)
 
@@ -94,10 +98,9 @@ func _ready() -> void:
 	root.add_child(_banner)
 
 	_hints = VBoxContainer.new()
-	_hints.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_hints.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	_hints.offset_left = 20
-	_hints.offset_bottom = -20
-	_hints.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_hints.offset_top = 20
 	_hints.add_theme_constant_override("separation", 4)
 	_hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hints.modulate.a = 0.85

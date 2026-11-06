@@ -3,7 +3,7 @@ extends RefCounted
 ## Freeflow target selection. Given a fighter and a stick direction, pick the enemy the
 ## player most likely means: close, roughly in the direction pushed, and preferably someone
 ## who is about to hit them. With no stick input it sticks with the current target or
-## whoever is in front.
+## whoever is straight in front; nobody off to the side.
 
 
 ## Best enemy to lunge at, or null. `dir` is a world-space XZ direction (any length).
@@ -29,8 +29,13 @@ static func pick(attacker: Fighter, dir: Vector3, max_range := Moves.LUNGE_RANGE
 		if dist > max_range:
 			continue
 		var angle := 0.0 if dist < 0.01 else rad_to_deg(aim.angle_to(to / dist))
-		# With a direction pushed, ignore anything well off to the side.
+		# With a direction pushed, ignore anything well off to the side. With the stick
+		# centred, only the man in front (or the one you're squared up to): a punch never
+		# swings you round to someone at your shoulder.
 		if has_aim and angle > 70.0:
+			continue
+		var engaged := f == attacker.target or f == attacker.stance_target
+		if not has_aim and angle > (55.0 if engaged else 35.0):
 			continue
 		var score := dist + angle / (25.0 if has_aim else 45.0)
 		if not attacker.is_hostile_to(f):

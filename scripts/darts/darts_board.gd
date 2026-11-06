@@ -31,14 +31,20 @@ const OCHE_RADIUS := 1.6                ## how close to the oche you must be to 
 const TURN_PAUSE := 1.8                 ## seconds the finished turn stays up
 const MATCH_PAUSE := 7.0                ## seconds the winner is shown before the lobby
 ## Throw scatter (mm, standard deviation) sober and on top when fully tipsy.
-const SCATTER := 9.0
-const TIPSY_SCATTER := 26.0
+const SCATTER := 13.0
+const TIPSY_SCATTER := 34.0
+## The throw's power meter (0..1): release here for a flat throw. Under-powered darts drop
+## low, over-powered ones fly high, POWER_ERROR mm per whole meter off.
+const SWEET_SPOT := 0.78
+const POWER_ERROR := 320.0
 const MAX_AIM := 260.0
 const PANEL_SCRIPT := preload("res://scripts/darts/darts_panel.gd")
 
 ## The board the local player is playing at (chalked up and not stepped away), or null.
 ## While set, the local player's fight and item controls are off.
 static var local_board: DartsBoard = null
+## Darts is played on a controller only. Tests turn this off (headless has no pads).
+static var require_pad := true
 
 var game := DartsMatch.new()
 ## Out from the wall, into the room.
@@ -83,9 +89,16 @@ static func handle_local_interact(f: Fighter) -> bool:
 		return true
 	var b := near_oche(f)
 	if b != null:
-		b.request_join()
+		if not pad_connected():
+			Events.banner.emit("Darts is played on a controller. Plug one in.", 2.5)
+		else:
+			b.request_join()
 		return true
 	return false
+
+
+static func pad_connected() -> bool:
+	return not require_pad or not Input.get_connected_joypads().is_empty()
 
 
 ## The board whose oche `f` is stood at, or null.
@@ -179,9 +192,10 @@ func request_options(start_score: int, legs: int, double_out: bool) -> void:
 	_send(&"options", [start_score, legs, double_out])
 
 
-## Throw at `aim` (board mm, including the wobble the player saw).
-func request_throw(aim: Vector2) -> void:
-	_send(&"throw", [aim])
+## Throw at `aim` (board mm, including the wobble the player saw) with `power` from the
+## power meter (SWEET_SPOT is a flat throw).
+func request_throw(aim: Vector2, power := SWEET_SPOT) -> void:
+	_send(&"throw", [aim, power])
 
 
 func _send(action: StringName, args: Array) -> void:
@@ -226,18 +240,21 @@ func _server(peer: int, action: StringName, args: Array) -> void:
 		&"throw":
 			if args.is_empty() or not (args[0] is Vector2) or peer != game.thrower_peer() or _thrower_away():
 				return
-			if not _server_throw(peer, args[0]):
+			var power: float = clampf(float(args[1]), 0.0, 1.0) if args.size() > 1 else SWEET_SPOT
+			if not _server_throw(peer, args[0], power):
 				return
 		_:
 			return
 	_broadcast()
 
 
-func _server_throw(peer: int, aim: Vector2) -> bool:
+func _server_throw(peer: int, aim: Vector2, power := SWEET_SPOT) -> bool:
 	if aim.length() > MAX_AIM:
 		aim = aim.normalized() * MAX_AIM
 	var sigma := SCATTER + TIPSY_SCATTER * _tipsy_of(peer)
-	var landed := aim + Vector2(_rng.randfn(0.0, sigma), _rng.randfn(0.0, sigma))
+	# y is down on the board: too little power drops the dart low, too much sends it high.
+	var drop := (SWEET_SPOT - power) * POWER_ERROR
+	var landed := aim + Vector2(_rng.randfn(0.0, sigma), drop + _rng.randfn(0.0, sigma))
 	var res := game.throw_dart(landed)
 	if res.is_empty():
 		return false
@@ -476,7 +493,7 @@ func _process(_delta: float) -> void:
 	var show := f != null and not local_input_locked() and near_oche(f) == self
 	_prompt.visible = show
 	if show:
-		var key := "[%s]" % (Settings.prompt("interact") if Settings.has_method("prompt") else "E")
+		var key := "[%s]" % (Settings.action_label("interact", "pad") if Settings.has_method("action_label") else "RT")
 		var i := game.index_of(multiplayer.get_unique_id())
 		var text := "%s  Play darts" % key
 		if i >= 0:
@@ -485,5 +502,7 @@ func _process(_delta: float) -> void:
 			text = "Darts: %s on  (%s)" % [game.describe().split("  ·")[0], _names()]
 		elif not game.players.is_empty():
 			text = "%s  Chalk up for darts  (%s)" % [key, _names()]
+		if i < 0 and not pad_connected():
+			text = "Darts needs a controller"
 		_prompt.text = text
 		_prompt.global_position = oche_point() + Vector3.UP * 2.1

@@ -8,7 +8,7 @@ var _arena: Node3D
 
 
 func run() -> void:
-	GameData.difficulty_index = 1  # Session Ale: 2 attackers, 2 squaring up per player
+	GameData.difficulty_index = 1  # Session Ale: 1 swinging at a time, 2 squaring up per player
 	# Hit-stop runs on real time; under --fixed-fps that would slow the whole sim to a crawl.
 	var fx := get_node_or_null(^"/root/Fx")
 	if fx != null and "hit_stop_time_scale" in fx:
@@ -176,7 +176,11 @@ func test_attack_tokens_cap() -> void:
 		_check(d.tokens_out() <= 1, "at most one token out at heat 0")
 		await get_tree().physics_frame
 	_check(most == 1, "cold room: punters take turns (max %d at once)" % most)
-	# Hot room: up to the difficulty's max_attackers.
+	# Hot room: up to the difficulty's max_attackers. (Session Ale keeps it to one at a time,
+	# so this half runs on Scrumpy, which allows two.)
+	_check(int(GameData.difficulty()["max_attackers"]) == 1, "a normal night: one swinging at a time")
+	var was := GameData.difficulty_index
+	GameData.difficulty_index = 2
 	most = 0
 	var cap := int(GameData.difficulty()["max_attackers"])
 	for i in 360:
@@ -184,6 +188,7 @@ func test_attack_tokens_cap() -> void:
 		most = maxi(most, _swinging(npcs))
 		await get_tree().physics_frame
 	_check(most >= 2 and most <= cap, "hot room: %d at once (cap %d)" % [most, cap])
+	GameData.difficulty_index = was
 
 
 func test_gang_up_rush() -> void:
@@ -196,6 +201,8 @@ func test_gang_up_rush() -> void:
 		npc.mood = Npc.Mood.ALERT
 		npcs.append(npc)
 	await _wait(0.1)
+	var was := GameData.difficulty_index
+	GameData.difficulty_index = 2  # Scrumpy: gang-ups of two (gentler nights have none)
 	d.heat = 0.0  # tokens would only allow one attacker
 	var crew := d.gang_up(p)
 	var most_rushers := int(GameData.difficulty()["max_attackers"])
@@ -212,6 +219,7 @@ func test_gang_up_rush() -> void:
 		await get_tree().physics_frame
 	_check(most >= 1 and grabbed, "one holds while the other lays in (%d swinging)" % most)
 	_check(grabbed, "the rugby lad grabs the player for his mates")
+	GameData.difficulty_index = was
 
 
 func _until_can_act(f: Fighter) -> void:

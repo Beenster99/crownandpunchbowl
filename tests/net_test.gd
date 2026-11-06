@@ -71,6 +71,13 @@ func _host() -> bool:
 	net.next_pub()
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 10.0):
 		return _fail("host: next pub didn't load with both players")
+	# Restart this pub (the pause menu's button): everyone reloads it and both respawn.
+	var before := current_scene.get_instance_id()
+	await create_timer(1.0).timeout
+	net.restart_pub()
+	if not await _wait(func(): return current_scene != null and current_scene.get_instance_id() != before and _players_spawned(2), 15.0):
+		return _fail("host: restart didn't reload the pub with both players")
+	print("NET host restarted the pub")
 	if not await _wait(func(): return net.players.size() == 1, 15.0):
 		return _fail("host: didn't notice the client leaving")
 	await create_timer(0.5).timeout
@@ -117,6 +124,11 @@ func _client() -> bool:
 		return false
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 15.0):
 		return _fail("client: didn't follow the host to the next pub")
+	var pub_scene := current_scene.get_instance_id()
+	if not await _wait(func(): return current_scene != null and current_scene.get_instance_id() != pub_scene and gd.current_pub_index == 3 \
+			and _players_spawned(2), 20.0):
+		return _fail("client: didn't follow the host's restart")
+	print("NET client followed the restart")
 	await create_timer(1.0).timeout
 	net.leave()
 	await create_timer(1.0).timeout

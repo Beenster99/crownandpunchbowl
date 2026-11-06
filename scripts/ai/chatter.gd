@@ -158,6 +158,10 @@ func _begin(a: Npc, b: Npc) -> void:
 
 
 func _tick_conversation(c: Dictionary, delta: float) -> void:
+	if not is_instance_valid(c["a"]) or not is_instance_valid(c["b"]):
+		# A talker was freed (the pub is being restarted or left): drop the chat quietly.
+		_convos.erase(c)
+		return
 	var a := c["a"] as Npc
 	var b := c["b"] as Npc
 	if not _still_chatting(a, b):
