@@ -55,7 +55,7 @@ const COUNTER_WINDOW := 0.9        ## after a parry, a punch this soon is a coun
 const COUNTER_BONUS := 1.6         ## damage multiplier on a counter
 const GUARD_BREAK_STAGGER := 0.7   ## a blocker hit by a guard breaker reels this long
 const ENGAGE_RANGE := 3.2          ## a player within this of an active enemy takes a stance
-const STANCE_MOVE_SCALE := 0.7     ## speed in a fighting stance (footwork, not sprinting)
+const STANCE_MOVE_SCALE := 0.6     ## speed in a fighting stance (footwork, not sprinting)
 const STANCE_HOLD := 4.0           ## seconds a stance lasts after the last exchange
 const POISE := 30.0                ## default poise, scaled by Fighter.toughness
 const POISE_REGEN := 15.0          ## per second, when not being hit
@@ -73,20 +73,22 @@ const MAX_FALL := 12.0             ## sanity cap on a reported fall
 
 const DATA := {
 	# --- Player bare-knuckle ---------------------------------------------------
-	&"jab": {"damage": 5.0, "windup": 0.07, "active": 0.05, "recover": 0.22, "reach": 1.3,
-		"arc": 70.0, "stagger": 0.25, "poise": 6.0, "knockback": 1.0, "to_face": true},
-	&"cross": {"damage": 7.0, "windup": 0.08, "active": 0.05, "recover": 0.25, "reach": 1.3,
-		"arc": 70.0, "stagger": 0.3, "poise": 8.0, "knockback": 1.5, "to_face": true},
-	&"hook": {"damage": 10.0, "windup": 0.12, "active": 0.06, "recover": 0.32, "reach": 1.3,
-		"arc": 80.0, "stagger": 0.45, "poise": 14.0, "knockback": 2.5, "heavy": true, "to_face": true},
-	&"uppercut": {"damage": 14.0, "windup": 0.16, "active": 0.06, "recover": 0.45, "reach": 1.2,
-		"arc": 70.0, "stagger": 0.6, "poise": 30.0, "knockback": 3.0, "heavy": true, "to_face": true},
-	&"kick": {"damage": 11.0, "windup": 0.16, "active": 0.07, "recover": 0.36, "reach": 1.65,
-		"arc": 70.0, "stagger": 0.5, "poise": 16.0, "knockback": 4.0, "heavy": true, "guard_break": true},
-	&"headbutt": {"damage": 14.0, "windup": 0.14, "active": 0.05, "recover": 0.42, "reach": 1.05,
-		"arc": 60.0, "stagger": 0.7, "poise": 22.0, "knockback": 2.0, "heavy": true,
+	# Paced to read as weighty, not frantic: every punch has a visible load and a recovery
+	# you have to respect. Heavier punches commit you for longer.
+	&"jab": {"damage": 6.0, "windup": 0.12, "active": 0.06, "recover": 0.3, "reach": 1.3,
+		"arc": 70.0, "stagger": 0.3, "poise": 6.0, "knockback": 1.4, "to_face": true},
+	&"cross": {"damage": 9.0, "windup": 0.2, "active": 0.06, "recover": 0.4, "reach": 1.35,
+		"arc": 70.0, "stagger": 0.4, "poise": 10.0, "knockback": 2.4, "to_face": true},
+	&"hook": {"damage": 11.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.25,
+		"arc": 90.0, "stagger": 0.55, "poise": 15.0, "knockback": 3.2, "heavy": true, "to_face": true},
+	&"uppercut": {"damage": 15.0, "windup": 0.3, "active": 0.07, "recover": 0.55, "reach": 1.15,
+		"arc": 70.0, "stagger": 0.7, "poise": 30.0, "knockback": 4.2, "heavy": true, "to_face": true},
+	&"kick": {"damage": 12.0, "windup": 0.3, "active": 0.08, "recover": 0.5, "reach": 1.65,
+		"arc": 70.0, "stagger": 0.6, "poise": 18.0, "knockback": 5.5, "heavy": true, "guard_break": true},
+	&"headbutt": {"damage": 15.0, "windup": 0.26, "active": 0.06, "recover": 0.5, "reach": 1.05,
+		"arc": 60.0, "stagger": 0.8, "poise": 22.0, "knockback": 3.0, "heavy": true,
 		"to_face": true, "self_damage": 2.0, "guard_break": true},
-	&"stomp": {"damage": 9.0, "windup": 0.2, "active": 0.06, "recover": 0.4, "reach": 1.4,
+	&"stomp": {"damage": 9.0, "windup": 0.32, "active": 0.06, "recover": 0.5, "reach": 1.4,
 		"arc": 90.0, "ground": true, "heavy": true},
 	&"knee": {"damage": 8.0, "windup": 0.0, "active": 0.05, "recover": 0.0, "reach": 1.4,
 		"arc": 60.0, "poise": 8.0, "keeps_hold": true, "lunge": false, "to_face": true},
@@ -95,10 +97,10 @@ const DATA := {
 
 	# --- Enemy moves (telegraphed, counterable) --------------------------------
 	&"swing": {"damage": 8.0, "telegraph": true, "windup_scale": 1.0, "active": 0.06,
-		"recover": 0.5, "reach": 1.35, "arc": 70.0, "stagger": 0.35, "poise": 10.0,
+		"recover": 0.7, "reach": 1.35, "arc": 70.0, "stagger": 0.35, "poise": 10.0,
 		"knockback": 2.0, "to_face": true},
-	&"haymaker": {"damage": 14.0, "telegraph": true, "windup_scale": 1.4, "active": 0.07,
-		"recover": 0.7, "reach": 1.4, "arc": 80.0, "stagger": 0.6, "poise": 30.0,
+	&"haymaker": {"damage": 14.0, "telegraph": true, "windup_scale": 1.5, "active": 0.07,
+		"recover": 0.95, "reach": 1.4, "arc": 80.0, "stagger": 0.6, "poise": 30.0,
 		"knockback": 4.0, "heavy": true, "to_face": true, "guard_break": true},
 	&"shove": {"damage": 3.0, "telegraph": true, "windup_scale": 0.8, "active": 0.05,
 		"recover": 0.4, "reach": 1.3, "arc": 70.0, "stagger": 0.4, "poise": 12.0, "knockback": 5.0,
@@ -108,10 +110,22 @@ const DATA := {
 		"knockback": 3.0, "heavy": true, "guard_break": true},
 }
 
-## Player punches: tap a hand for a quick punch, hold it for a heavy one.
+## Enemy tells are this much longer than the difficulty's telegraph_time, so you can see
+## someone lining a punch up and decide what to do about it.
+const ENEMY_WINDUP_SCALE := 1.35
+## Locomotion has weight: speeding up and slowing down take a moment (m/s per second).
+const ACCEL := 16.0
+const DECEL := 20.0
+## Knockback slides off more slowly while staggering, so a big hit makes you stumble.
+const STAGGER_DRAG := 7.0
+## A punch carries you forward into it (m/s on the strike).
+const FOLLOW_THROUGH := 1.4
+
+## Player punches. Left: tap for a jab, hold for a straight cross. Right: tap for a hook,
+## hold for an uppercut. The uppercut also has its own button.
 const LEFT_TAP := &"jab"
-const LEFT_HOLD := &"hook"
-const RIGHT_TAP := &"cross"
+const LEFT_HOLD := &"cross"
+const RIGHT_TAP := &"hook"
 const RIGHT_HOLD := &"uppercut"
 const PUNCH_HOLD_TIME := 0.22            ## seconds a punch button is held to throw the heavy version
 const BOTH_HANDS_WINDOW := 0.08    ## both punches pressed this close together = headbutt
@@ -120,13 +134,16 @@ const BOTH_HANDS_WINDOW := 0.08    ## both punches pressed this close together =
 const COMBOS := [
 	{"name": "The Full English", "seq": [&"jab", &"cross", &"hook", &"uppercut"],
 		"bonus": 1.7, "knockdown": true},
-	{"name": "Left, right, goodnight", "seq": [&"jab", &"cross", &"hook"], "bonus": 1.4},
-	{"name": "Double jab, cross", "seq": [&"jab", &"jab", &"cross"], "bonus": 1.3},
+	{"name": "Left, right, goodnight", "seq": [&"jab", &"hook", &"uppercut"], "bonus": 1.5,
+		"knockdown": true},
+	{"name": "Double jab, hook", "seq": [&"jab", &"jab", &"hook"], "bonus": 1.3},
+	{"name": "One-two-hook", "seq": [&"jab", &"cross", &"hook"], "bonus": 1.35},
 	{"name": "Hook to the chin", "seq": [&"hook", &"uppercut"], "bonus": 1.3},
+	{"name": "Jab, hook", "seq": [&"jab", &"hook"], "bonus": 1.15},
 	{"name": "One-two", "seq": [&"jab", &"cross"], "bonus": 1.15},
 ]
-const RHYTHM_GRACE := 0.4          ## after a move ends, the next one still continues the string
-const INPUT_BUFFER := 0.15         ## a press this close before the chain window opens is kept
+const RHYTHM_GRACE := 0.45         ## after a move ends, the next one still continues the string
+const INPUT_BUFFER := 0.2         ## a press this close before the chain window opens is kept
 const MASH_LIMIT := 2              ## presses too early in a row before you fumble the string
 const FUMBLE_TIME := 0.35          ## you're off balance this long after mashing
 ## Seconds without landing a hit before the combo counter resets.
@@ -142,6 +159,15 @@ static func match_combo(history: Array) -> Dictionary:
 		if history.slice(history.size() - seq.size()) == seq:
 			return c
 	return {}
+
+
+## A longer combo starts with `seq` (so the string isn't over yet).
+static func combo_continues(seq: Array) -> bool:
+	for c in COMBOS:
+		var longer: Array = c["seq"]
+		if longer.size() > seq.size() and longer.slice(0, seq.size()) == seq:
+			return true
+	return false
 
 
 static func has(move_id: StringName) -> bool:

@@ -146,7 +146,8 @@ Rules other workstreams rely on:
   hits on players get `enemy_damage`, and `heal()` applies `heal_multiplier`. Set `team`
   before the fighter enters the tree, and don't apply these multipliers again.
 - **Enemy tells.** AI attacks with a move that has `telegraph: true` (`swing`, `haymaker`,
-  `shove`, `baton`). Its windup becomes the difficulty's `telegraph_time`, the fighter flashes,
+  `shove`, `baton`). Its windup becomes the difficulty's `telegraph_time` times
+  `Moves.ENEMY_WINDUP_SCALE` (and the move's `windup_scale`), the fighter flashes,
   `Events.attack_telegraphed` fires, and the target's prompt says Block (punches) or Dodge
   (moves with `guard_break`).
 - **Blocking.** `BLOCK` covers `Moves.BLOCK_ARC` in front for `BLOCK_CHIP` damage. A guard
@@ -155,6 +156,16 @@ Rules other workstreams rely on:
   breakers (kicks, headbutts, haymakers, shoves, batons, throws) stagger a blocker and fire
   `Events.guard_broken`. Blocked hits arrive in `hit_landed` with `blocked: true` (and
   parries with `parried: true`, damage 0), so FX can play a thud instead of blood.
+- **Wind-ups are visible.** `move_started` fires once the windup is set, so a visual can read
+  `windup_remaining()`. FighterVisual plays the strike's load slowly into the loaded pose and
+  holds it (`CharacterRig.play_windup`) until the fighter enters ATTACK (`release_strike`).
+- **Weight.** Footwork accelerates and decelerates (`Moves.ACCEL`/`DECEL`), a strike carries
+  you forward (`FOLLOW_THROUGH`), and knockback slides off slowly while staggered
+  (`STAGGER_DRAG`). `HitLean` (scripts/combat/hit_lean.gd) tips each rig away from blows on a
+  damped spring; it is cosmetic and resets when a fighter goes down.
+- **Player punches.** Left: tap jab, hold cross. Right: tap hook, hold uppercut. The
+  `uppercut` action throws one directly; both punches together headbutt. Combos are in
+  `Moves.COMBOS` and a string keeps going while a longer combo can still follow.
 - **No chasing.** A move steps in at most `Moves.MAX_LUNGE_STEP`; further away it whiffs.
 - **Stance.** `in_stance` / `stance_changed` say when a fighter is squared up for a fight
   (an exchange in the last `STANCE_HOLD` seconds or, for players, an active enemy within

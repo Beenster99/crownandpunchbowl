@@ -14,6 +14,7 @@ const NODE_NAME := "Visual"
 
 var fighter: Fighter
 var rig: CharacterRig
+var lean: HitLean
 var _last_state := -1
 
 
@@ -70,6 +71,10 @@ func _ready() -> void:
 	fighter.state_changed.connect(_on_state_changed)
 	fighter.move_started.connect(_on_move_started)
 	fighter.hit_taken.connect(_on_hit_taken)
+	lean = HitLean.new()
+	lean.name = "HitLean"
+	lean.setup(fighter, rig)
+	add_child(lean)
 	Events.nose_broken.connect(_on_nose_broken)
 
 
@@ -114,8 +119,12 @@ func hand_socket() -> Node3D:
 func _play_state(s: int) -> void:
 	_last_state = s
 	var key := String(Fighter.State.keys()[s]).to_lower()
-	# Attacks are animated from move_started, which knows which move it is.
-	if key == "attack" or key == "windup":
+	# Attacks are animated from move_started, which knows which move it is. A punch being
+	# lined up holds its loaded pose until the strike comes out.
+	if key == "attack":
+		rig.release_strike()
+		return
+	if key == "windup":
 		return
 	if key == "stagger" and rig.current in [&"hit_front", &"hit_back"]:
 		return
@@ -127,7 +136,11 @@ func _on_state_changed(_old: Fighter.State, new_state: Fighter.State) -> void:
 
 
 func _on_move_started(move_id: StringName) -> void:
-	rig.play_move(String(move_id))
+	# A wind-up long enough to see is played as a visible load-up, held until the hit.
+	if fighter.state == Fighter.State.WINDUP and fighter.windup_remaining() >= 0.1:
+		rig.play_windup(String(move_id), fighter.windup_remaining())
+	else:
+		rig.play_move(String(move_id))
 
 
 func _on_hit_taken(info: Dictionary) -> void:

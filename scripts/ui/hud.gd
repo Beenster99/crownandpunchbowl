@@ -26,7 +26,7 @@ var _hints: VBoxContainer
 var _combo_tween: Tween
 var _banner_tween: Tween
 ## Shown in the controls reminder, in this order, if the action exists in Settings.ACTIONS.
-const HINTS := [["punch", "Punch"], ["punch_left", "Left hand"], ["punch_right", "Right hand"],
+const HINTS := [["punch", "Punch"], ["punch_left", "Left hand"], ["punch_right", "Right hand"], ["uppercut", "Uppercut"],
 	["kick", "Kick"], ["headbutt", "Headbutt"], ["block", "Block / parry"], ["counter", "Counter"],
 	["grab", "Grab and hold"], ["dodge", "Dodge"], ["interact", "Pick up / order drink"],
 	["order_food", "Order food"], ["throw", "Throw"]]
