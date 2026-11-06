@@ -52,6 +52,10 @@ func _host() -> bool:
 	# Networked combat: the client grabs and knees a punter; the host resolves the hits.
 	var hits := []
 	var events := root.get_node("Events")
+	# Push-to-talk: the client speaks to a punter; the host hears it and the punter replies.
+	var talk := root.get_node("Talk")
+	var said := []
+	talk.punter_replied.connect(func(npc, text, _o): said.append([npc, text]))
 	var on_hit := func(info: Dictionary):
 		if info.get("attacker") == _player(cid):
 			hits.append(info)
@@ -60,10 +64,20 @@ func _host() -> bool:
 		return _fail("host: never saw the client's hit land")
 	events.hit_landed.disconnect(on_hit)
 	print("NET host saw client hit %s for %.1f" % [hits[0]["victim"].name, float(hits[0].get("damage", 0.0))])
+	if not await _wait(func(): return said.size() > 0, 20.0):
+		return _fail("host: never heard the client talk to a punter")
+	print("NET host: %s answered the client: \"%s\"" % [said[0][0].name, said[0][1]])
 	await create_timer(1.0).timeout
 	net.next_pub()
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 10.0):
 		return _fail("host: next pub didn't load with both players")
+	# Restart this pub (the pause menu's button): everyone reloads it and both respawn.
+	var before := current_scene.get_instance_id()
+	await create_timer(1.0).timeout
+	net.restart_pub()
+	if not await _wait(func(): return current_scene != null and current_scene.get_instance_id() != before and _players_spawned(2), 15.0):
+		return _fail("host: restart didn't reload the pub with both players")
+	print("NET host restarted the pub")
 	if not await _wait(func(): return net.players.size() == 1, 15.0):
 		return _fail("host: didn't notice the client leaving")
 	await create_timer(0.5).timeout
@@ -106,8 +120,15 @@ func _client() -> bool:
 	print("NET client saw the host's tables fly")
 	if not await _client_fight(me):
 		return false
+	if not await _client_talk(me):
+		return false
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 15.0):
 		return _fail("client: didn't follow the host to the next pub")
+	var pub_scene := current_scene.get_instance_id()
+	if not await _wait(func(): return current_scene != null and current_scene.get_instance_id() != pub_scene and gd.current_pub_index == 3 \
+			and _players_spawned(2), 20.0):
+		return _fail("client: didn't follow the host's restart")
+	print("NET client followed the restart")
 	await create_timer(1.0).timeout
 	net.leave()
 	await create_timer(1.0).timeout
@@ -144,6 +165,31 @@ func _client_fight(me: Node3D) -> bool:
 	if not await _wait(func(): return me.state != me.State.GRABBING, 3.0):
 		return _fail("client: throw didn't release the punter")
 	print("NET client grabbed, kneed and threw %s (hp %.0f -> %.0f)" % [npc.name, hp_before, npc.hp])
+	return true
+
+
+## Talk to a punter: the line goes to the host, and the reply comes back as a bubble.
+func _client_talk(me: Node3D) -> bool:
+	await create_timer(1.0).timeout
+	if not await _wait(func(): return _punter() != null, 10.0):
+		return _fail("client: no punter to talk to")
+	var npc: Node3D = _punter()
+	var dir: Vector3 = npc.global_position - me.global_position
+	dir.y = 0.0
+	me.global_position = npc.global_position - dir.normalized() * 1.5 + Vector3(0, 0.05, 0)
+	me.rotation.y = atan2(-dir.x, -dir.z)
+	await create_timer(0.4).timeout
+	var talk := root.get_node("Talk")
+	var got := {"mine": "", "reply": ""}
+	talk.player_said.connect(func(who, text): if who == me: got["mine"] = text)
+	talk.punter_spoke.connect(func(_npc, text): got["reply"] = text)
+	talk.say("Evening! What are you drinking?")
+	if not await _wait(func(): return got["reply"] != "", 10.0):
+		return _fail("client: no punter replied")
+	var mine: Node = me.get_node_or_null("ChatterBubble")
+	if not String(got["mine"]).contains("drinking") or mine == null or not String(mine.text).contains("drinking"):
+		return _fail("client: own line not shown over the farmer (%s)" % got)
+	print("NET client talked to a punter and got a reply")
 	return true
 
 

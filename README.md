@@ -37,3 +37,7 @@ Co-op: Host co-op / Join co-op on the main menu. See [docs/NETWORKING.md](docs/N
 
 The current state is the M0 skeleton: shared data, settings and keybind storage, a placeholder
 player, and the recommended camera. Gameplay comes in through the workstreams in the plan.
+
+## Credits
+
+The character models use MakeHuman assets (CC0 and CC-BY); see [CREDITS.md](CREDITS.md).

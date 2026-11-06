@@ -25,6 +25,8 @@ const NPC_SCENE := preload("res://scenes/actors/npc.tscn")
 const GROUP := &"director"
 ## Onlookers within this distance of a hit react to it.
 const MATE_RADIUS := 6.0
+## Below this an NPC has fallen out of the pub (no floor is this low).
+const OUT_OF_WORLD_Y := -8.0
 
 enum Police { NONE, WAITING, CALLED, ARRIVED }
 
@@ -49,7 +51,7 @@ enum Police { NONE, WAITING, CALLED, ARRIVED }
 @export var police_delay := 8.0
 @export var police_count := 2
 ## Breather between two attacks on the same player, so blows come one at a time.
-@export var attack_gap := 0.9
+@export var attack_gap := 1.4
 ## Seed for crowd randomness (0 = random).
 @export var rng_seed := 0
 ## Spawn the starting crowd by itself. Turn off to call start() yourself.
@@ -76,6 +78,7 @@ var _rush_t := 0.0
 var _police_t := 0.0
 var _police_heat := 2.0
 var _started := false
+var _rescue_t := 0.0
 
 
 func _ready() -> void:
@@ -235,6 +238,10 @@ func _physics_process(delta: float) -> void:
 		return
 	_clock += delta
 	heat = maxf(heat - heat_decay * delta, 0.0)
+	_rescue_t -= delta
+	if _rescue_t <= 0.0:
+		_rescue_t = 0.5
+		_rescue_fallen()
 	if not fight_on:
 		return
 	_trim_t -= delta
@@ -472,13 +479,78 @@ func _marker_positions(group: StringName) -> Array[Vector3]:
 	return out
 
 
-## Spread newcomers out in a short line just inside the door.
+## Spread newcomers out in a short line just inside the door. The door marker stands
+## outside the building, where there's no ground, so the line starts at the first spot
+## past the doorway with floor under it; a slot that would be in a wall or over a drop
+## falls back to single file up the middle.
 func _door_slot(i: int) -> Vector3:
-	var inward := _inside_from_door() - door
+	var home := _inside_from_door()
+	var inward := home - door
 	inward.y = 0.0
 	inward = inward.normalized() if inward.length() > 0.01 else Vector3.FORWARD
 	var side := Vector3(-inward.z, 0.0, inward.x)
-	return door + side * (float(i % 3) - 1.0) * 0.9 + inward * (0.4 + float(i / 3) * 0.9)
+	var entry := _entry_point()
+	var slot := entry + side * (float(i % 3) - 1.0) * 0.9 + inward * (0.4 + float(i / 3) * 0.9)
+	var ground: Variant = _standable(slot)
+	if ground != null:
+		return ground
+	ground = _standable(entry + inward * (0.4 + float(i) * 0.7))
+	return ground if ground != null else entry
+
+
+## The first point walking in from the door that has floor under it and room to stand.
+## The door marker itself when nothing is found (no world collision, e.g. bare tests).
+func _entry_point() -> Vector3:
+	var home := _inside_from_door()
+	var to := home - door
+	to.y = 0.0
+	var dist := to.length()
+	if dist < 0.01:
+		return door
+	var dir := to / dist
+	var t := 0.0
+	while t <= dist + 0.01:
+		var ground: Variant = _standable(door + dir * t)
+		if ground != null:
+			return ground
+		t += 0.25
+	return door
+
+
+## `p` moved onto the floor under it, or null if there's no floor within a step or two
+## or a body there would be inside a wall. Only checks world geometry (layer 1).
+func _standable(p: Vector3) -> Variant:
+	var world := get_viewport().find_world_3d() if get_viewport() else null
+	if world == null:
+		return null
+	var space := world.direct_space_state
+	var ray := PhysicsRayQueryParameters3D.create(p + Vector3.UP * 1.0, p + Vector3.DOWN * 1.5, 1)
+	var hit := space.intersect_ray(ray)
+	if hit.is_empty():
+		return null
+	var foot: Vector3 = hit["position"]
+	var shape := PhysicsShapeQueryParameters3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.3
+	capsule.height = 1.4
+	shape.shape = capsule
+	shape.collision_mask = 1
+	shape.transform = Transform3D(Basis(), foot + Vector3.UP * 0.95)
+	if not space.intersect_shape(shape, 1).is_empty():
+		return null
+	return foot
+
+
+## Host safety net: an NPC that has dropped out of the world (under the floor, off the
+## map) is put back inside the door. One under the floor is invisible but can still land
+## blows, because hit range is measured flat.
+func _rescue_fallen() -> void:
+	for node in get_tree().get_nodes_in_group(&"npcs"):
+		var npc := node as Npc
+		if npc == null or npc.global_position.y > OUT_OF_WORLD_Y:
+			continue
+		npc.velocity = Vector3.ZERO
+		npc.global_position = _door_slot(0)
 
 
 ## A point a few metres into the room from the door, used as newcomers' home.

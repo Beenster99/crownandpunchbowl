@@ -42,7 +42,9 @@ func _initialize() -> void:
 	_check(settings.action_label("move_up", "pad") == "Left stick up", "stick label")
 	for action in settings.ACTIONS:
 		_check(InputMap.has_action(action), "input action exists: " + action)
-		_check(InputMap.action_get_events(action).size() == 2, "kb + pad events: " + action)
+		# Typing a line is keyboard only: a pad has nothing to type with.
+		var want := 1 if action == "say_line" else 2
+		_check(InputMap.action_get_events(action).size() == want, "kb + pad events: " + action)
 
 	# Values, difficulty and section reset.
 	settings.set_value("gameplay", "difficulty", 3)
@@ -121,7 +123,7 @@ func _initialize() -> void:
 	we.queue_free()
 	settings.reset_section("graphics")
 
-	# Main menu builds, settings opens with all four tabs.
+	# Main menu builds, settings opens with all five tabs.
 	change_scene_to_file("res://scenes/main/main_menu.tscn")
 	await process_frame
 	await process_frame
@@ -129,7 +131,7 @@ func _initialize() -> void:
 	var s: Control = menu.open_settings()
 	await process_frame
 	var tabs := s.find_children("*", "TabContainer", true, false)
-	_check(tabs.size() == 1 and tabs[0].get_tab_count() == 4, "settings has 4 tabs")
+	_check(tabs.size() == 1 and tabs[0].get_tab_count() == 5, "settings has 5 tabs (with Talk)")
 	_check(s.find_children("pause_pad", "Button", true, false).size() == 1, "keybind button per device")
 	s.close()
 	_check(menu.find_children("*", "FarmerCard", true, false).size() == 6, "six farmer cards")
@@ -149,6 +151,20 @@ func _initialize() -> void:
 		_check(paused, "solo pause freezes the tree")
 		ui[0].pause_menu.resume()
 		_check(not paused, "resume unfreezes")
+		# Restart this pub: a fresh pub with the player spawned again, not an empty room.
+		var old_scene := current_scene
+		ui[0].pause_menu.open()
+		_check(not ui[0].pause_menu._restart.disabled, "solo player can restart")
+		ui[0].pause_menu._on_restart()
+		var restarted := false
+		for i in 600:
+			await process_frame
+			if current_scene != null and current_scene != old_scene \
+					and current_scene.find_children("*", "PlayerFighter", true, false).size() == 1:
+				restarted = true
+				break
+		_check(restarted, "restart reloads the pub with the player in it")
+		_check(not paused, "restart leaves the game unpaused")
 
 	if _failed:
 		quit(1)

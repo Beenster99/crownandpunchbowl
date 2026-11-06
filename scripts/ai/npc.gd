@@ -54,6 +54,13 @@ var _look_at: Vector3 = Vector3.INF
 var _recover_t := 0.0     # backing off after an exchange
 var _guard_t := 0.0       # seconds left covering up
 var _read_windup := false # already reacted to the foe's current wind-up
+## Talked down (Npc.hear_words): seconds left where it won't volunteer to rejoin the fight.
+var _settled_t := 0.0
+var _pleas := 0.0         # recent attempts to talk this NPC down; each one works less
+var _hits_from := {}      # player instance id -> hits taken from them tonight
+var _last_hit_from := {}  # player instance id -> Time (s) of their last hit
+var _face_t := 0.0        # seconds left facing whoever spoke to us
+var _heard_from: Node3D = null
 
 
 func _ready() -> void:
@@ -100,6 +107,11 @@ func type_value(key: String) -> Variant:
 func engage(who: Fighter, forced := false) -> void:
 	if team == Team.STAFF or who == null or not is_hostile_to(who):
 		return
+	if not forced and _settled_t > 0.0 and not bool(_type.get("always_engaged", false)):
+		alert()
+		return
+	if forced:
+		_settled_t = 0.0
 	if not forced and foe != who and not bool(_type.get("always_engaged", false)):
 		var d := _find_director()
 		if d != null and not d.has_room(who):
@@ -170,11 +182,165 @@ func _on_hit_taken(info: Dictionary) -> void:
 		_recover_t = maxf(_recover_t, _rng.randf_range(0.7, 1.5))
 		_drop_token()
 	var attacker := info.get("attacker") as Fighter
+	if attacker != null and attacker.team == Team.PLAYERS:
+		var id := attacker.get_instance_id()
+		_hits_from[id] = int(_hits_from.get(id, 0)) + 1
+		_last_hit_from[id] = Time.get_ticks_msec() / 1000.0
 	if attacker != null and is_hostile_to(attacker):
 		# Whoever hit you is now your problem, unless you're busy with someone else.
 		if mood != Mood.ENGAGED or foe == null or not foe.can_be_targeted() \
 				or _rng.randf() < 0.6:
 			engage(attacker, true)
+
+
+# --- Being talked to (host) ------------------------------------------------------------
+
+## Hits `who` has landed on us tonight.
+func hits_from(who: Node) -> int:
+	return int(_hits_from.get(who.get_instance_id(), 0)) if who != null else 0
+
+
+## Seconds since `who` last hit us (INF if never).
+func since_hit_by(who: Node) -> float:
+	if who == null or not _last_hit_from.has(who.get_instance_id()):
+		return INF
+	return Time.get_ticks_msec() / 1000.0 - float(_last_hit_from[who.get_instance_id()])
+
+
+func is_settled() -> bool:
+	return _settled_t > 0.0
+
+
+## A player said something to us. `heard` is TalkIntent.classify(). Changes our mood and
+## returns what it did (a TalkLines outcome): calmed, unconvinced, riled, fuming, cowed,
+## chat or shrug. Staff and police listen but are never talked down.
+func hear_words(who: Fighter, heard: Dictionary) -> String:
+	if who == null or is_down():
+		return "shrug"
+	_heard_from = who
+	_face_t = 4.0
+	var intent := String(heard.get("intent", "none"))
+	var strength := float(heard.get("strength", 0.0))
+	if team == Team.STAFF:
+		match intent:
+			"provoke": return "riled"
+			"calm": return "calmed" if hits_from(who) == 0 else "unconvinced"
+			"chat": return "chat"
+		return "chat"
+	match intent:
+		"calm":
+			return _try_placate(who, strength, bool(heard.get("apology", false)))
+		"provoke":
+			return _get_provoked(who, strength, bool(heard.get("loud", false)))
+		"chat":
+			if mood == Mood.CALM:
+				return "chat"
+			return "shrug"  # small talk in the middle of a scrap: "You what?"
+	# Anything else said to a calm punter is just conversation.
+	return "chat" if mood == Mood.CALM else "shrug"
+
+
+## Chance that a calming word works right now, 0..1.
+func placate_chance(who: Fighter, strength: float, apology: bool) -> float:
+	if bool(_type.get("always_engaged", false)):
+		return 0.0  # the Old Bill aren't talked out of an arrest
+	var c := 0.25 + strength * 0.65
+	c *= 1.15 - float(_type.get("aggression", 1.0)) * 0.3
+	c /= 1.0 + 0.3 * hits_from(who)  # each punch you've landed makes them less forgiving
+	if apology and since_hit_by(who) < 4.0:
+		c *= 1.25  # "it was an accident" is believable straight after a stray one
+	var d := _find_director()
+	if d != null and float(d.heat) > 0.7:
+		c *= 0.7
+	c *= pow(0.75, _pleas)  # the fifth "calm down" in a row doesn't land
+	return clampf(c, 0.03, 0.92)
+
+
+func _try_placate(who: Fighter, strength: float, apology: bool) -> String:
+	var chance := placate_chance(who, strength, apology)
+	_pleas += 1.0
+	if _rng.randf() >= chance:
+		return "unconvinced"
+	settle(who)
+	return "calmed"
+
+
+## Talked down: stop fighting `who` (if we were), and don't volunteer to rejoin for a while.
+## Being hit again still sets us off.
+func settle(who: Node = null) -> void:
+	if bool(_type.get("always_engaged", false)) or team == Team.STAFF:
+		return
+	_settled_t = _rng.randf_range(20.0, 35.0)
+	if mood == Mood.ENGAGED and (who == null or foe == who or foe == null):
+		back_off()
+	var d := _find_director()
+	if d != null:
+		d.heat = maxf(float(d.heat) - 0.08, 0.0)
+		if float(d.heat) < 0.35 and mood == Mood.ALERT:
+			calm_down()
+
+
+func _get_provoked(who: Fighter, strength: float, loud: bool) -> String:
+	_settled_t = 0.0
+	var bravery := float(_type.get("bravery", 0.5))
+	var d := _find_director()
+	if d != null and loud:
+		d.heat = minf(float(d.heat) + 0.04, 1.0)
+	if mood == Mood.ENGAGED and foe == who:
+		# Already at it: come in sooner.
+		_attack_cd = minf(_attack_cd, 0.3)
+		_recover_t = 0.0
+		return "fuming"
+	if bravery < 0.35 and _rng.randf() > bravery + strength * 0.3:
+		alert()
+		return "cowed"
+	var chance := clampf(bravery * 0.6 + strength * 0.5, 0.1, 0.95)
+	if mood == Mood.CALM:
+		chance *= 0.6  # a quiet drinker usually just turns round first
+	if _rng.randf() < chance:
+		engage(who)
+		if mood == Mood.ENGAGED and foe == who:
+			return "riled"
+	alert()
+	return "riled" if strength > 0.5 else "unconvinced"
+
+
+## Claude's verdict on what the words did (PunterMind effects). Returns a TalkLines outcome.
+func apply_talk_effect(who: Fighter, effect: String) -> String:
+	if who == null:
+		return "shrug"
+	_heard_from = who
+	_face_t = 4.0
+	if team == Team.STAFF:
+		return "chat"
+	match effect:
+		"calm_down":
+			if bool(_type.get("always_engaged", false)):
+				return "unconvinced"
+			_pleas += 1.0
+			settle(who)
+			return "calmed"
+		"stay_wary":
+			if mood == Mood.ENGAGED and foe == who and not bool(_type.get("always_engaged", false)):
+				back_off()
+			else:
+				alert()
+			return "unconvinced"
+		"square_up":
+			return _get_provoked(who, 0.9, false)
+		"attack":
+			_settled_t = 0.0
+			engage(who)
+			if mood == Mood.ENGAGED and foe == who:
+				_attack_cd = 0.0
+				_recover_t = 0.0
+				return "fuming"
+			alert()
+			return "riled"
+		"cower":
+			alert()
+			return "cowed"
+	return "chat" if mood == Mood.CALM else "shrug"
 
 
 # --- Brain ----------------------------------------------------------------------------
@@ -191,6 +357,9 @@ func _physics_process(delta: float) -> void:
 func _think(delta: float) -> void:
 	_attack_cd -= delta
 	_quiet_t += delta
+	_settled_t = maxf(_settled_t - delta, 0.0)
+	_pleas = maxf(_pleas - delta / 12.0, 0.0)
+	_face_t = maxf(_face_t - delta, 0.0)
 	_recover_t = maxf(_recover_t - delta, 0.0)
 	rushing = maxf(rushing - delta, 0.0)
 	if rushing <= 0.0:
@@ -251,6 +420,11 @@ func _think_staff() -> void:
 
 
 func _think_calm(delta: float) -> void:
+	if _face_t > 0.0 and is_instance_valid(_heard_from):
+		# Someone's talking to us: stop and look at them.
+		_look_at = _heard_from.global_position
+		move_input = _separation() * 0.5
+		return
 	if chatting_with != null and is_instance_valid(chatting_with):
 		# In a conversation: hold still, face them, stay out of their personal space.
 		_look_at = chatting_with.global_position
@@ -274,6 +448,8 @@ func _think_calm(delta: float) -> void:
 
 func _think_alert(delta: float) -> void:
 	var p := _nearest_player(30.0)
+	if _face_t > 0.0 and is_instance_valid(_heard_from) and _heard_from is Fighter:
+		p = _heard_from as Fighter
 	if p == null:
 		return
 	var heat := _heat()
@@ -293,7 +469,8 @@ func _think_alert(delta: float) -> void:
 	_engage_roll_t -= delta
 	if _engage_roll_t <= 0.0:
 		_engage_roll_t = 2.0
-		if heat > 0.45 and _rng.randf() < float(_type["bravery"]) * heat * 0.15:
+		if heat > 0.45 and _settled_t <= 0.0 \
+				and _rng.randf() < float(_type["bravery"]) * heat * 0.15:
 			engage(p)
 
 

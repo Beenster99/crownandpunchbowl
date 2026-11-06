@@ -1,9 +1,10 @@
 extends Node
-## Defend prompts: when an enemy winds up an attack on the local player, a prompt pops up
-## over their head saying how to defend it and which button to press, for the device the
-## player is using ("LB  BLOCK HIGH" for a punch at the head, "RB  BLOCK LOW" for one at the
-## body, "A  DODGE" for guard breakers: kicks, haymakers, shoves, batons). The prompt shrinks as
-## the hit gets closer and turns green on a parry. Respects the "counter_prompts" setting.
+## Defend prompts: when an enemy winds up an attack on the local player, one small prompt
+## shows under the player's feet saying how to defend the attack that lands soonest and
+## which button to press, for the device the player is using ("LB  BLOCK HIGH" for a punch
+## at the head, "RB  BLOCK LOW" for one at the body, "A  DODGE" for guard breakers: kicks,
+## haymakers, shoves, batons). It turns green on a parry. Respects the "counter_prompts"
+## setting.
 ## PlayerFighter adds one of these for the local player.
 
 const COLOURS := {"guard_head": Color(1.0, 0.85, 0.2), "guard_body": Color(1.0, 0.6, 0.15),
@@ -15,7 +16,12 @@ var player: Fighter
 ## "kb" or "pad", from the last real input (Settings.device is used when it exists).
 var device := "kb"
 
-var _labels := {}  # attacker -> Label3D
+## Pixels (at pixel_size) the prompt sits below the player's feet on screen.
+const PROMPT_DROP := 30.0
+
+var _attackers: Array = []  # enemies winding up on the player
+var _label: Label3D
+var _hold := 0.0  # seconds left showing "PARRIED"
 
 
 func _ready() -> void:
@@ -51,56 +57,68 @@ func _on_telegraphed(attacker: Node, target: Node, _seconds: float) -> void:
 		return
 	if not bool(Settings.get_value("gameplay", "counter_prompts")):
 		return
-	var a := attacker as Fighter
-	var hint := a.defend_hint()
-	if hint == "":
+	if not _attackers.has(attacker):
+		_attackers.append(attacker)
+
+
+func _on_countered(defender: Node, _attacker: Node) -> void:
+	if defender != player:
 		return
-	var label: Label3D = _labels.get(a)
-	if label == null or not is_instance_valid(label):
-		label = Label3D.new()
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.no_depth_test = true
-		label.fixed_size = true
-		label.pixel_size = 0.0007
-		label.font_size = 36
-		label.outline_size = 12
-		label.outline_modulate = Color(0, 0, 0, 0.85)
-		label.render_priority = 10
-		a.add_child(label)
-		_labels[a] = label
-	label.text = prompt_text(hint)
-	label.modulate = COLOURS.get(hint, Color.WHITE)
-	label.set_meta("start", a.windup_remaining())
+	var label := _get_label()
+	label.text = "PARRIED!  COUNTER"
+	label.modulate = Color(0.4, 1.0, 0.45)
 	label.visible = true
+	_hold = 0.6
 
 
-func _on_countered(defender: Node, attacker: Node) -> void:
-	if defender != player or not _labels.has(attacker):
-		return
-	var label: Label3D = _labels[attacker]
-	if is_instance_valid(label):
-		label.text = "PARRIED!  COUNTER"
-		label.modulate = Color(0.4, 1.0, 0.45)
-		label.set_meta("hold", 0.6)
+## The one small prompt, under the player's feet. Made on first use.
+func _get_label() -> Label3D:
+	if _label == null or not is_instance_valid(_label):
+		_label = Label3D.new()
+		_label.name = "DefendPrompt"
+		_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_label.no_depth_test = true
+		_label.fixed_size = true
+		_label.pixel_size = 0.0006
+		_label.font_size = 22
+		_label.outline_size = 8
+		_label.outline_modulate = Color(0, 0, 0, 0.85)
+		_label.render_priority = 10
+		_label.position = Vector3(0, 0.02, 0)
+		_label.offset = Vector2(0, -PROMPT_DROP)  # pushed down the screen, below the feet
+		_label.visible = false
+		player.add_child(_label)
+	return _label
+
+
+## The enemy whose wind-up on the player lands soonest, or null.
+func most_urgent() -> Fighter:
+	var best: Fighter = null
+	for a in _attackers.duplicate():
+		var f := a as Fighter
+		if not is_instance_valid(f) or f.state != Fighter.State.WINDUP or f.target != player:
+			_attackers.erase(a)
+			continue
+		if best == null or f.windup_remaining() < best.windup_remaining():
+			best = f
+	return best
 
 
 func _process(delta: float) -> void:
-	for a in _labels.keys():
-		var label: Label3D = _labels[a]
-		if not is_instance_valid(a) or not is_instance_valid(label):
-			_labels.erase(a)
-			continue
-		var f := a as Fighter
-		var hold := float(label.get_meta("hold", 0.0))
-		if hold > 0.0:
-			label.set_meta("hold", hold - delta)
-			label.position = Vector3(0, 2.45, 0)
-			continue
-		if f.state != Fighter.State.WINDUP or f.target != player:
-			label.visible = false
-			continue
-		var start := maxf(float(label.get_meta("start", 0.5)), 0.01)
-		var t := clampf(f.windup_remaining() / start, 0.0, 1.0)
-		label.position = f.to_local(f.get_head_position()) + Vector3(0, 0.55, 0) \
-			if f.has_method("get_head_position") else Vector3(0, 2.3, 0)
-		label.scale = Vector3.ONE * lerpf(1.0, 1.35, 1.0 - t)
+	if player == null:
+		return
+	if _hold > 0.0:
+		_hold -= delta
+		return
+	var f := most_urgent()
+	if f == null:
+		if _label != null and is_instance_valid(_label):
+			_label.visible = false
+		return
+	var hint := f.defend_hint()
+	if hint == "":
+		return
+	var label := _get_label()
+	label.text = prompt_text(hint)
+	label.modulate = COLOURS.get(hint, Color.WHITE)
+	label.visible = true

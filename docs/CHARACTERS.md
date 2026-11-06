@@ -14,23 +14,38 @@ into ragdolls.
 
 ## How the models are made
 
-`tools/blender/build_characters.py` builds every model from the look data. No hand-made art
-files are needed, and changing a look and rebuilding takes about a minute for all 15.
+`tools/blender/build_humans.py` builds every model from the look data and the
+[MakeHuman](http://www.makehumancommunity.org) base mesh and community assets (see
+[CREDITS.md](../CREDITS.md)). It reads MakeHuman's data files directly (`tools/blender/mh_human.py`);
+the MPFB add-on itself is not needed. All 15 looks build in under a minute.
 
-- **Bodies** are a quick procedural sculpt: ellipsoids and capsules for the torso, belly
-  and limbs are voxel-remeshed into one watertight surface, smoothed so the joins
-  fillet, and decimated. Each body part is remeshed separately so an arm never welds to
-  the torso, and the part is remembered per vertex so skin weights never bleed across.
-- **Hands** are their own finer sculpt: a palm, four fingers and a thumb, so fists clench,
-  hands open to grab and fingers wrap a pint.
-- **Heads** are sculpted the same way (cranium, jaw, brow ridge, cheeks, chin) with a
-  separate nose on its own bone, ears, lips, eyebrows and eyes.
-- **Clothes, hair and beards** are shells grown off the body or head surface (gilets,
-  waistcoats, bibs, braces, hi-vis, collars, cuffs, pockets, hair caps, beards and stubble),
-  with hems relaxed so cut edges read as seams. Hats are small modelled pieces.
-- **Colours** come from named materials (`skin`, `top`, `trousers`, `over`, `hat`...).
-  Godot recolours them from the look, so one model serves a whole crowd type. Shirts get a
-  check pattern mapped triplanar, so the models need no UVs.
+- **Bodies** are MakeHuman's realistic base mesh, shaped per look with its macro targets
+  (gender, age, muscle, weight, African or European features from the skin tone) and detail
+  targets (belly, nose size, head size, brow). The body is scaled so a height-1.0 look
+  stands 1.8 m, then by the look's `height`.
+- **Skin weights** are MakeHuman's game-engine weights folded onto our bones, with the jaw
+  taken from its default rig. Every finger has its own chain (`Ring1/2`, `Pinky1/2` are
+  extra bones on these models).
+- **Rest pose:** MakeHuman stands in an A-pose. The builder lowers the arms to hang 6° out,
+  turns the palms to the thighs, adds the look's stoop, and applies that as the rest pose, so
+  every animation keyed for the old models fits.
+- **Clothes, hair, beards, hats, shoes, eyes, brows and lashes** are MakeHuman proxies
+  (`.mhclo`): each vertex sits on a triangle of the base mesh, so they follow the shaped body
+  and take its weights. Body faces under the clothes and shoes are deleted so skin never
+  pokes through. Hair is pulled inside a hat the look always wears. The mapping from the
+  look's `top`, `hair`, `beard` and `hat` to an asset is in the tables at the top of
+  `build_humans.py`.
+- **Extras** that MakeHuman doesn't have are cut from the clothes or skin and pushed out:
+  gilets, hi-vis (with reflective bands), waistcoats, aprons, braces, neckerchiefs, stubble,
+  shaved heads and blood. The custodian helmet is modelled.
+- **Textures** are converted for tinting: colour maps become greyscale detail (cloth weave,
+  seams, skin pores) that averages 0.8, so Godot multiplies in the look's colour. Large shapes
+  and the printed MakeHuman logos are taken out of the clothes so one colour tints a whole
+  garment. Normal maps are kept (softened). The eyes keep their colours. Processed textures
+  are cached in `tools/blender/out/tex` (not committed).
+- **Colours** come from named materials (`skin`, `top`, `trousers`, `over`, `hat`,
+  `hair`...). Godot recolours them from the look, so one model serves a whole crowd type.
+  Blender's `.001` suffixes are ignored.
 - **Variants**: optional pieces are separate meshes called `Hair_<STYLE>`, `Beard_<STYLE>`,
   `Hat_<STYLE>` and `Top_<TYPE>`. Each crowd model carries every piece its type can roll,
   and Godot shows the ones that match. `Blood_*` meshes appear as a fighter gets hurt.
@@ -39,17 +54,26 @@ files are needed, and changing a look and rebuilding takes about a minute for al
   - face: `Nose`, `Jaw` (opens the mouth, carries the chin and beard), `BrowL`/`BrowR`
     (pivot at the outer end, so a twist frowns or winces)
   - arms: `Clavicle`, `Shoulder`, `Elbow`, `Hand`
-  - fingers: `Thumb1/2`, `Index1/2`, `Fingers1/2` (middle, ring and little finger together)
+  - fingers: `Thumb1/2`, `Index1/2`, `Fingers1/2` (middle), `Ring1/2`, `Pinky1/2` (the
+    older sculpted models have no ring and little finger bones; the rig curls what exists)
   - legs: `Hip`, `Knee`, `Foot`
 
-Rebuild after changing `CharacterLooks`:
+Rebuild after changing `CharacterLooks`. The MakeHuman data comes from the MPFB 2.0.18 zip
+on extensions.blender.org (its `data` folder) and the asset packs on
+files2.makehumancommunity.org (`makehuman_system_assets`, `suits03`, `hats03`, `bodyparts05`,
+`bodyparts06`, `glasses01`), unzipped side by side:
 
 ```
 godot --headless --path . --script res://tools/export_looks.gd      # looks -> looks.json
-blender -b -P tools/blender/build_characters.py                      # all models (Blender 4.5)
-blender -b -P tools/blender/build_characters.py -- --blend tom gaz   # some, plus .blend files
+export MH_DATA=/opt/mpfb/mpfb_data/data MH_ASSETS=/opt/mpfb/assets
+blender -b -P tools/blender/build_humans.py                          # all models (Blender 4.5)
+blender -b -P tools/blender/build_humans.py -- --blend tom gaz       # some, plus .blend files
 godot --headless --path . --import                                   # reimport the .glb files
 ```
+
+The older procedural sculpt, `tools/blender/build_characters.py`, still builds the cartoon
+models the same way and shares the bone and material names; `build_humans.py` borrows its
+helpers.
 
 `--blend` also saves `tools/blender/out/<id>.blend` (not committed) so you can open a model,
 tweak it or hand-sculpt over it. A hand-made model works as long as it keeps the bone names,
@@ -235,11 +259,97 @@ What makes them move like a person rather than a puppet:
 Baking is the slow part (about 0.1 s per model), so characters built from the same model
 share one animation library.
 
+### The fight set
+
+`RigFightAnims` (scripts/actors/rig_fight_anims.gd) adds the extended set on top, from the
+same guard:
+
+- **Stances and footwork:** each fighter squares up their own way, picked by seed
+  (`FIGHT_IDLES`: boxer, pub brawler, wary). With the guard up, `set_move_vector()` picks
+  walking in, backpedalling (`walk_back`) or side-stepping (`strafe_l`/`strafe_r`).
+- **Variants:** `VARIANTS` lists several takes of each strike (a slipping jab, a double jab,
+  an overhand right, wide looping hooks, a lead uppercut, a chopping uppercut, a teep, a
+  low kick, a lapel-grab headbutt). `play_move()` picks one at random; every take keeps the
+  load/contact timing of the move it varies.
+- **Body shots:** `play_move(move, &"body")` throws `jab_body`, `cross_body`,
+  `hook_l_body`/`hook_r_body` (shovel hooks) or `uppercut_body`.
+- **New moves:** `clinch_knee` (both hands behind his head, drag down, knee up),
+  `shoulder_charge`, `groin_kick`, and the punter's `body_swing`.
+- **Defence:** `set_guard_zone(&"head")` (LB, gloves to the temples) or `&"body"` (RB,
+  elbows on the ribs), `play_block_hit()`, `play_parry()` (`parry_l`, `parry_r`),
+  `play_dodge(world_dir)` (`dodge_l`/`_r`/`_back`/`_fwd`), `slip_l`/`slip_r`.
+- **Reactions:** `play_hit(from_front, heavy, dir, zone, move)`. Head shots snap back or to
+  the side, an uppercut lifts the chin (`hit_uppercut`), body shots fold (`hit_body`,
+  `hit_body_l`/`_r`), and `zone = &"groin"` plays `groin_down`, which chains into the
+  `groin_hold` loop on all fours. `play_clinched()` is the knee's victim.
+
+### Motion capture (Mixamo)
+
+On top of the keyed set, 53 motion-captured takes from Mixamo play on every model
+(`RigMixamo`, `scripts/actors/rig_mixamo.gd`):
+
+- **Strikes:** jabs, a cross, hooks (the left one mirrored), an elbow, an uppercut, MMA
+  and roundhouse kicks, a headbutt, a knee and stomps.
+- **Defence:** blocks, parries, dodges, side steps, a duck and a weave.
+- **Getting hit:** head, body, rib and uppercut reactions, a stagger, a blow to the back
+  of the head, and doubling over from the groin kick.
+- **Floor:** getting up and crawling.
+- **Standing about:** two fight stances, three calm idles, a drunk idle (for looks that
+  sway), chatting, the calm walk, cheering, clapping, taunts and a shrug.
+
+Each one joins the random takes of a keyed animation (`variant_of`), replaces it
+(`replaces`), or joins a stance pool. `play()` picks a take. `current` stays the base name
+(`punch_r`, `hit_front`...), so game code doesn't need to know about takes;
+`current_take` is the take actually playing. Strikes are trimmed and sped up into the blow
+so they land at the same moment as the keyed take (combat timing is unchanged), then
+recover nearer real time. Clips that start turned are turned to face forward.
+
+Pipeline:
+
+```
+# Mixamo: Y Bot, FBX Binary, Without Skin, 30 fps, no keyframe reduction
+blender -b -P tools/blender/mixamo_to_rig.py -- <folder of .fbx>   # -> assets/animations/mixamo/*.json
+python3 tools/mixamo_clips.py --prune                              # picks and times them -> clips.json
+xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_mixamo.gd -- <out_dir>
+```
+
+The converter poses Mixamo's T-pose skeleton into our rest pose (arms hanging, palms in).
+For each frame it stores every joint's rotation in the rig's pose convention: character
+axes, composed down our chain. `RigMixamo.make()` bakes that with
+`rest_local * (M^-1 q M)`, like the keyed poses, so one file fits every build. The list
+of clips and what each is for is the table in `tools/mixamo_clips.py`. The JSON files are
+exported with the game (`include_filter` in `export_presets.cfg`).
+
+### The procedural layer
+
+`RigReactor` is a `SkeletonModifier3D` under the skeleton that runs after the animation each
+frame, so hits don't look canned:
+
+- **Head snap and body flinch:** every hit kicks a damped spring that whips the head away
+  from the blow (back, round to the side for a hook, up for an uppercut) or folds the
+  torso, then wobbles it back, whatever animation is playing underneath.
+- **Head movement:** `set_head_bob(Vector2)` (right stick; x slips, +y ducks, -y leans
+  back) bends the spine and the legs together so the feet stay put.
+- **Breathing:** the chest rises and falls, harder as they get hurt.
+
+It is switched off while ragdolling. Note that `get_bone_global_pose()` shows the animated
+pose; sockets (BoneAttachment3D) follow the modified one.
+
+### Materials
+
+The MakeHuman models have UVs, so `_material()` uses their detail map tinted by the look's
+colour (scaled by `1 / DETAIL_MEAN`) and their normal map. Hair, beards, brows and lashes are
+alpha-clipped and drawn both sides; stubble and shaved heads are a see-through shell over the
+skin. Skin gets subsurface scattering and a rim, boots and leather a light clearcoat, hair
+anisotropic highlights, eyes a glossy clearcoat. Untextured surfaces (the older sculpted
+models, the modelled extras) fall back to a tiling noise mapped triplanar into the colour and
+roughness (`SURFACES`).
+
 ## Performance
 
-Models are 25k to 48k triangles with every variant included (only the shown pieces draw),
-and Godot generates LODs on import, so a crowd in the high camera draws far fewer. The 15
-`.glb` files are about 23 MB in the repo.
+Models are 15k to 50k faces with every variant included (only the shown pieces draw), and
+Godot generates LODs on import, so a crowd in the high camera draws far fewer. The 15 `.glb`
+files, textures included, are about 50 MB in the repo.
 
 ## Tests and tools
 

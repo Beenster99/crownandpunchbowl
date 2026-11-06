@@ -28,6 +28,7 @@ func run() -> void:
 		"test_footwork_has_weight", "test_head_and_body_guards", "test_slip",
 		"test_groin_kick_combo", "test_shoulder_charge", "test_clinch_knee", "test_hold_resistance",
 		"test_hook_knocks_head_sideways", "test_one_punch_doesnt_drop_a_fresh_man",
+		"test_punches_can_miss", "test_no_stick_punch_goes_straight", "test_foe_health_bar",
 	]
 	# COMBAT_ONLY=test_a,test_b runs just those.
 	var only := OS.get_environment("COMBAT_ONLY")
@@ -532,8 +533,11 @@ func test_defend_prompt_text() -> void:
 			"pad dodge prompt: " + prompts.prompt_text("dodge"))
 	e.request_attack(&"haymaker", p)
 	await _wait(0.05)
-	var label := e.get_children().filter(func(c): return c is Label3D)
-	_check(label.size() == 1 and (label[0] as Label3D).text.ends_with("DODGE"), "prompt over the attacker")
+	var label := p.get_children().filter(func(c): return c is Label3D)
+	_check(label.size() == 1 and (label[0] as Label3D).text.ends_with("DODGE"),
+		"one prompt under the player")
+	_check(label.size() == 1 and (label[0] as Label3D).font_size <= 24, "and it's small")
+	_check(e.get_children().filter(func(c): return c is Label3D).is_empty(), "nothing over the attacker")
 
 
 func test_player_kick_stomps() -> void:
@@ -1017,3 +1021,56 @@ func test_one_punch_doesnt_drop_a_fresh_man() -> void:
 			downed = true
 			break
 	_check(downed, "a good beating still drops him")
+
+
+func test_punches_can_miss() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.25), Vector3(0, 0, 0))
+	await _wait(0.1)
+	var whiffs := []
+	var cb := func(a, _m): whiffs.append(a)
+	Events.attack_whiffed.connect(cb)
+	p.request_attack(&"hook", e)
+	# He steps back out of it while it's being thrown.
+	e.global_position = Vector3(0, 0, -2.6)
+	await _until_free(p)
+	Events.attack_whiffed.disconnect(cb)
+	_check(is_equal_approx(e.hp, e.max_hp), "a punch at a man who stepped away misses (hp %.1f)" % e.hp)
+	_check(whiffs == [p], "and it's a whiff (%s)" % [whiffs])
+
+
+func test_no_stick_punch_goes_straight() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var side := _fighter(Fighter.Team.PUNTERS, Vector3(-1.0, 0, -0.5))
+	await _wait(0.1)
+	p.move_input = Vector3.ZERO
+	_check(Targeting.pick(p, Vector3.ZERO) == null, "no stick: a man at your shoulder isn't picked")
+	var start := p.rotation.y
+	p.button(&"jab")
+	await _until_free(p)
+	_check(absf(angle_difference(start, p.rotation.y)) < 0.05,
+		"a jab with the stick centred goes straight (%.2f rad)" % angle_difference(start, p.rotation.y))
+	var ahead := _fighter(Fighter.Team.PUNTERS, Vector3(0.3, 0, -1.4))
+	await _wait(0.1)
+	_check(Targeting.pick(p, Vector3.ZERO) == ahead, "the man in front is")
+	# Squared up to the man in front, a second one arriving at your shoulder doesn't spin you.
+	ahead.request_attack(&"shove", p)
+	await _wait(0.3)
+	_check(p.stance_target == ahead, "squared up to the man in front")
+	side.request_attack(&"shove", p)
+	await _wait(0.1)
+	_check(p.stance_target == ahead, "and you stay on him when another starts at your side")
+
+
+func test_foe_health_bar() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.5), Vector3(0, 0, 0))
+	var bars := FoeHealthBars.new()
+	bars.player = p
+	p.add_child(bars)
+	await _wait(0.1)
+	_check(bars.bar_for(e) == null, "no bar on a punter you're not fighting")
+	e.request_attack(&"swing", p)
+	await _wait(0.6)
+	_check(bars.bar_for(e) != null and bars.bar_for(e).get_parent() == e, "a bar under the man you're fighting")
+	_check(bars.bar_for(e) != null and bars.bar_for(e).position.y < 0.2, "on the floor, under him")
