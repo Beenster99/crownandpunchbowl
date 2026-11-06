@@ -54,8 +54,9 @@ func open() -> void:
 	if is_open():
 		return
 	_root.visible = true
-	# Restarting reloads the scene locally, so it's solo only until pub flow syncs it (M2).
-	_restart.disabled = not _is_alone()
+	# The host (or a solo player) restarts the pub for everyone through Net.
+	_restart.disabled = not Net.is_host()
+	_restart.text = "Restart this pub" if Net.is_host() else "Restart this pub (host only)"
 	if _is_alone():
 		get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -100,9 +101,14 @@ func _open_settings() -> void:
 	_root.add_child(_settings)
 
 
+## Goes through Net rather than reloading the scene here: a plain reload left Net thinking the
+## pub was already loaded, so nobody was spawned and the pub came back empty.
 func _on_restart() -> void:
+	if not Net.is_host():
+		return
+	_root.visible = false
 	get_tree().paused = false
-	get_tree().reload_current_scene()
+	Net.restart_pub()
 
 
 func _on_quit() -> void:
