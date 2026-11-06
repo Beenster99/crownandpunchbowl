@@ -63,8 +63,8 @@ xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_
 - `PubBuilder.material(colour)` returns textured materials for the era colours: wood grain
   on timber, trim, the bar and furniture; plaster (17th and 18th century) or wallpaper (19th)
   above the dado; plaster, raised panelling or glazed tiles on the dado; brick and stone round
-  fireplaces; brushed metal on anything metallic. Floors are flagstones, oak boards or
-  encaustic tiles. `PubEra` names the sets with `wall_tex` and `dado_tex`.
+  fireplaces; brushed metal on anything metallic. Floors are flagstones (17th century), oak boards (18th) or
+  dark riven slate (19th; encaustic tiles are still a texture set but were too busy). `PubEra` names the sets with `wall_tex` and `dado_tex`.
 - `PubBuilder.prop()` stores a `variant` meta on every prop marker. Pickups
   (`PubItem.variant`) and placeholders use it, so one table's chairs all match.
 - `table_set()` puts drinks at the real height of the chosen table and adds one to three bits

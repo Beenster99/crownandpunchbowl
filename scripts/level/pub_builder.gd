@@ -249,10 +249,10 @@ func floor_area(rect: Rect2, tile_metres := 2.0) -> void:
 	var plane := PlaneMesh.new()
 	plane.size = rect.size
 	mesh.mesh = plane
-	var floor_sets := {"boards": "planks", "tiles": "tiles", "flagstone": "flagstone"}
+	var floor_sets := {"boards": "planks", "tiles": "tiles", "flagstone": "flagstone", "slate": "slate"}
 	var set: String = floor_sets.get(style["floor"], "flagstone")
 	var tint: Color = Color(0.92, 0.9, 0.88) if set == "tiles" else (style["floor_a"] as Color).lerp(style["floor_b"], 0.5).lightened(0.08)
-	var repeats := {"planks": 0.85, "tiles": 0.8, "flagstone": 0.42}
+	var repeats := {"planks": 0.85, "tiles": 0.8, "flagstone": 0.42, "slate": 0.4}
 	mesh.material_override = PubMaterials.surface(set, tint, repeats[set] * 2.0 / tile_metres, 1.0)
 	body.add_child(mesh)
 	world.add_child(body)

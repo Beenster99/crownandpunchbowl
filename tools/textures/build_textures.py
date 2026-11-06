@@ -191,6 +191,29 @@ def build_flagstone():
     save_set("flagstone", alb, h, rough, 6.0)
 
 
+def build_slate():
+    """Riven slate slabs in a running bond: dark, low contrast, cleft surface."""
+    alb = np.full((N, N), 0.35)
+    h = np.full((N, N), -0.4)
+    rough = np.full((N, N), 0.9)
+    cleft = stretched(6, 24, 5, 200)
+    fine = fbm(24, 3, seed=201)
+    rows, cols = 4, 2
+    sh, sw = N // rows, N // cols
+    for r in range(rows):
+        off = (sw // 2) * (r % 2)
+        for c in range(cols + 1):
+            shade = 0.82 + 0.18 * RNG.random()
+            x0 = c * sw + off + 3
+            for x in range(x0, x0 + sw - 6):
+                xx = x % N
+                ys = slice(r * sh + 3, (r + 1) * sh - 3)
+                alb[ys, xx] = shade * (0.88 + 0.16 * cleft[ys, xx] + 0.06 * fine[ys, xx])
+                h[ys, xx] = 0.3 * cleft[ys, xx] + 0.15 * fine[ys, xx]
+                rough[ys, xx] = 0.55 + 0.25 * fine[ys, xx]
+    save_set("slate", alb, h, rough, 4.0)
+
+
 def build_tiles():
     """Victorian encaustic tiles: terracotta, cream and black with a quatrefoil motif."""
     terracotta, cream, black, blue = (150, 62, 40), (214, 196, 160), (34, 30, 26), (52, 72, 92)
@@ -597,7 +620,7 @@ def build_beermats():
 
 
 SETS = {
-    "wood": build_wood, "planks": build_planks, "flagstone": build_flagstone, "tiles": build_tiles,
+    "wood": build_wood, "planks": build_planks, "flagstone": build_flagstone, "tiles": build_tiles, "slate": build_slate,
     "plaster": build_plaster, "brick": build_brick, "panelling": build_panelling,
     "glazed_tile": build_glazed_tile, "wallpaper": build_wallpaper, "fabric": build_fabric,
     "leather": build_leather, "metal": build_metal, "cast_iron": build_cast_iron, "felt": build_felt,

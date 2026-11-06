@@ -42,7 +42,7 @@ const STYLES := {
 		"label": "19th century",
 		"wall_tex": "wallpaper", "dado_tex": "glazed_tile",
 		"wall_height": 3.4,
-		"floor": "tiles", "floor_a": Color("6e3226"), "floor_b": Color("bfb194"),
+		"floor": "slate", "floor_a": Color("30363c"), "floor_b": Color("272c31"),
 		"wall": Color("b9a27a"), "dado": Color("2f5a43"), "trim": Color("6b1f1f"),
 		"timber": Color("4a1d12"), "bar": Color("5a2215"), "bar_top": Color("2b0f08"),
 		"furniture": Color("4f2416"), "accent": Color("d6b25e"),
