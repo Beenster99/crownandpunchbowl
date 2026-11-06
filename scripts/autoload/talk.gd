@@ -20,8 +20,8 @@ signal punter_replied(npc: Node, text: String, outcome: String)
 signal punter_spoke(npc: Node, text: String)
 
 ## How far away a punter can be and still hear you (shouting carries further).
-const HEAR_RANGE := 7.0
-const SHOUT_RANGE := 11.0
+const HEAR_RANGE := 9.0
+const SHOUT_RANGE := 13.0
 ## Lines of conversation each punter remembers (for Claude).
 const MEMORY := 8
 ## Seconds between lines from one player, so held keys and spam don't flood the host.
@@ -164,7 +164,11 @@ func _said(text: String, loud: bool) -> void:
 		return
 	text = text.substr(0, 200)
 	_show_player_line.rpc(String(who.name), text)
-	hear(who, text, loud)
+	if hear(who, text, loud) == null:
+		if peer == multiplayer.get_unique_id():
+			_nobody_heard()
+		else:
+			_nobody_heard.rpc_id(peer)
 
 
 ## Host: `who` said `text`. Picks the punter they meant, changes their mood, and gets them
@@ -360,6 +364,13 @@ func _show_player_line(player_name: String, text: String) -> void:
 	if bool(Settings.get_value("talk", "show_heard")) and bool(Settings.get_value("gameplay", "subtitles")):
 		_bubble(who).show_line(text, BUBBLE_SECONDS)
 	player_said.emit(who, text)
+
+
+## Tell the speaker nobody was close enough, so silence doesn't look like "it didn't understand".
+@rpc("authority", "call_remote", "reliable")
+func _nobody_heard() -> void:
+	_status("Nobody's close enough to hear you. Get up to a punter and face them.", 3.5,
+		Color(1.0, 0.85, 0.6))
 
 
 @rpc("authority", "call_local", "reliable")

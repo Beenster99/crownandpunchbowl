@@ -7,7 +7,8 @@ punter you're facing hears you. Settings live on the **Talk** tab.
 
 1. **Listening** (`scripts/talk/listener.gd`). The mic is recorded while the key is held and
    turned into text on the player's own PC by whisper.cpp (`speech/whisper`). Nothing is
-   uploaded. A loud recording counts as shouting.
+   uploaded. Silence either side is trimmed and quiet mics are brought up to level first.
+   If nobody is in earshot, the speaker is told so. A loud recording counts as shouting.
 2. **Who heard it** (`Talk.pick_listener`). The nearest punter in front of you, preferring
    whoever you're fighting and anyone you name ("Oi, barman!", "Rupert, calm down"). Shouting
    carries further, and a shouted provocation makes calm punters nearby look round.
@@ -44,7 +45,8 @@ key.
 ## Speech tools
 
 Not in git. `python3 tools/fetch_speech.py` downloads them into `speech/` (whisper.cpp
-v1.8.2 + base.en model, Piper 2023.11.14-2, en_GB VCTK voice). Copy `speech/` next to
+v1.8.2 + small.en model (base.en misheard too much in play-testing; it's still used if it's
+the only one there), Piper 2023.11.14-2, en_GB VCTK voice). Copy `speech/` next to
 `CrownAndPunchbowl.exe` when packaging a build. Licences are in `speech/LICENCES.txt`
 (Piper uses espeak-ng, GPL v3, run as a separate program). `CP_SPEECH_DIR` overrides the
 location.
