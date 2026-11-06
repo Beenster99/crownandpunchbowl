@@ -53,6 +53,10 @@ func _ready() -> void:
 		_prompts = load("res://scripts/combat/defend_prompts.gd").new()
 		_prompts.player = self
 		add_child(_prompts)
+		var bars := FoeHealthBars.new()
+		bars.name = "FoeHealthBars"
+		bars.player = self
+		add_child(bars)
 
 
 ## Farmer stats from the lobby choice (Net.players[peer]["farmer"]).

@@ -51,6 +51,11 @@ const GRAB_RANGE := 1.5
 const HOLD_TIME := 4.0             ## seconds a grip lasts before the victim slips free (x grip)
 const ESCAPE_PER_STRUGGLE := 0.1   ## escape progress per struggle() call (1.0 = free)
 const HOLD_DISTANCE := 0.75        ## how far in front of the holder the victim is held
+## A strike lands on its target only within reach plus this, and inside its arc: the man
+## has to still be there. A miss costs WHIFF_RECOVER more recovery and stumbles you forward.
+const REACH_SLACK := 0.15
+const WHIFF_RECOVER := 0.18
+const WHIFF_STUMBLE := 1.3
 const DODGE_TIME := 0.38
 const DODGE_IFRAMES := 0.28
 const DODGE_SPEED := 9.0
