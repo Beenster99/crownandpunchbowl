@@ -183,6 +183,22 @@ func solid(size: Vector3, pos: Vector3, mat: Material, rot_y := 0.0, parent: Nod
 	return body
 
 
+## A small loose cylinder (bottle, glass) as a physics prop under `parent` at local `pos`.
+## `pinned` keeps it fixed (on a shelf) until PubPhysics.disturb() knocks it loose.
+func loose_cylinder(parent: Node3D, prop_name: String, radius: float, height: float, pos: Vector3,
+		mat: Material, mass := 0.5, fragile := true, pinned := false) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.name = prop_name
+	var cs := CollisionShape3D.new()
+	cs.shape = PubPhysics.shape_for(Vector2(radius, height))
+	body.add_child(cs)
+	cylinder(body, radius, height, Vector3.ZERO, mat)
+	PubPhysics.setup_prop(body, mass, false, fragile, pinned)
+	parent.add_child(body, true)
+	body.position = pos
+	return body
+
+
 func occluder(node: Node3D) -> Node3D:
 	node.add_to_group("camera_occluders")
 	return node
@@ -459,7 +475,9 @@ func back_bar(centre: Vector3, length: float, facing: Vector3, carved := false) 
 		for i in n:
 			var a := -length * 0.5 + 0.15 + i * 0.22
 			var p := (Vector3(a, y + 0.14, 0) if along_x else Vector3(0, y + 0.14, a)) + front * 0.6
-			cylinder(body, 0.045, 0.26, p, material(colours[(i + shelf) % colours.size()], 0.1, 0.2))
+			# Pinned to the shelf until someone is slammed into the back bar, then they rain down.
+			loose_cylinder(body, "ShelfBottle", 0.045, 0.26, p, material(colours[(i + shelf) % colours.size()], 0.1, 0.2),
+				0.9, true, true)
 	if carved:
 		# Victorian gantry: mirror panel and carved crest.
 		deco(body, (Vector3(length * 0.8, 0.5, 0.02) if along_x else Vector3(0.02, 0.5, length * 0.8)),
@@ -563,8 +581,16 @@ func pool_table(pos: Vector3, rot_y := 0.0) -> void:
 	deco(body, Vector3(2.2, 0.04, 1.1), Vector3(0, 0.41, 0), material(Color("1f6a35"), 0.0, 0.95))
 	var balls := [Color("e8e2d0"), Color("c22a1a"), Color("e0b81a"), Color("141414"), Color("c22a1a"), Color("e0b81a")]
 	for i in balls.size():
-		var b := sphere(body, 0.03, Vector3(-0.3 + (i % 3) * 0.08, 0.45, -0.1 + (i / 3) * 0.09), material(balls[i], 0.0, 0.2))
-		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var ball := RigidBody3D.new()
+		var cs := CollisionShape3D.new()
+		cs.shape = PubPhysics.shape_for(0.03)
+		ball.add_child(cs)
+		sphere(ball, 0.03, Vector3.ZERO, material(balls[i], 0.0, 0.2)).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ball.name = "PoolBall"
+		PubPhysics.setup_prop(ball, 0.17)
+		ball.linear_damp = 0.6
+		body.add_child(ball, true)
+		ball.position = Vector3(-0.3 + (i % 3) * 0.08, 0.431, -0.1 + (i / 3) * 0.09)
 	var basis := Basis(Vector3.UP, deg_to_rad(rot_y))
 	prop("pool_cue", pos + basis * Vector3(0.0, 0.85, 0.55), rot_y)
 	prop("pool_cue", pos + basis * Vector3(0.6, 0.0, 0.9), rot_y)
@@ -773,9 +799,9 @@ func chandelier(pos: Vector3, arms := 6) -> void:
 	flicker_lights.append(light)
 
 
-## Ale barrel, solid scenery. `on_side` lays it on a cradle.
+## Ale barrel, a heavy physics body: a body flung into it rocks it, and one on its side rolls.
 func barrel(pos: Vector3, on_side := false) -> void:
-	var body := StaticBody3D.new()
+	var body := RigidBody3D.new()
 	body.position = pos + Vector3(0, 0.45 if not on_side else 0.4, 0)
 	var shape := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
@@ -784,6 +810,7 @@ func barrel(pos: Vector3, on_side := false) -> void:
 	shape.shape = cyl
 	body.add_child(shape)
 	body.name = "Barrel"
+	PubPhysics.setup_prop(body, 55.0, true)
 	world.add_child(body, true)
 	var wood := material(Color("6a4524"))
 	var hoop := material(Color("2a2a2a"), 0.7, 0.5)

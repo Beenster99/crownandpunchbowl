@@ -44,6 +44,10 @@ func _host() -> bool:
 		return _fail("host: wrong authorities")
 	if not await _wait(func(): return absf(_player(cid).position.x - 3.0) < 0.05, 10.0):
 		return _fail("host: client movement not replicated (x=%s)" % _player(cid).position.x)
+	# Props are simulated on the host: send the tables flying; the client checks they move.
+	for t in _tables():
+		t.sleeping = false
+		t.apply_central_impulse(Vector3(0.0, 160.0, 80.0))
 	_player(1).position.x = -3.0  # client checks this arrives
 	# Networked combat: the client grabs and knees a punter; the host resolves the hits.
 	var hits := []
@@ -86,9 +90,20 @@ func _client() -> bool:
 	var me := _player(net.local_id())
 	if not me.is_multiplayer_authority():
 		return _fail("client: doesn't own its player")
+	var table_start := {}
+	for t in _tables():
+		table_start[t] = t.global_position
 	me.position.x = 3.0
 	if not await _wait(func(): return absf(_player(1).position.x + 3.0) < 0.05, 10.0):
 		return _fail("client: host movement not replicated")
+	var moved := func() -> bool:
+		for t in table_start:
+			if is_instance_valid(t) and t.global_position.distance_to(table_start[t]) > 0.3:
+				return true
+		return false
+	if table_start.is_empty() or not await _wait(moved, 10.0):
+		return _fail("client: host's props never moved (%d tables)" % table_start.size())
+	print("NET client saw the host's tables fly")
 	if not await _client_fight(me):
 		return false
 	if not await _wait(func(): return gd.current_pub_index == 3 and _players_spawned(2), 15.0):
@@ -138,6 +153,14 @@ func _punter() -> Node3D:
 				and n.global_position.y < 0.2:
 			return n
 	return null
+
+
+func _tables() -> Array:
+	var out := []
+	for n in get_nodes_in_group("pub_props"):
+		if String(n.get_path()).contains("Table"):
+			out.append(n)
+	return out
 
 
 func _players_spawned(n: int) -> bool:
