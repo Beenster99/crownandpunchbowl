@@ -1388,11 +1388,13 @@ static func _with(base: Dictionary, changes: Dictionary) -> Dictionary:
 func _anim_defs() -> Dictionary:
 	var lie := _lie
 	var fists := {&"_fistL": Vector3(1, 0, 0), &"_fistR": Vector3(1, 0, 0)}
-	# Boxing guard: bladed with the left side forward, chin tucked behind the fists, knees soft.
+	# Boxing guard (mid range): bladed with the left side forward, elbows down in front of the ribs,
+	# forearms up, the lead fist a little out at eye height and the rear fist by the cheek, chin
+	# tucked, knees soft.
 	var guard := _with(fists, {
 		&"Hips": Vector3(0, -16, 0), &"Spine": Vector3(-8, 9, 0), &"Head": Vector3(-8, 6, 0),
-		&"ShoulderL": Vector3(58, 0, 4), &"ElbowL": Vector3(124, 0, 0), &"HandL": Vector3(-10, 0, 0),
-		&"ShoulderR": Vector3(52, 0, -6), &"ElbowR": Vector3(132, 0, 0), &"HandR": Vector3(-10, 0, 0),
+		&"ShoulderL": Vector3(50, -25, 25), &"ElbowL": Vector3(115, 0, 0), &"HandL": Vector3(0, -70, 0),
+		&"ShoulderR": Vector3(40, 30, -30), &"ElbowR": Vector3(136, 0, 0), &"HandR": Vector3(0, 70, 0),
 		&"HipL": Vector3(16, 0, -6), &"KneeL": Vector3(-18, 0, 0), &"HipR": Vector3(-10, 0, 6), &"KneeR": Vector3(-16, 0, 0),
 		&"_hips": Vector3(0, -0.02, 0), &"_brow": Vector3(0.6, 0, 0),
 	})
@@ -1439,10 +1441,10 @@ func _anim_defs() -> Dictionary:
 	defs[&"idle"] = {"length": 1.2, "loop": true, "keys": [
 		[0.0, guard],
 		[0.3, _with(guard, {&"_hips": Vector3(0.008, -0.035, 0), &"KneeL": Vector3(-24, 0, 0), &"KneeR": Vector3(-22, 0, 0),
-			&"ShoulderL": Vector3(54, 0, 6), &"ElbowL": Vector3(120, 0, 0), &"Spine": Vector3(-10, 11, 0)})],
-		[0.6, _with(guard, {&"_hips": Vector3(0, -0.015, 0), &"ShoulderR": Vector3(56, 0, -4)})],
+			&"ShoulderL": Vector3(47, -25, 25), &"ElbowL": Vector3(112, 0, 0), &"Spine": Vector3(-10, 11, 0)})],
+		[0.6, _with(guard, {&"_hips": Vector3(0, -0.015, 0), &"ShoulderR": Vector3(43, 30, -30)})],
 		[0.9, _with(guard, {&"_hips": Vector3(-0.008, -0.035, 0), &"KneeL": Vector3(-24, 0, 0), &"KneeR": Vector3(-22, 0, 0),
-			&"ShoulderR": Vector3(50, 0, -8), &"ElbowR": Vector3(128, 0, 0), &"Spine": Vector3(-9, 7, 0), &"Head": Vector3(-9, 9, 0)})],
+			&"ShoulderR": Vector3(38, 30, -30), &"ElbowR": Vector3(132, 0, 0), &"Spine": Vector3(-9, 7, 0), &"Head": Vector3(-9, 9, 0)})],
 		[1.2, guard],
 	]}
 	var step := _with(guard, {&"Spine": Vector3(-10, 14, 0), &"HipL": Vector3(32, 0, -6), &"KneeL": Vector3(-12, 0, 0),
