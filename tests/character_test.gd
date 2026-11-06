@@ -238,6 +238,15 @@ func _check_fight_set() -> void:
 	if rig.current != &"guard_body":
 		_fail("RB should drop to the body guard, got %s" % rig.current)
 	rig.set_guard_zone(&"")
+	# Letting go of the guard goes back to standing, so walking off animates the legs
+	# (it used to stick in "block" and the fighter glided about).
+	if not CharacterRig.STANDING.has(rig.current) and not CharacterRig.fight_idles().has(rig.current):
+		_fail("dropping the guard should go back to a standing pose, got %s" % rig.current)
+	rig.set_move_vector(Vector2(0.0, 3.0))
+	rig.set_move_speed(3.0)
+	if rig.current != &"walk":
+		_fail("walking off after a guard should walk, got %s" % rig.current)
+	rig.set_move_speed(0.0)
 	# Dodges by direction (the rig faces -Z: +X is its right).
 	for pair in [[Vector3.RIGHT, &"dodge_r"], [Vector3.LEFT, &"dodge_l"], [Vector3.BACK, &"dodge_back"], [Vector3.FORWARD, &"dodge_fwd"]]:
 		rig.play_dodge(pair[0])
