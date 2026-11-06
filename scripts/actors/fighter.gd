@@ -32,6 +32,8 @@ signal hit_dealt(info: Dictionary)
 signal stance_changed(in_stance: bool)
 ## Slipped the head (right stick flick) towards `dir` (x: right, y: up). Fires on every peer.
 signal slipped(dir: Vector2)
+## A power shot started loading (true) or went (false).
+signal power_charging(on: bool)
 
 ## DOUBLED: kicked in the groin, on all fours holding it. Appended so older values keep
 ## their numbers on the wire.
@@ -60,6 +62,8 @@ const _RELEASE_SILENT := 1  # victim's state is set by whatever happens next (hi
 @export_range(0.0, 1.0) var parry_skill := 1.0
 ## Below this fraction of max_hp, a fighter who gets knocked down only gets up to crawl.
 @export_range(0.0, 1.0) var crawl_fraction := 0.25
+## The gas tank (see Moves.STAMINA): strikes spend it, blocks and body shots drain it.
+@export var max_stamina := Moves.STAMINA
 ## False for anyone who must never be KO'd. (Bar staff are untouchable anyway.)
 @export var can_be_knocked_out := true
 @export var get_up_time := 1.5
@@ -67,6 +71,7 @@ const _RELEASE_SILENT := 1  # victim's state is set by whatever happens next (hi
 @export var use_rig := true
 
 var hp: float
+var stamina: float
 var state: State = State.IDLE
 ## World-space desired movement, set by the controller each physics frame.
 var move_input := Vector3.ZERO
@@ -124,6 +129,12 @@ var _vault_t := -1.0
 var _slip_t := 0.0       # head shots miss while > 0 (counts down from Moves.SLIP_WINDOW)
 var _slip_cd := 0.0
 var _charge_hit := false  # this shoulder charge has already hit someone
+var _stamina_wait := 0.0
+var _hold_power := false  # the button is still held: at the end of the windup, it loads
+var _charging := false
+var _charge_t := 0.0
+var _power := 1.0         # damage multiplier of the strike in progress
+var _power_frac := 0.0
 var _saved_mask := 0
 var _airborne := false
 var _fall_peak := 0.0
@@ -135,6 +146,7 @@ func _ready() -> void:
 	if team == Team.PUNTERS or team == Team.POLICE:
 		max_hp *= float(GameData.difficulty()["enemy_health"])
 	hp = max_hp
+	stamina = max_stamina
 	_poise = Moves.POISE * toughness
 	_saved_layer = collision_layer
 	if use_rig:
@@ -281,6 +293,25 @@ func get_facing() -> Vector3:
 	return f.normalized() if f.length() > 0.001 else Vector3.FORWARD
 
 
+func stamina_fraction() -> float:
+	return clampf(stamina / maxf(max_stamina, 1.0), 0.0, 1.0)
+
+
+## Running on fumes: soft punches, slow hands and feet, a guard that folds.
+func is_gassed() -> bool:
+	return stamina < max_stamina * Moves.GASSED
+
+
+## Stood coiled, loading a power shot.
+func is_charging() -> bool:
+	return _charging
+
+
+## How loaded the power shot being charged is (0..1).
+func charge_fraction() -> float:
+	return clampf(_charge_t / Moves.CHARGE_TIME, 0.0, 1.0) if _charging else 0.0
+
+
 func hp_fraction() -> float:
 	return clampf(hp / max_hp, 0.0, 1.0) if max_hp > 0.0 else 0.0
 
@@ -291,9 +322,16 @@ func hp_fraction() -> float:
 ## A target further than one short step out of reach isn't chased: the move whiffs.
 ## `bonus` multiplies damage (combos), up to 2.0; `combo_name` is shown by the HUD.
 ## While GRABBING, any attack becomes a knee to the held fighter.
+## `hold`: the button is held down. A chargeable move (hooks, uppercuts) that's still held
+## when its wind-up ends loads into a power shot until request_unleash().
 func request_attack(move_id: StringName, target_fighter: Fighter = null, bonus := 1.0,
-		combo_name := "") -> void:
-	_send(&"attack", [move_id, _path(target_fighter), bonus, combo_name])
+		combo_name := "", hold := false) -> void:
+	_send(&"attack", [move_id, _path(target_fighter), bonus, combo_name, hold])
+
+
+## Let go of a held punch: throw it now, with however much power it has loaded.
+func request_unleash() -> void:
+	_send(&"unleash", [])
 
 
 ## Raise (true) or drop (false) a guard: Moves.GUARD_HEAD covers head shots, GUARD_BODY
@@ -373,6 +411,9 @@ func take_hit(info: Dictionary) -> void:
 	info["direction"] = dir
 
 	var new_hp := hp - dmg
+	if zone != Moves.GUARD_HEAD and dmg > 0.0:
+		# Body shots take the wind out of you.
+		_server_drain(dmg * Moves.BODY_SHOT_DRAIN)
 	var poise_hit := float(info.get("poise", 8.0)) / maxf(toughness, 0.1)
 	if state == State.STAGGER or state == State.DOUBLED:
 		poise_hit *= Moves.STAGGER_POISE_SCALE  # no stun-locking a man to the floor
@@ -474,6 +515,17 @@ func _server_guard(info: Dictionary, attacker: Fighter) -> bool:
 		_rpc_parried.rpc(_path(attacker))
 		_rpc_react.rpc(State.BLOCK, 0.0, hp, Vector3.ZERO, _pack(info), false)
 		return true
+	var drain := float(info.get("guard_drain", float(info.get("damage", 0.0)) * 1.2))
+	if stamina - drain <= 0.0:
+		# Nothing left to hold it up with: the guard is smashed apart and they reel, open.
+		_server_drain(stamina)
+		info["guard_broken"] = true
+		info["guard_crushed"] = true
+		info["stagger"] = Moves.GUARD_CRUSH_STAGGER * maxf(toughness, 0.1)
+		info["damage"] = float(info.get("damage", 0.0)) * 0.6
+		Events.guard_broken.emit(self, attacker)
+		return false
+	_server_drain(drain)
 	var chip := float(info.get("damage", 0.0)) * Moves.BLOCK_CHIP
 	info["damage"] = chip
 	info["blocked"] = true
@@ -547,7 +599,10 @@ func _server_action(action: StringName, args: Array) -> void:
 		&"attack":
 			var bonus := clampf(float(args[2]), 0.5, 2.0) if args.size() > 2 else 1.0
 			var cname := String(args[3]) if args.size() > 3 else ""
-			_server_attack(args[0], _fighter_at(args[1]), bonus, cname)
+			var hold := bool(args[4]) if args.size() > 4 else false
+			_server_attack(args[0], _fighter_at(args[1]), bonus, cname, hold)
+		&"unleash":
+			_server_unleash()
 		&"block":
 			var zone: StringName = StringName(args[1]) if args.size() > 1 else Moves.GUARD_HEAD
 			if zone != Moves.GUARD_BODY:
@@ -612,7 +667,8 @@ func _resolve_move(move_id: StringName) -> Dictionary:
 	return m
 
 
-func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name := "") -> void:
+func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name := "",
+		hold := false) -> void:
 	if not Moves.has(move_id):
 		push_warning("Unknown move %s" % move_id)
 		return
@@ -633,7 +689,23 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 		if combo_name == "":
 			combo_name = "Counter"
 		_counter_ready = 0.0
-	_rpc_start_move.rpc(move_id, _path(tgt), bonus, combo_name)
+	# Too gassed to load one up: it just goes.
+	hold = hold and bool(m["chargeable"]) and stamina >= float(m["stamina"]) * 2.0
+	_rpc_start_move.rpc(move_id, _path(tgt), bonus, combo_name, hold)
+
+
+## Throw the power shot being held, if there is one.
+func _server_unleash() -> void:
+	if state != State.WINDUP or not _hold_power:
+		return
+	_rpc_unleash.rpc(clampf(_charge_t / Moves.CHARGE_TIME, 0.0, 1.0) if _charging else 0.0)
+
+
+## Take stamina off (blocks, body shots) and tell everyone. Host only.
+func _server_drain(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	_rpc_stamina.rpc(maxf(stamina - amount, 0.0))
 
 
 func _server_block(on: bool, zone: StringName) -> void:
@@ -745,9 +817,16 @@ func _server_resolve_hit() -> void:
 			var right := get_facing().cross(Vector3.UP)
 			dir = (dir - right * side * 0.9).normalized()
 		var zone := StringName(m.get("zone", Moves.GUARD_HEAD))
-		var dmg := float(m["damage"]) * power * _bonus
+		var dmg := float(m["damage"]) * power * _bonus * _power
 		if team != Team.PLAYERS and v.team == Team.PLAYERS:
 			dmg *= float(GameData.difficulty()["enemy_damage"])
+		if is_gassed():
+			dmg *= Moves.GASSED_DAMAGE
+		# Caught him recovering from his own punch (or his miss): a punish.
+		var punish := v.state == State.ATTACK and v._attack_t > float(v._move.get("active", 0.0)) \
+			and not bool(m["ground"])
+		if punish:
+			dmg *= Moves.PUNISH_BONUS
 		var height := 1.45 if bool(m["to_face"]) else 1.1
 		if zone == &"groin":
 			height = 0.85
@@ -761,7 +840,19 @@ func _server_resolve_hit() -> void:
 			"stagger": float(m["stagger"]), "poise": float(m["poise"]),
 			"knockback": float(m["knockback"]), "weapon": weapon,
 			"guard_break": bool(m.get("guard_break", false)),
+			"guard_drain": float(m.get("guard_drain", 0.0)) * _power,
 		}
+		if _power > 1.0:
+			info["power"] = _power_frac
+			info["stagger"] = float(info["stagger"]) * _power
+			info["poise"] = float(info["poise"]) * _power
+			info["knockback"] = float(info["knockback"]) * (1.0 + (_power - 1.0) * 0.6)
+			if _power_frac >= 0.5:
+				info["heavy"] = true
+		if punish:
+			info["punish"] = true
+			info["heavy"] = true
+			info["stagger"] = float(info["stagger"]) * 1.3
 		# A "clean" connect (FX sprays blood off the face): a counter, a combo ender, or a
 		# face shot on someone reeling or held.
 		info["clean"] = bool(m["to_face"]) and (_bonus >= 1.3 \
@@ -845,11 +936,16 @@ func _flat_dist(f: Fighter) -> float:
 
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_start_move(move_id: StringName, target_path: NodePath, bonus := 1.0,
-		combo_name := "") -> void:
+		combo_name := "", hold := false) -> void:
 	if not _sender_is_host():
 		return
 	var tgt := _fighter_at(target_path)
 	var m := _resolve_move(move_id)
+	_spend(float(m["stamina"]))
+	if is_gassed():
+		m["windup"] = float(m["windup"]) * Moves.GASSED_WINDUP
+	_power = 1.0
+	_power_frac = 0.0
 	if combo_name != "" and m.has("knockdown"):
 		for c in Moves.COMBOS:
 			if c["name"] == combo_name and bool(c.get("knockdown", false)):
@@ -872,6 +968,9 @@ func _rpc_start_move(move_id: StringName, target_path: NodePath, bonus := 1.0,
 	_lunge_t = 0.0
 	_attack_t = 0.0
 	_charge_hit = false
+	_hold_power = hold
+	_charging = false
+	_charge_t = 0.0
 	# Only step in when the target is a short step out of reach; never chase across the room.
 	_lunge_ok = tgt != null and bool(m["lunge"]) \
 		and _flat_dist(tgt) - float(m["reach"]) * 0.8 <= Moves.MAX_LUNGE_STEP
@@ -950,8 +1049,44 @@ func _rpc_strike_result(hit: bool) -> void:
 		return
 	if state == State.ATTACK:
 		_state_len += Moves.WHIFF_RECOVER
+	_spend(float(_move.get("stamina", 0.0)) * Moves.WHIFF_STAMINA)
 	_impulse += get_facing() * Moves.WHIFF_STUMBLE
 	Events.attack_whiffed.emit(self, current_move)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_stamina(value: float) -> void:
+	if not _sender_is_host():
+		return
+	stamina = clampf(value, 0.0, max_stamina)
+	_stamina_wait = Moves.STAMINA_REGEN_DELAY
+
+
+## The held punch goes, loaded to `frac` (0 = a normal punch).
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_unleash(frac: float) -> void:
+	if not _sender_is_host():
+		return
+	var was_charging := _charging
+	_hold_power = false
+	_charging = false
+	if frac >= Moves.POWER_MIN and state == State.WINDUP:
+		_power_frac = frac
+		_power = lerpf(1.0, Moves.POWER_MAX, frac)
+		_spend(float(_move.get("stamina", 0.0)) * Moves.POWER_STAMINA * frac)
+		_move["heavy"] = true if frac >= 0.5 else bool(_move["heavy"])
+		if frac >= 0.95:
+			_move["guard_break"] = true  # everything behind it: no guard holds that
+	if was_charging:
+		power_charging.emit(false)
+
+
+## Spend stamina on a strike (runs on every peer, so the bars agree).
+func _spend(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	stamina = maxf(stamina - amount, 0.0)
+	_stamina_wait = Moves.STAMINA_REGEN_DELAY
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -1069,6 +1204,12 @@ func _enter(new_state: State, duration: float) -> void:
 	state = new_state
 	if new_state != State.WINDUP and new_state != State.ATTACK:
 		current_move = &""
+	if new_state != State.WINDUP:
+		# Hit (or let go) while loading a power shot: it's gone.
+		_hold_power = false
+		if _charging:
+			_charging = false
+			power_charging.emit(false)
 	if old == State.GRABBING and holding != null:
 		# Safety net: the host always releases explicitly, but never leave a dangling hold.
 		if holding.held_by == self:
@@ -1112,12 +1253,27 @@ func _tick_state(delta: float) -> void:
 	_poise_wait -= delta
 	if _poise_wait <= 0.0:
 		_poise = minf(_poise + Moves.POISE_REGEN * delta, Moves.POISE * toughness)
+	_stamina_wait -= delta
+	if _stamina_wait <= 0.0 and state != State.WINDUP and state != State.ATTACK:
+		var regen := Moves.STAMINA_REGEN
+		if state == State.BLOCK:
+			regen *= Moves.STAMINA_BLOCK_REGEN
+		stamina = minf(stamina + regen * delta, max_stamina)
 	match state:
 		State.WINDUP:
 			_lunge_t += delta
 			if not _is_lunging():
 				_windup_left -= delta
-			if _windup_left <= 0.0:
+			if _windup_left <= 0.0 and _hold_power:
+				# Still holding the button: coil up and load the power shot.
+				if not _charging:
+					_charging = true
+					_charge_t = 0.0
+					power_charging.emit(true)
+				_charge_t += delta
+				if multiplayer.is_server() and _charge_t >= Moves.CHARGE_TIME + Moves.CHARGE_HOLD:
+					_server_unleash()
+			elif _windup_left <= 0.0:
 				_attack_t = 0.0
 				_enter(State.ATTACK, float(_move["active"]) + float(_move["recover"]))
 				# Put your weight into it: the strike carries you a little way forward.
@@ -1227,6 +1383,8 @@ func _tick_motion(delta: float) -> void:
 			elif in_stance:
 				scale = Moves.STANCE_MOVE_SCALE
 			# Weight: footwork speeds up and slows down over a moment instead of snapping.
+			if is_gassed():
+				scale *= Moves.GASSED_SPEED
 			var want := move_input.limit_length(1.0) * move_speed * scale
 			var rate := Moves.ACCEL if want.length() > _walk_vel.length() else Moves.DECEL
 			_walk_vel = _walk_vel.move_toward(want, rate * delta)

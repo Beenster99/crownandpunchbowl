@@ -29,6 +29,8 @@ func run() -> void:
 		"test_groin_kick_combo", "test_shoulder_charge", "test_clinch_knee", "test_hold_resistance",
 		"test_hook_knocks_head_sideways", "test_one_punch_doesnt_drop_a_fresh_man",
 		"test_punches_can_miss", "test_no_stick_punch_goes_straight", "test_foe_health_bar",
+		"test_stamina", "test_jabs_crush_a_guard", "test_body_shots_sap_stamina", "test_power_shot",
+		"test_punish_a_miss", "test_player_holds_for_power",
 	]
 	# COMBAT_ONLY=test_a,test_b runs just those.
 	var only := OS.get_environment("COMBAT_ONLY")
@@ -1074,3 +1076,161 @@ func test_foe_health_bar() -> void:
 	await _wait(0.6)
 	_check(bars.bar_for(e) != null and bars.bar_for(e).get_parent() == e, "a bar under the man you're fighting")
 	_check(bars.bar_for(e) != null and bars.bar_for(e).position.y < 0.2, "on the floor, under him")
+
+
+func test_stamina() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	await _wait(0.1)
+	_check(is_equal_approx(p.stamina, p.max_stamina), "fighters start with a full tank")
+	p.request_attack(&"jab", e)
+	_check(is_equal_approx(p.stamina, p.max_stamina - 6.0), "a jab costs 6 (%.1f)" % p.stamina)
+	await _until_free(p)
+	# A miss costs double.
+	var before := p.stamina
+	e.global_position = Vector3(0, 0, -4.0)
+	p.request_attack(&"hook", e)
+	await _until_free(p)
+	_check(p.stamina <= before - 26.0 + 0.5, "a missed hook costs double (%.1f -> %.1f)" % [before, p.stamina])
+	# It comes back once you stop throwing.
+	var low := p.stamina
+	await _wait(1.5)
+	_check(p.stamina > low + 10.0, "stamina comes back with a breather (%.1f -> %.1f)" % [low, p.stamina])
+	# Gassed: soft punches.
+	e.global_position = Vector3(0, 0, -1.2)
+	await _until_free(e)
+	p.stamina = 5.0
+	_check(p.is_gassed(), "under a quarter is gassed")
+	var hp := e.hp
+	p.request_attack(&"jab", e)
+	await _until_free(p)
+	_check(is_equal_approx(hp - e.hp, 5.0 * Moves.GASSED_DAMAGE),
+		"a gassed jab hits soft (%.2f)" % (hp - e.hp))
+
+
+func test_jabs_crush_a_guard() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	await _wait(0.1)
+	e.request_block(true, Moves.GUARD_HEAD)
+	await _wait(0.4)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	p.request_attack(&"jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("blocked", false)), "the jab hits the guard")
+	_check(e.stamina < e.max_stamina - 12.0, "and drains it more than it cost (%.1f)" % e.stamina)
+	# Run his tank down: the next one smashes the guard apart.
+	e.stamina = 5.0
+	hits.clear()
+	p.request_attack(&"jab", e)
+	await _wait(0.25)
+	_check(hits.size() == 1 and bool(hits[0].get("guard_crushed", false)) \
+		and not bool(hits[0].get("blocked", false)), "an empty guard is crushed")
+	_check(e.state == Fighter.State.STAGGER, "and he reels, open (%s)" % Fighter.State.keys()[e.state])
+
+
+func test_body_shots_sap_stamina() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	await _wait(0.1)
+	p.request_attack(&"body_hook", e)
+	await _until_free(p)
+	_check(e.stamina <= e.max_stamina - 8.0 * Moves.BODY_SHOT_DRAIN + 0.5,
+		"a body hook takes the wind out of him (%.1f)" % e.stamina)
+
+
+func test_power_shot() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	e.max_hp = 500.0
+	e.hp = 500.0
+	await _wait(0.1)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	# A quick tap is a normal hook.
+	p.request_attack(&"hook", e, 1.0, "", true)
+	p.request_unleash()
+	await _until_free(p)
+	_check(hits.size() == 1 and is_equal_approx(float(hits[0]["damage"]), 11.0),
+		"a tapped hook is a normal hook (%s)" % [hits[0]["damage"] if hits else "none"])
+	await _until_free(e)
+	await _wait(1.0)
+	# Held: it loads, the fighter stays coiled, and let go at full it lands at full power
+	# and goes through a guard.
+	e.request_block(true, Moves.GUARD_HEAD)
+	hits.clear()
+	p.request_attack(&"hook", e, 1.0, "", true)
+	await _wait(0.6)
+	_check(p.state == Fighter.State.WINDUP and p.is_charging(), "holding it loads a power shot")
+	await _wait(0.55)
+	_check(p.charge_fraction() >= 0.99, "fully loaded (%.2f)" % p.charge_fraction())
+	p.request_unleash()
+	await _until_free(p)
+	_check(hits.size() == 1 and not bool(hits[0].get("blocked", false)) \
+		and float(hits[0].get("power", 0.0)) >= 0.95, "full power goes through the guard")
+	if hits.size() == 1:
+		_check(float(hits[0]["damage"]) > 11.0 * 0.6 * 1.5,
+			"and hits much harder (%.1f)" % float(hits[0]["damage"]))
+	# Held too long, it goes on its own.
+	await _until_free(e)
+	await _wait(1.0)
+	hits.clear()
+	p.request_attack(&"uppercut", e, 1.0, "", true)
+	await _wait(Moves.CHARGE_TIME + Moves.CHARGE_HOLD + 0.6)
+	_check(hits.size() == 1, "a power shot held too long goes by itself")
+	# A jab in the face while loading cancels it.
+	await _until_free(e)
+	await _until_free(p)
+	await _wait(1.0)
+	hits.clear()
+	p.request_attack(&"hook", e, 1.0, "", true)
+	await _wait(0.5)
+	e.request_attack(&"jab", p)
+	await _wait(0.3)
+	_check(not p.is_charging() and p.state != Fighter.State.WINDUP and p.state != Fighter.State.ATTACK,
+		"a jab while loading knocks the power shot out of him (%s)" % Fighter.State.keys()[p.state])
+	await _wait(0.6)
+	_check(hits.is_empty(), "and it never lands")
+
+
+func test_punish_a_miss() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	await _wait(0.1)
+	# He swings at thin air (we're stood off to the side of it).
+	p.global_position = Vector3(3.0, 0, 0)
+	e.request_attack(&"hook")
+	await _wait(0.1)
+	while e.state == Fighter.State.WINDUP:
+		await get_tree().physics_frame
+	await _wait(0.12)
+	_check(e.state == Fighter.State.ATTACK, "he's recovering from the miss")
+	p.global_position = Vector3(0, 0, 0)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	var hp := e.hp
+	p.request_attack(&"jab", e)
+	await _wait(0.2)
+	_check(hits.size() == 1 and bool(hits[0].get("punish", false)), "catching him recovering is a punish")
+	_check(is_equal_approx(hp - e.hp, 5.0 * Moves.PUNISH_BONUS), "and hits harder (%.2f)" % (hp - e.hp))
+
+
+func test_player_holds_for_power() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	await _wait(0.1)
+	_check(p.button(&"hook", false, false, false, true), "a held hook button loads a power shot")
+	await _wait(0.6)
+	_check(p.is_charging(), "and the fighter is coiled")
+	p.release_power()
+	await _wait(0.1)
+	_check(p.state == Fighter.State.ATTACK, "letting go throws it")
+	await _until_free(p)
+	_check(not p.button(&"jab", false, false, false, true), "jabs don't load: they're quick")

@@ -3,8 +3,8 @@ extends Node
 ## shows under the player's feet saying how to defend the attack that lands soonest and
 ## which button to press, for the device the player is using ("LB  BLOCK HIGH" for a punch
 ## at the head, "RB  BLOCK LOW" for one at the body, "A  DODGE" for guard breakers: kicks,
-## haymakers, shoves, batons). It turns green on a parry. Respects the "counter_prompts"
-## setting.
+## haymakers, shoves, batons). It turns green on a parry, and calls out power shots,
+## punishes and broken guards. Respects the "counter_prompts" setting.
 ## PlayerFighter adds one of these for the local player.
 
 const COLOURS := {"guard_head": Color(1.0, 0.85, 0.2), "guard_body": Color(1.0, 0.6, 0.15),
@@ -27,6 +27,7 @@ var _hold := 0.0  # seconds left showing "PARRIED"
 func _ready() -> void:
 	Events.attack_telegraphed.connect(_on_telegraphed)
 	Events.attack_countered.connect(_on_countered)
+	Events.hit_landed.connect(_on_hit_landed)
 
 
 func _input(event: InputEvent) -> void:
@@ -64,11 +65,31 @@ func _on_telegraphed(attacker: Node, target: Node, _seconds: float) -> void:
 func _on_countered(defender: Node, _attacker: Node) -> void:
 	if defender != player:
 		return
+	flash("PARRIED!  COUNTER", Color(0.4, 1.0, 0.45))
+
+
+## Show `text` in place of the prompt for `seconds` (call-outs: power shots, punishes).
+func flash(text: String, colour: Color, seconds := 0.6) -> void:
 	var label := _get_label()
-	label.text = "PARRIED!  COUNTER"
-	label.modulate = Color(0.4, 1.0, 0.45)
+	label.text = text
+	label.modulate = colour
 	label.visible = true
-	_hold = 0.6
+	_hold = seconds
+
+
+## Call out what the player just pulled off (or had done to them).
+func _on_hit_landed(info: Dictionary) -> void:
+	if player == null:
+		return
+	if info.get("attacker") == player:
+		if bool(info.get("guard_crushed", false)):
+			flash("GUARD BROKEN", Color(1.0, 0.8, 0.3))
+		elif float(info.get("power", 0.0)) >= 0.95 and not bool(info.get("blocked", false)):
+			flash("FULL POWER", Color(1.0, 0.55, 0.2))
+		elif bool(info.get("punish", false)):
+			flash("PUNISHED", Color(0.4, 1.0, 0.45))
+	elif info.get("victim") == player and bool(info.get("guard_crushed", false)):
+		flash("GUARD CRUSHED", Color(1.0, 0.35, 0.25))
 
 
 ## The one small prompt, under the player's feet. Made on first use.

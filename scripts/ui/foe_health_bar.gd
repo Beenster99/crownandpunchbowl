@@ -3,7 +3,9 @@ extends Node
 ## A subtle health bar on the floor under each punter squaring up to the local player (the
 ## one or two they're fighting), so you can see who's nearly done. It fades in when the
 ## fight starts, follows the punter, and fades out a moment after they leave the fight or
-## go down for good. PlayerFighter adds one of these for the local player.
+## go down for good. A thin strip under it shows their stamina, so you can see when they're
+## gassed and their guard is there for the taking. PlayerFighter adds one of these for the
+## local player.
 
 const WIDTH_PX := 70          ## bar size in texture pixels
 const HEIGHT_PX := 5
@@ -13,6 +15,9 @@ const LINGER := 1.2           ## seconds a bar stays after the fight moves on
 const BG := Color(0, 0, 0, 0.55)
 const FILL := Color(0.86, 0.18, 0.14)
 const FILL_LOW := Color(1.0, 0.55, 0.15)
+const STAMINA_PX := 2         ## stamina strip height, just under the health bar
+const STAMINA_FILL := Color(0.75, 0.85, 0.45)
+const STAMINA_GASSED := Color(1.0, 0.75, 0.2)
 
 var player: Fighter
 
@@ -62,6 +67,11 @@ func _process(delta: float) -> void:
 		fill.region_rect = Rect2(0, 0, maxf(WIDTH_PX * frac, 0.01), HEIGHT_PX)
 		fill.modulate = (FILL_LOW if frac < 0.3 else FILL) * Color(1, 1, 1, float(b["alpha"]))
 		(b["bg"] as Sprite3D).modulate = BG * Color(1, 1, 1, float(b["alpha"]))
+		var st: Sprite3D = b["stamina"]
+		var sfrac := fighter.stamina_fraction()
+		st.region_rect = Rect2(0, 0, maxf(WIDTH_PX * sfrac, 0.01), STAMINA_PX)
+		st.modulate = (STAMINA_GASSED if fighter.is_gassed() else STAMINA_FILL) \
+			* Color(1, 1, 1, float(b["alpha"]) * 0.85)
 		(b["root"] as Node3D).visible = float(b["alpha"]) > 0.01
 		if float(b["alpha"]) <= 0.0 and want == 0.0:
 			(b["root"] as Node3D).queue_free()
@@ -77,7 +87,7 @@ func _exit_tree() -> void:
 
 func _make(f: Fighter) -> Dictionary:
 	if _tex == null:
-		var img := Image.create(WIDTH_PX, HEIGHT_PX, false, Image.FORMAT_RGBA8)
+		var img := Image.create(WIDTH_PX, HEIGHT_PX + STAMINA_PX + 1, false, Image.FORMAT_RGBA8)
 		img.fill(Color.WHITE)
 		_tex = ImageTexture.create_from_image(img)
 	var root := Node3D.new()
@@ -85,11 +95,19 @@ func _make(f: Fighter) -> Dictionary:
 	root.position = Vector3(0, 0.06, 0)  # just off the floor at his feet
 	f.add_child(root)
 	var bg := _sprite(0)
+	bg.region_enabled = true
+	bg.region_rect = Rect2(0, 0, WIDTH_PX, HEIGHT_PX + STAMINA_PX + 1)
+	bg.offset.y = -(STAMINA_PX + 1)
 	var fill := _sprite(1)
 	fill.region_enabled = true
+	var stamina := _sprite(1)
+	stamina.region_enabled = true
+	stamina.offset.y = -(STAMINA_PX + 1)
 	root.add_child(bg)
 	root.add_child(fill)
-	return {"root": root, "fill": fill, "bg": bg, "alpha": 0.0, "seen": LINGER}
+	root.add_child(stamina)
+	return {"root": root, "fill": fill, "bg": bg, "stamina": stamina, "alpha": 0.0,
+		"seen": LINGER}
 
 
 func _sprite(priority: int) -> Sprite3D:

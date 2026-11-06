@@ -54,6 +54,10 @@ var _look_at: Vector3 = Vector3.INF
 var _recover_t := 0.0     # backing off after an exchange
 var _guard_t := 0.0       # seconds left covering up
 var _read_windup := false # already reacted to the foe's current wind-up
+var _pressure := 0.0      # recent punches taken (blocked or not); makes them cover up
+var _cover_zone: StringName = &""  # cover up with this guard as soon as we're free
+var _counter_pending := false      # fire a counter jab off the guard
+var _winded := false      # gassed: back off and breathe until the tank's half full
 ## Talked down (Npc.hear_words): seconds left where it won't volunteer to rejoin the fight.
 var _settled_t := 0.0
 var _pleas := 0.0         # recent attempts to talk this NPC down; each one works less
@@ -85,6 +89,7 @@ func _ready() -> void:
 	crawl_fraction = float(_type["crawl_fraction"])
 	hold_resist = float(_type.get("hold_resist", 0.0))
 	parry_skill = float(_type.get("parry", 0.0))
+	max_stamina = float(_type.get("stamina", Moves.STAMINA))
 	_rng.seed = hash(String(name)) ^ hash(kind)
 	_strafe = 1.0 if _rng.randf() < 0.5 else -1.0
 	_attack_cd = _rng.randf_range(0.3, 1.0)
@@ -176,7 +181,19 @@ func _on_hit_taken(info: Dictionary) -> void:
 	if not multiplayer.is_server():
 		return
 	_quiet_t = 0.0
-	if float(info.get("damage", 0.0)) > 0.0 and not bool(info.get("blocked", false)) \
+	var blocked := bool(info.get("blocked", false))
+	if not bool(info.get("slipped", false)):
+		_pressure += 1.0
+	var defence := float(_type.get("defence", 0.0))
+	if blocked and not bool(info.get("parried", false)) and mood == Mood.ENGAGED \
+			and _rng.randf() < float(_type.get("counter", 0.0)):
+		_counter_pending = true  # took it on the gloves: fire one straight back
+	elif not blocked and mood == Mood.ENGAGED and _pressure >= 1.5 \
+			and _rng.randf() < defence + 0.25:
+		# Getting tagged repeatedly: shell up where it's coming from.
+		var zone := StringName(info.get("zone", Moves.GUARD_HEAD))
+		_cover_zone = Moves.GUARD_HEAD if zone == Moves.GUARD_HEAD else Moves.GUARD_BODY
+	if float(info.get("damage", 0.0)) > 0.0 and not blocked \
 			and mood == Mood.ENGAGED and _rng.randf() < 0.6:
 		# Rocked: back off and get the guard up before coming again.
 		_recover_t = maxf(_recover_t, _rng.randf_range(0.7, 1.5))
@@ -361,6 +378,11 @@ func _think(delta: float) -> void:
 	_pleas = maxf(_pleas - delta / 12.0, 0.0)
 	_face_t = maxf(_face_t - delta, 0.0)
 	_recover_t = maxf(_recover_t - delta, 0.0)
+	_pressure = maxf(_pressure - delta * 0.6, 0.0)
+	if is_gassed():
+		_winded = true
+	elif stamina_fraction() > 0.6:
+		_winded = false
 	rushing = maxf(rushing - delta, 0.0)
 	if rushing <= 0.0:
 		rush_grab = false
@@ -388,6 +410,11 @@ func _think(delta: float) -> void:
 			pass
 		State.BLOCK:
 			_guard_t -= delta
+			if _counter_pending and foe != null and is_instance_valid(foe) \
+					and _flat_dist(foe) < 1.7 and foe.can_be_targeted():
+				_counter_pending = false
+				request_attack(&"counter_jab", foe)
+				return
 			if _guard_t <= 0.0 or mood != Mood.ENGAGED or team == Team.STAFF:
 				request_block(false)
 				return
@@ -491,12 +518,25 @@ func _think_engaged(delta: float) -> void:
 		foe = null
 		return
 	_look_at = foe.global_position
+	_counter_pending = false
+	if _cover_zone != &"":
+		var zone := _cover_zone
+		_cover_zone = &""
+		_drop_token()
+		request_block(true, zone)
+		_guard_t = _rng.randf_range(0.8, 1.4)
+		return
 	if _read_foe():
 		return
 	var to := foe.global_position - global_position
 	to.y = 0.0
 	var d := to.length()
 	var dir := to / d if d > 0.01 else get_facing()
+	if _winded and rushing <= 0.0:
+		# Blowing hard: get out of range and get some air back in before going again.
+		_drop_token()
+		_back_off(foe, 0.6)
+		return
 	if _recover_t > 0.0 and rushing <= 0.0:
 		_back_off(foe, 0.7)
 		return
@@ -554,7 +594,9 @@ func _read_foe() -> bool:
 	if _read_windup:
 		return false
 	_read_windup = true
-	if _rng.randf() >= float(_type.get("defence", 0.0)):
+	# Under pressure they get warier: a man who's been tagged keeps his hands up.
+	var defence := float(_type.get("defence", 0.0)) + minf(_pressure * 0.12, 0.35)
+	if _rng.randf() >= defence:
 		return false  # didn't see it coming
 	_drop_token()
 	var away := global_position - foe.global_position

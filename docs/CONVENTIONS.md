@@ -192,6 +192,20 @@ Rules other workstreams rely on:
 - **Going down.** Poise is high (`Moves.POISE`) and recovers fast after `POISE_REGEN_DELAY`;
   hits on a staggered man chip less (`STAGGER_POISE_SCALE`). One punch doesn't drop a fresh man.
 - **No chasing.** A move steps in at most `Moves.MAX_LUNGE_STEP`; further away it whiffs.
+- **Stamina** (`Fighter.stamina` / `max_stamina`, `stamina_fraction()`, `is_gassed()`). Every
+  strike costs its move's `stamina` (a whiff the same again), blocked hits drain the blocker by
+  the move's `guard_drain` (jabs drain far more than they cost), body shots drain
+  `damage * BODY_SHOT_DRAIN`. It regenerates after `STAMINA_REGEN_DELAY` when not striking (half
+  rate behind a guard). Under `GASSED`: damage, wind-up and footwork suffer. A guard hit with
+  no stamina left is crushed (`guard_crushed: true`, stagger `GUARD_CRUSH_STAGGER`). Costs are
+  applied on every peer from the replicated move RPCs; host-side drains go out by `_rpc_stamina`.
+- **Power shots.** `request_attack(..., hold = true)` on a `chargeable` move (hooks, uppercuts)
+  keeps the fighter in WINDUP after the wind-up, loading (`is_charging()`, `charge_fraction()`,
+  `power_charging` signal) until `request_unleash()` or `CHARGE_TIME + CHARGE_HOLD`. Damage,
+  stagger and poise scale up to `POWER_MAX`; full charge breaks guards. Being hit cancels it.
+  Hits carry `power` (the charge fraction).
+- **Punishes.** A hit on a fighter in the recovery of their own strike does `PUNISH_BONUS` and
+  carries `punish: true`. Parry and slip counters do `COUNTER_BONUS`.
 - **Stance.** `in_stance` / `stance_changed` say when a fighter is squared up for a fight
   (an exchange in the last `STANCE_HOLD` seconds or, for players, an active enemy within
   `ENGAGE_RANGE`). Animations can use it to pick a relaxed idle or a guard.
