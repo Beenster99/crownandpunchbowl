@@ -17,10 +17,12 @@ into ragdolls.
 `tools/blender/build_characters.py` builds every model from the look data. No hand-made art
 files are needed, and changing a look and rebuilding takes about a minute for all 15.
 
-- **Bodies** are a quick procedural sculpt: ellipsoids and capsules for the torso, belly,
-  limbs and fists are voxel-remeshed into one watertight surface, smoothed so the joins
+- **Bodies** are a quick procedural sculpt: ellipsoids and capsules for the torso, belly
+  and limbs are voxel-remeshed into one watertight surface, smoothed so the joins
   fillet, and decimated. Each body part is remeshed separately so an arm never welds to
   the torso, and the part is remembered per vertex so skin weights never bleed across.
+- **Hands** are their own finer sculpt: a palm, four fingers and a thumb, so fists clench,
+  hands open to grab and fingers wrap a pint.
 - **Heads** are sculpted the same way (cranium, jaw, brow ridge, cheeks, chin) with a
   separate nose on its own bone, ears, lips, eyebrows and eyes.
 - **Clothes, hair and beards** are shells grown off the body or head surface (gilets,
@@ -32,8 +34,13 @@ files are needed, and changing a look and rebuilding takes about a minute for al
 - **Variants**: optional pieces are separate meshes called `Hair_<STYLE>`, `Beard_<STYLE>`,
   `Hat_<STYLE>` and `Top_<TYPE>`. Each crowd model carries every piece its type can roll,
   and Godot shows the ones that match. `Blood_*` meshes appear as a fighter gets hurt.
-- **Armature**: `Hips`, `Spine`, `Chest`, `Neck`, `Head`, `Nose`, `Shoulder/Elbow/Hand` and
-  `Hip/Knee/Foot` with L and R. All models share these names.
+- **Armature** (all models share these names, L and R where paired):
+  - spine and head: `Hips`, `Spine`, `Spine2`, `Chest`, `Neck`, `Head`
+  - face: `Nose`, `Jaw` (opens the mouth, carries the chin and beard), `BrowL`/`BrowR`
+    (pivot at the outer end, so a twist frowns or winces)
+  - arms: `Clavicle`, `Shoulder`, `Elbow`, `Hand`
+  - fingers: `Thumb1/2`, `Index1/2`, `Fingers1/2` (middle, ring and little finger together)
+  - legs: `Hip`, `Knee`, `Foot`
 
 Rebuild after changing `CharacterLooks`:
 
@@ -146,7 +153,8 @@ These names are the contract with gameplay. Real art must keep them.
   `idle_chat`, `idle_polish`, `walk_relaxed`, `punch_l`, `punch_r`, `kick`,
   `headbutt`, `windup`, `swing`, `throw`, `grab`, `hold`, `held_struggle`, `hit_front`,
   `hit_back`, `stagger`, `knockdown`, `down`, `get_up`, `crawl`, `ko`, `drink`, `eat`,
-  `dodge`, `cheer`, `taunt`, `block`, `hook_l`, `uppercut_r`.
+  `dodge`, `cheer`, `taunt`, `block`, `hook_l`, `hook_r`, `uppercut_r`, `hit_left`,
+  `hit_right`.
 - **Fighter states** map one to one (`CharacterRig.STATE_ANIMS`):
 
   | State | Animation | Notes |
@@ -162,36 +170,70 @@ These names are the contract with gameplay. Real art must keep them.
   | GRABBING | `grab` then `hold` | |
   | DODGE | `dodge` | Duck and weave |
 
-- **Moves** (`CharacterRig.MOVE_ANIMS`): every move id in `scripts/combat/moves.gd` (jab, cross,
-  hook, uppercut, haymaker, kick, knee, stomp, headbutt, counter, shove, throw, swing, baton)
-  maps to an animation. Until there are dedicated ones, several share the nearest animation.
+- **Moves** (`CharacterRig.MOVE_ANIMS`): every move id in `scripts/combat/moves.gd` maps to
+  an animation. The boxing set is distinct: jab `punch_l`, cross `punch_r`, hook `hook_r`
+  (`hook_l` for the lead hand) and uppercut `uppercut_r`. A few others still share the
+  nearest one (haymaker, counter and shove use the punches; knee and stomp use the kick).
+- **Hit reactions**: `play_hit(from_front, heavy, direction)` picks `stagger` for heavy blows,
+  `hit_back` from behind, `hit_left`/`hit_right` when the blow comes across (a hook whips the
+  head round) and `hit_front` for a straight shot.
 - **Chains**: `knockdown` → `down`, `grab` → `hold`. Attacks, hit reacts, `get_up`,
   `drink`, `eat`, `cheer` and `taunt` return to idle (turn off with `auto_return_to_idle`).
 - **Sockets** (`get_socket`): `hand_r`, `hand_l`, `head`, `chest`, `hold_point` (where a
   held enemy goes, in front of the chest).
 
-### Timings (placeholder)
+### Timings
 
-| Animation | Length | Contact frame |
-| --- | --- | --- |
-| `punch_l` / `punch_r` | 0.42 s | 0.16 s |
-| `kick` | 0.6 s | 0.22 s |
-| `headbutt` | 0.55 s | 0.25 s |
-| `swing` | 0.7 s | 0.33 s |
-| `throw` | 0.6 s | release at 0.3 s |
-| `windup` | 0.5 s | holds |
-| `drink` / `eat` | 1.6 s | heal at about 1.1 s |
+Every strike has a **load** (the end of its wind-up: weight back, the punching side coiled)
+and a **contact** (the blow lands). `rig.load_time(anim)` and `rig.contact_time(anim)` return
+them, so combat can stretch the wind-up to fill a move's telegraph and release on time.
 
-Combat owns the real timing. If it needs different numbers, change the keys in
-`CharacterRig._anim_defs()` and update this table.
+| Animation | Length | Load | Contact |
+| --- | --- | --- | --- |
+| `punch_l` (jab) | 0.38 s | 0.06 s | 0.10 s |
+| `punch_r` (cross) | 0.46 s | 0.08 s | 0.13 s |
+| `hook_l` / `hook_r` | 0.52 s | 0.10 s | 0.16 s |
+| `uppercut_r` | 0.6 s | 0.13 s | 0.19 s |
+| `kick` | 0.62 s | 0.14 s | 0.22 s |
+| `headbutt` | 0.56 s | 0.16 s | 0.24 s |
+| `swing` | 0.72 s | 0.22 s | 0.32 s |
+| `throw` | 0.6 s | 0.18 s | release at 0.3 s |
+| `windup` | 0.55 s | 0.55 s (holds) | |
+| `drink` / `eat` | 1.6 s | | heal at about 1.1 s |
+
+To retime a strike, move its keys in `CharacterRig._anim_defs()` along with its `load` and
+`contact`, and update this table.
 
 ## How the animations work
 
-The 25 animations are pose data in `CharacterRig._anim_defs()` (joint rotations in the
-character's own axes). At load time they are retargeted onto each model's skeleton:
-a bone's pose rotation is `rest_local * (M⁻¹ q M)`, where M is the bone's rest orientation.
-That means one set of animation data drives every model, whatever its proportions. A
+The animations are pose data in `CharacterRig._anim_defs()`: joint rotations in the
+character's own axes, keyed in time. At load time they are retargeted onto each model's
+skeleton (a bone's pose rotation is `rest_local * (M⁻¹ q M)`, where M is the bone's rest
+orientation), so one set of data drives every model whatever its proportions. A
 hand-keyed Blender action could later replace any of them by name.
+
+What makes them move like a person rather than a puppet:
+
+- **Splines and eases.** Poses are baked at 30 fps. Between keys the motion follows a spline
+  through the neighbouring keys, so it never stops dead at a key. A key can ask for an ease
+  on the way in: `"io"` settles into it (loads, holds), `"snap"` accelerates into it (the
+  impact), `"out"` decelerates (recoveries), `"lin"` is even.
+- **Follow-through.** Joints further from the hips trail a little (`OVERLAP`): the hips
+  lead, then the chest, the head, the jaw and the fingers. A punch starts in the legs and a
+  blow rolls up into the head.
+- **Filled-in joints.** `_expand()` shares a spine bend over `Spine` and `Spine2` and a head
+  turn with the neck, moves the collarbones with the arms (a punch reaches with the
+  shoulder), plants the feet flat, and drives the hands and face from a few scalars:
+  `_fistL`/`_fistR` (0 open, 1 clenched), `_jaw` (0 shut, 1 wide), `_brow` (+1 scowl, -1
+  wince) and `_heelL`/`_heelR` (lift the heel, the pivot on a cross).
+- **Weight.** Every punch loads first (weight back, the punching side coiled), drives from
+  the hips with a pivot on the foot, holds a beat at full extension and settles back into
+  a bladed boxing guard. Hits snap the head away, then a stagger step catches the weight.
+
+![Guard, jab, cross load and contact, lead and rear hooks, uppercut load and contact, the haymaker chamber, block, a straight hit and a hook to the head](images/characters_fighting.jpg)
+
+Baking is the slow part (about 0.1 s per model), so characters built from the same model
+share one animation library.
 
 ## Performance
 
@@ -208,6 +250,9 @@ and Godot generates LODs on import, so a crowd in the high camera draws far fewe
   `Parameter "material" is null` lines.
 - `xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_characters.gd -- <dir>`
   renders the line-up to PNGs, which is how the images in this file were made.
+- `xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_moves.gd -- <out.png> tom side punch_r@0,0.08,0.13,0.19,0.3`
+  renders one character through a move as a contact sheet (views: side, front, top, three,
+  close), for judging wind-ups, contact and recovery.
 
 ![Actions: punch, headbutt, kick, drink](images/characters_actions.jpg)
 

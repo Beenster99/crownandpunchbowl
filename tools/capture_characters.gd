@@ -3,14 +3,26 @@ extends SceneTree
 ## xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_characters.gd -- <out_dir>
 
 const SHOTS := [
-	["idle", 0.6, true, false],
-	["punch_r", 0.18, true, false],
+	["idle", 0.0, true, false],
+	["punch_l", 0.1, true, false],
+	["punch_r", 0.08, true, false],
+	["punch_r", 0.13, true, false],
+	["hook_l", 0.1, true, false],
+	["hook_l", 0.16, true, false],
+	["hook_r", 0.16, true, false],
+	["uppercut_r", 0.13, true, false],
+	["uppercut_r", 0.19, true, false],
+	["windup", 0.55, true, false],
+	["block", 0.0, true, false],
+	["hit_front", 0.12, true, false],
+	["hit_left", 0.14, true, false],
+	["stagger", 0.3, true, false],
 	["headbutt", 0.27, true, false],
 	["crawl", 0.9, true, true],
 	["ko", 1.0, false, true],
 	["hold", 0.3, true, false],
 	["drink", 0.8, true, false],
-	["kick", 0.3, true, false],
+	["kick", 0.22, true, false],
 	["ragdoll", 2.5, true, true],
 	["ragdoll", 0.0, false, true],
 	["idle", 0.6, false, false],
@@ -58,7 +70,7 @@ func _initialize() -> void:
 		await process_frame
 		await RenderingServer.frame_post_draw
 		var img := root.get_texture().get_image()
-		var path := "%s/%s_%s.png" % [out, shot[0], "close" if shot[2] else "game"]
+		var path := "%s/%s_%s_%s.png" % [out, shot[0], str(int(shot[1] * 100)), "close" if shot[2] else "game"]
 		img.save_png(path)
 		print("saved ", path)
 	quit(0)
