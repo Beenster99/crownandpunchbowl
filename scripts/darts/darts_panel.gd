@@ -203,7 +203,7 @@ func refresh() -> void:
 	_finish_btn.text = "Double out" if g.double_out else "Straight out"
 	_start_btn.text = "Start game" if g.players.size() > 1 else "Start (practice on your own)"
 	_hint.text = "Aim: move or mouse.  Throw: %s, left click, %s or %s.  Step away: %s." % [
-		_key("throw"), _key("punch_left") if Settings.device == "pad" else "Space", "Enter", _key("interact")]
+		_key("throw"), _key(_pad_throw_action()) if Settings.device == "pad" else "Space", "Enter", _key("interact")]
 
 	if my_turn and not _was_turn:
 		aim = DartsRules.target_point(20, 3)
@@ -244,11 +244,16 @@ func _process(delta: float) -> void:
 		aim += stick * AIM_SPEED * delta
 		aim = aim.limit_length(DartsRules.R_BOARD)
 		var pressed := Input.is_action_just_pressed("throw") \
-			or (Settings.device == "pad" and Input.is_action_just_pressed("punch_left")) \
+			or (Settings.device == "pad" and Input.is_action_just_pressed(_pad_throw_action())) \
 			or (Input.is_action_just_pressed("ui_accept") and get_viewport().gui_get_focus_owner() == null)
 		if pressed:
 			throw()
 	_view.queue_redraw()
+
+
+## The pad's jab button (X) throws too. Named "jab" since the controls rework, "punch_left" before.
+func _pad_throw_action() -> String:
+	return "jab" if InputMap.has_action("jab") else "punch_left"
 
 
 ## Throws at where the reticle is now (aim plus wobble).
