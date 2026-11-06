@@ -66,14 +66,17 @@ func _initialize() -> void:
 	for i in 10:
 		dummy.global_position += Vector3(0.1, 0, 0)
 		await process_frame
-	await create_timer(1.2, true, false, true).timeout
+	# Sample while waiting: short groans can finish before any single check.
+	var speaking := 0
+	var until := Time.get_ticks_msec() + 1600
+	while Time.get_ticks_msec() < until:
+		for p in fx.get_children():
+			if p is AudioStreamPlayer3D and p.playing:
+				speaking += 1
+		await process_frame
 	_check(is_equal_approx(Engine.time_scale, 1.0), "hit-stop never released (time_scale %s)" % Engine.time_scale)
 	_check(dummy.get_node_or_null("FxFaceBlood") != null, "no bloody face decal")
 	_check(fx.blood.decal_count() > 0, "no floor blood decals")
-	var speaking := 0
-	for p in fx.get_children():
-		if p is AudioStreamPlayer3D and p.playing:
-			speaking += 1
 	_check(speaking > 0, "nothing is playing")
 
 	events.fighter_knocked_out.emit(dummy)
@@ -125,6 +128,8 @@ func _initialize() -> void:
 	_check(_count_particles() == p_before, "blocked or parried hit drew blood")
 	_check(blocker.get_node_or_null("FxFaceBlood") == null, "blocked hit bloodied the face")
 	_check(fx.bark(player, "taunt", 3, true), "player couldn't bark a taunt")
+	target.set_meta("voice_id", "posh_m1")
+	_check(not fx.bark(target, "hurt", 1), "two spoken lines back to back (barks should be occasional)")
 
 	# 3. Blood off means no new blood.
 	settings.values["gameplay"]["blood"] = 0
