@@ -70,7 +70,7 @@ const GLASS_WORDS := ["bottle", "glass", "pint", "jug", "mirror", "window"]
 @export var clean_shake := 0.3
 
 @export_group("Blood")
-@export var face_blood_per_face_hit := 0.12
+@export var face_blood_per_face_hit := 0.05
 @export var crawl_smear_step := 0.45
 
 @export_group("Falls")
@@ -426,7 +426,7 @@ func _on_nose_broken(fighter: Node) -> void:
 	play("blood_splat", head)
 	_later(0.12, say.bind(fighter, "groan", 2), fighter)
 	blood.spray(head + fwd * 0.2, fwd + Vector3.DOWN * 0.3, 1.8)
-	blood.add_face_blood(fighter, 0.6)
+	blood.add_face_blood(fighter, 0.3)
 	# A nosebleed keeps dripping for a bit.
 	for i in 4:
 		_later(0.6 + i * 0.5, func():
@@ -450,7 +450,7 @@ func _on_knocked_down(fighter: Node) -> void:
 func _on_crawling(fighter: Node) -> void:
 	if not _valid(fighter):
 		return
-	blood.add_face_blood(fighter, 0.8)
+	blood.add_face_blood(fighter, 0.2)
 	var now := Time.get_ticks_msec() / 1000.0
 	_crawlers[fighter.get_instance_id()] = {
 		"fighter": fighter, "next": now + randf_range(0.6, 1.2),
@@ -542,7 +542,7 @@ func _on_fell(fighter: Node, height: float) -> void:
 	var amount := clampf(h * fall_blood_per_metre, 0.4, 2.0)
 	blood.spray(feet + Vector3.UP * 0.3, Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)), amount)
 	blood.floor_decal(Vector3(head.x, feet.y, head.z), randf_range(0.5, 0.8) * minf(amount, 1.5), "splat")
-	blood.add_face_blood(fighter, clampf(h * 0.12, 0.1, 0.5))
+	blood.add_face_blood(fighter, clampf(h * 0.06, 0.05, 0.25))
 	var local := _is_local_player(fighter)
 	shake(clampf(h * fall_shake_per_metre, shake_light, 1.0) * (shake_local_victim if local else 1.0))
 	if local:

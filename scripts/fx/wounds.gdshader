@@ -18,6 +18,11 @@ uniform sampler2D skin_texture : source_color, filter_linear_mipmap, repeat_enab
 uniform bool use_texture = false;
 uniform vec4 skin_tint : source_color = vec4(0.8, 0.6, 0.5, 1.0);
 uniform float blood = 1.0;          // 0 with gore off: cuts show as scabs, no trickle
+// Nosebleed and split-mouth blood (BloodFx face blood, 0..1): a smear under the nose and
+// at the mouth with thin runs down to the chin. Stays on those spots, never the whole head.
+uniform float face_blood = 0.0;
+uniform int nose_spot = -1;
+uniform int lip_spot = -1;
 
 varying vec3 rest;
 varying float puff;
@@ -125,6 +130,38 @@ void fragment() {
 						* step(0.0, below) * (1.0 - step(run, below));
 					wet = max(wet, drip * blood * 0.95);
 				}
+			}
+		}
+	}
+	if (face_blood > 0.0 && blood > 0.0) {
+		vec3 up = vec3(0.0, 1.0, 0.0);
+		for (int s = 0; s < 2; s++) {
+			int i = s == 0 ? nose_spot : lip_spot;
+			if (i < 0 || i >= spot_count) continue;
+			vec3 o = spot_out[i].xyz;
+			float r = spot_pos[i].w;
+			// Under the nose (or on the lip): a small wet patch, ragged at the edge.
+			vec3 c = spot_pos[i].xyz - up * r * (s == 0 ? 0.9 : 0.1);
+			vec3 q = rest - c;
+			// Measured across the face, not into it: the nose tip stands well proud of the lip.
+			vec3 qf = q - o * dot(q, o);
+			float patch = bump(length(qf * vec3(1.0, 1.5, 1.0)), r * (0.5 + 0.6 * face_blood) * (0.75 + 0.5 * n1));
+			wet = max(wet, clamp(patch * 3.0, 0.0, 1.0) * (0.55 + 0.4 * face_blood));
+			// Runs: two from the nostrils, one from a mouth corner, longer as it builds.
+			for (int k = 0; k < 2; k++) {
+				if (s == 1 && k == 1) break;
+				float off = s == 0 ? (k == 0 ? -0.4 : 0.4) : 0.55;
+				vec3 side_dir = normalize(cross(up, o));
+				vec3 q2 = q - side_dir * off * r;
+				float below = -dot(q2, up);
+				float run = (0.012 + 0.05 * face_blood) * (s == 0 ? 1.0 : 0.7);
+				vec3 side = q2 - up * dot(q2, up) - o * dot(q2, o);
+				float wob = sin(below * 160.0 + float(k + s * 2) * 2.3) * 0.0008 + (n1 - 0.5) * 0.001;
+				float along = clamp(below / run, 0.0, 1.0);
+				float tw = (0.0022 + 0.0016 * face_blood) * (1.0 - along * 0.5) + 0.001 * smoothstep(0.85, 1.0, along);
+				float drip = (1.0 - smoothstep(tw * 0.5, tw, abs(length(side) + wob)))
+					* step(0.0, below) * (1.0 - step(run, below));
+				wet = max(wet, drip * 0.95);
 			}
 		}
 	}

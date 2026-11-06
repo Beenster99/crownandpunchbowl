@@ -18,12 +18,12 @@ const MAX_AGE := 4.0
 var max_drops := 900
 var max_marks := 1600
 ## Drag per second for a 1 mm droplet; bigger drops get proportionally less.
-var drag_mm := 6.0
+var drag_mm := 3.0
 ## How big a mark is compared with the droplet that made it.
-var mark_scale := 10.0
+var mark_scale := 14.0
 ## Droplets in flight are drawn this much bigger than they are, or the camera (11 to 20 m
 ## away) would never see them.
-var air_scale := 3.5
+var air_scale := 5.0
 
 var _pos := PackedVector3Array()
 var _vel := PackedVector3Array()
@@ -165,7 +165,7 @@ func _land(at: Vector3, normal: Vector3, v: Vector3, r: float) -> void:
 	var along := v - n * v.dot(n)  # travel across the surface
 	# Hitting at a shallow angle stretches the mark into a streak.
 	var cos_in := absf(v.dot(n)) / maxf(speed, 0.001)
-	var stretch := clampf(1.0 / maxf(cos_in, 0.25), 1.0, 4.0)
+	var stretch := clampf(1.0 / maxf(cos_in, 0.3), 1.0, 3.0)
 	var size := r * mark_scale * clampf(0.8 + speed * 0.06, 0.8, 1.5)
 	var z := along.normalized() if along.length() > 0.01 else n.cross(Vector3.RIGHT if absf(n.x) < 0.9 else Vector3.FORWARD).normalized()
 	var x := n.cross(z).normalized()
