@@ -44,6 +44,12 @@ const MENU_SCENE := "res://scenes/main/main_menu.tscn"
 const SPAWNED_GROUP := "net_spawned"
 ## Seconds a join waits for the host before giving up with a useful message.
 const JOIN_TIMEOUT := 10.0
+## How long (ms) a connected peer may go silent before ENet drops it. ENet's default
+## minimum is 5 s, and the host can freeze that long building a pub's crowd (every new
+## character bakes its animations), which used to drop clients at the start of a pub.
+## Players who quit still leave at once; only a crashed or unplugged peer takes longer.
+const PEER_TIMEOUT_MIN := 20000
+const PEER_TIMEOUT_MAX := 40000
 
 ## peer_id -> {"name": String, "farmer": int, "ready": bool}
 var players := {}
@@ -403,11 +409,12 @@ func _sync_lobby(new_players: Dictionary, pub_index: int, difficulty_index: int)
 
 # --- Connection events ------------------------------------------------------------
 
-func _on_peer_connected(_id: int) -> void:
-	pass  # Clients register themselves with _register; nothing to do until then.
+func _on_peer_connected(id: int) -> void:
+	_be_patient(id)  # Clients register themselves with _register; nothing else until then.
 
 
 func _on_connected_to_server() -> void:
+	_be_patient(1)
 	_register.rpc_id(1, PROTOCOL_VERSION, _local_name, _local_farmer)
 
 
@@ -440,6 +447,16 @@ func _on_server_disconnected() -> void:
 	leave()
 	server_disconnected.emit()
 	get_tree().change_scene_to_file(MENU_SCENE)
+
+
+## Lets a connected peer ride out a long frame on either side (see PEER_TIMEOUT_MIN).
+func _be_patient(id: int) -> void:
+	var enet := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if enet == null:
+		return
+	var p := enet.get_peer(id)
+	if p != null:
+		p.set_timeout(0, PEER_TIMEOUT_MIN, PEER_TIMEOUT_MAX)
 
 
 # --- Host addresses and router port ------------------------------------------------
