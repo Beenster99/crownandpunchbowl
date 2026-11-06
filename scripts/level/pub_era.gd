@@ -2,14 +2,16 @@ class_name PubEra
 extends RefCounted
 ## Era styles for the village pubs: colours, floor pattern, ceiling height and lighting.
 ## Each pub picks one with `PubEra.get_style(id)` and the PubBuilder reads it when
-## making walls, floors and lights. Greybox values; the art pass replaces the colours
-## with real materials but should keep these keys.
+## making walls, floors and lights. The colours tint PubMaterials texture sets: `wall_tex`
+## and `dado_tex` name the sets for the upper wall and the dado, and timber, trim, bar
+## and furniture colours get wood grain.
 
 const STYLES := {
 	# Low, dark and smoky: flagstones, whitewash between oak framing, low beams,
 	# a big inglenook and candle/fire light.
 	"17th": {
 		"label": "17th century",
+		"wall_tex": "plaster", "dado_tex": "plaster",
 		"wall_height": 2.7,
 		"floor": "flagstone", "floor_a": Color("6d675f"), "floor_b": Color("57524b"),
 		"wall": Color("d8cdb4"), "dado": Color("d8cdb4"), "trim": Color("3a2414"),
@@ -23,6 +25,7 @@ const STYLES := {
 	# Georgian: wide oak boards, painted walls over panelled dado, sash windows, brass.
 	"18th": {
 		"label": "18th century",
+		"wall_tex": "plaster", "dado_tex": "panelling",
 		"wall_height": 3.2,
 		"floor": "boards", "floor_a": Color("7a5232"), "floor_b": Color("6a4529"),
 		"wall": Color("8fa08a"), "dado": Color("4f5e4c"), "trim": Color("e7e0cc"),
@@ -37,8 +40,9 @@ const STYLES := {
 	# a big carved back bar.
 	"19th": {
 		"label": "19th century",
+		"wall_tex": "wallpaper", "dado_tex": "glazed_tile",
 		"wall_height": 3.4,
-		"floor": "tiles", "floor_a": Color("6e3226"), "floor_b": Color("bfb194"),
+		"floor": "slate", "floor_a": Color("30363c"), "floor_b": Color("272c31"),
 		"wall": Color("b9a27a"), "dado": Color("2f5a43"), "trim": Color("6b1f1f"),
 		"timber": Color("4a1d12"), "bar": Color("5a2215"), "bar_top": Color("2b0f08"),
 		"furniture": Color("4f2416"), "accent": Color("d6b25e"),

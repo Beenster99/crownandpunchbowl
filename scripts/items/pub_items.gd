@@ -68,8 +68,8 @@ func _exit_tree() -> void:
 
 
 ## Place a starting prop. Call on every peer in the same order (the pub's _ready does).
-func add_item(kind: StringName, pos: Vector3, yaw := 0.0) -> PubItem:
-	var item := _make(kind, "I%d" % _next_id, pos, -1)
+func add_item(kind: StringName, pos: Vector3, yaw := 0.0, variant := "") -> PubItem:
+	var item := _make(kind, "I%d" % _next_id, pos, -1, variant)
 	item.rotation.y = yaw
 	_next_id += 1
 	return item
@@ -94,9 +94,10 @@ func _rpc_spawn(kind: StringName, item_name: String, pos: Vector3, ammo: int) ->
 		_make(kind, item_name, pos, ammo)
 
 
-func _make(kind: StringName, item_name: String, pos: Vector3, ammo: int) -> PubItem:
+func _make(kind: StringName, item_name: String, pos: Vector3, ammo: int, variant := "") -> PubItem:
 	var item := PubItem.new()
 	item.kind = kind
+	item.variant = variant
 	item.ammo = ammo
 	item.name = item_name
 	item.position = pos

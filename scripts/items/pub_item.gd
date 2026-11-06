@@ -20,6 +20,8 @@ const GROUP := &"items"
 const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.45)
 
 @export var kind: StringName = &"bottle"
+## Which model to show (a PropLibrary variant name). Empty picks one from the start position.
+@export var variant := ""
 ## Darts in the set. -1 takes the kind's default.
 @export var ammo := -1
 
@@ -38,6 +40,7 @@ var _travelled := 0.0
 var _ground_y := 0.0
 var _break_pending := false
 var _mesh: MeshInstance3D
+var _model_centre := Vector3.ZERO  # centre of a PropLibrary model's bounds (zero for primitives)
 var _outline: StandardMaterial3D
 var _highlight := 0
 ## Physics body that carries the item while it's loose (PubPhysics). Top-level, so the
@@ -310,6 +313,7 @@ func _fly(delta: float) -> void:
 	_travelled += Vector2(to.x - from.x, to.z - from.z).length()
 	if _mesh != null:
 		_mesh.rotate_x(-delta * 14.0)
+		_mesh.position = -(_mesh.basis * _model_centre)  # spin models round their middle
 	if not multiplayer.is_server():
 		to.y = maxf(to.y, _ground_y)
 		global_position = to
@@ -421,6 +425,7 @@ func _lie_at(pos: Vector3) -> void:
 			global_position.y += minf(bs.size.x, bs.size.z) * 0.5  # on the floor, not in it
 	if _mesh != null:
 		_mesh.rotation = Vector3.ZERO
+		_mesh.position = -_model_centre
 	if body != null:
 		body.global_transform = global_transform
 		body.linear_velocity = Vector3.ZERO
@@ -451,6 +456,9 @@ func _follow_holder() -> void:
 func set_highlight(level: int) -> void:
 	if _mesh == null or level == _highlight:
 		return
+	if _mesh.material_override == null:
+		_set_model_highlight(level)
+		return
 	_highlight = level
 	var mat := _mesh.material_override as StandardMaterial3D
 	if mat == null:
@@ -475,6 +483,31 @@ func set_highlight(level: int) -> void:
 	mat.next_pass = _outline
 
 
+## Models (PropLibrary) share their materials, so the glint and outline go in an overlay.
+func _set_model_highlight(level: int) -> void:
+	_highlight = level
+	if level <= 0 or mode != Mode.LOOSE:
+		_mesh.material_overlay = null
+		_highlight = 0
+		return
+	if _outline == null:
+		_outline = StandardMaterial3D.new()
+		_outline.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_outline.cull_mode = BaseMaterial3D.CULL_FRONT
+		_outline.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_outline.grow = true
+		_outline.render_priority = 1
+	_outline.grow_amount = 0.012 if level == 1 else 0.03
+	_outline.albedo_color = HIGHLIGHT_COLOR * Color(1, 1, 1, 0.22 if level == 1 else 0.85)
+	var glint := StandardMaterial3D.new()
+	glint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glint.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glint.albedo_color = HIGHLIGHT_COLOR * Color(1, 1, 1, 0.08 if level == 1 else 0.22)
+	glint.next_pass = _outline
+	_mesh.material_overlay = glint
+
+
 func _pulse_highlight() -> void:
 	if _highlight == 2 and _outline != null:
 		var t := Time.get_ticks_msec() / 1000.0
@@ -482,6 +515,22 @@ func _pulse_highlight() -> void:
 
 
 func _build_mesh(k: Dictionary) -> void:
+	# A proper model when there is one (PropLibrary), picked from the kind's variants by
+	# where the item starts, so every peer shows the same look.
+	var look: Variant = variant if variant != "" else position
+	var model := PropLibrary.visual(String(kind), look) if PropLibrary.has(String(kind)) else null
+	if model != null:
+		var h := model.mesh.get_aabb()
+		_mesh = model
+		_mesh.name = "Mesh"
+		_model_centre = h.get_center()
+		_mesh.position = -_model_centre
+		var model_pivot := Node3D.new()
+		model_pivot.name = "Pivot"
+		model_pivot.position = _model_centre
+		add_child(model_pivot)
+		model_pivot.add_child(_mesh)
+		return
 	var spec: Array = k.get("mesh", ["box", Vector3(0.1, 0.1, 0.1), Color.MAGENTA])
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "Mesh"

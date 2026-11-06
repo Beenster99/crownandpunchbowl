@@ -1,0 +1,1847 @@
+{
+ "antlers": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 3,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "big",
+  "tris": 212,
+  "dims": [
+   0.566,
+   0.576,
+   0.123
+  ]
+ },
+ "armchair_wingback": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 35,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1644,
+  "dims": [
+   0.84,
+   1.225,
+   0.802
+  ]
+ },
+ "ashtray_glass": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.5,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 306,
+  "dims": [
+   0.121,
+   0.034,
+   0.12
+  ]
+ },
+ "ashtray_tin": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.2,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 142,
+  "dims": [
+   0.12,
+   0.021,
+   0.12
+  ]
+ },
+ "aspidistra": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 8,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1314,
+  "dims": [
+   0.588,
+   0.737,
+   0.487
+  ]
+ },
+ "beermat_stack": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.05,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 50,
+  "dims": [
+   0.129,
+   0.011,
+   0.129
+  ]
+ },
+ "bell_brass": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.8,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 210,
+  "dims": [
+   0.1,
+   0.18,
+   0.1
+  ]
+ },
+ "bench": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 25,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 80,
+  "dims": [
+   1.6,
+   0.475,
+   0.36
+  ]
+ },
+ "bookcase": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 70,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1524,
+  "dims": [
+   1.04,
+   1.95,
+   0.34
+  ]
+ },
+ "bottle_ale": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 0.6,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 324,
+  "dims": [
+   0.067,
+   0.27,
+   0.065
+  ]
+ },
+ "bottle_broken": {
+  "category": "bottles",
+  "kind": "broken_bottle",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 128,
+  "dims": [
+   0.067,
+   0.16,
+   0.065
+  ]
+ },
+ "bottle_brown_sauce": {
+  "category": "bottles",
+  "kind": "decor_bottle",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 128,
+  "dims": [
+   0.056,
+   0.193,
+   0.056
+  ]
+ },
+ "bottle_candle": {
+  "category": "bottles",
+  "kind": "decor_bottle",
+  "mass": 0.7,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 412,
+  "dims": [
+   0.076,
+   0.401,
+   0.076
+  ]
+ },
+ "bottle_champagne": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.6,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 326,
+  "dims": [
+   0.088,
+   0.315,
+   0.087
+  ]
+ },
+ "bottle_cider_flagon": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.8,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 416,
+  "dims": [
+   0.156,
+   0.275,
+   0.13
+  ]
+ },
+ "bottle_gin": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.1,
+  "shape": "box",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 216,
+  "dims": [
+   0.07,
+   0.255,
+   0.071
+  ]
+ },
+ "bottle_ketchup": {
+  "category": "bottles",
+  "kind": "decor_bottle",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 128,
+  "dims": [
+   0.056,
+   0.193,
+   0.056
+  ]
+ },
+ "bottle_lager": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 0.55,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 324,
+  "dims": [
+   0.065,
+   0.28,
+   0.063
+  ]
+ },
+ "bottle_rum": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.1,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 392,
+  "dims": [
+   0.087,
+   0.275,
+   0.085
+  ]
+ },
+ "bottle_stout": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 0.6,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 324,
+  "dims": [
+   0.069,
+   0.26,
+   0.067
+  ]
+ },
+ "bottle_vinegar": {
+  "category": "bottles",
+  "kind": "decor_bottle",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 228,
+  "dims": [
+   0.052,
+   0.19,
+   0.051
+  ]
+ },
+ "bottle_vodka": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.0,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 332,
+  "dims": [
+   0.073,
+   0.32,
+   0.071
+  ]
+ },
+ "bottle_whisky": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.2,
+  "shape": "box",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 216,
+  "dims": [
+   0.085,
+   0.265,
+   0.06
+  ]
+ },
+ "bottle_wine": {
+  "category": "bottles",
+  "kind": "bottle",
+  "mass": 1.2,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 368,
+  "dims": [
+   0.079,
+   0.325,
+   0.077
+  ]
+ },
+ "candle_stick": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.6,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 304,
+  "dims": [
+   0.161,
+   0.27,
+   0.117
+  ]
+ },
+ "cask_small": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 20,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 384,
+  "dims": [
+   0.422,
+   0.508,
+   0.55
+  ]
+ },
+ "chair_bentwood": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 4,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 928,
+  "dims": [
+   0.45,
+   0.869,
+   0.45
+  ]
+ },
+ "chair_captains": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 8,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 684,
+  "dims": [
+   0.513,
+   0.759,
+   0.505
+  ]
+ },
+ "chair_ladderback": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 5,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 456,
+  "dims": [
+   0.46,
+   1.06,
+   0.43
+  ]
+ },
+ "chair_leather": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 9,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1348,
+  "dims": [
+   0.47,
+   0.975,
+   0.478
+  ]
+ },
+ "chair_leg": {
+  "category": "tools",
+  "kind": "chair_leg",
+  "mass": 0.5,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 168,
+  "dims": [
+   0.058,
+   0.514,
+   0.048
+  ]
+ },
+ "chair_spindle": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 5,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 320,
+  "dims": [
+   0.424,
+   0.915,
+   0.4
+  ]
+ },
+ "chair_wheelback": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 6,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1304,
+  "dims": [
+   0.46,
+   0.97,
+   0.44
+  ]
+ },
+ "chair_windsor": {
+  "category": "chairs",
+  "kind": "chair",
+  "mass": 6,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 636,
+  "dims": [
+   0.516,
+   1.099,
+   0.457
+  ]
+ },
+ "chalkboard_menu": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 4,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "big",
+  "tris": 446,
+  "dims": [
+   0.6,
+   0.85,
+   0.035
+  ]
+ },
+ "coal_scuttle": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 7,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 314,
+  "dims": [
+   0.3,
+   0.468,
+   0.3
+  ]
+ },
+ "coal_shovel": {
+  "category": "tools",
+  "kind": "coal_shovel",
+  "mass": 1.6,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 144,
+  "dims": [
+   0.18,
+   0.82,
+   0.062
+  ]
+ },
+ "coat_stand": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 9,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 532,
+  "dims": [
+   0.567,
+   1.863,
+   0.549
+  ]
+ },
+ "crate_bottles": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 12,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 972,
+  "dims": [
+   0.45,
+   0.28,
+   0.32
+  ]
+ },
+ "dartboard": {
+  "category": "games",
+  "kind": "dartboard",
+  "mass": 6,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": true,
+  "size": "big",
+  "tris": 824,
+  "dims": [
+   1.322,
+   0.68,
+   0.123
+  ]
+ },
+ "darts_set": {
+  "category": "games",
+  "kind": "darts",
+  "mass": 0.07,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 240,
+  "dims": [
+   0.056,
+   0.016,
+   0.175
+  ]
+ },
+ "fire_tongs": {
+  "category": "tools",
+  "kind": "fire_tongs",
+  "mass": 1.2,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 144,
+  "dims": [
+   0.08,
+   0.764,
+   0.03
+  ]
+ },
+ "fish_case": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 4,
+  "shape": "box",
+  "fragile": true,
+  "pinned": true,
+  "size": "big",
+  "tris": 276,
+  "dims": [
+   0.7,
+   0.3,
+   0.157
+  ]
+ },
+ "food_bangers_mash": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.7,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 1210,
+  "dims": [
+   0.286,
+   0.06,
+   0.286
+  ]
+ },
+ "food_fish_chips": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.7,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 1382,
+  "dims": [
+   0.306,
+   0.065,
+   0.306
+  ]
+ },
+ "food_pie_chips": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.7,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 1468,
+  "dims": [
+   0.286,
+   0.08,
+   0.286
+  ]
+ },
+ "food_ploughmans": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.8,
+  "shape": "box",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 404,
+  "dims": [
+   0.32,
+   0.09,
+   0.2
+  ]
+ },
+ "food_roast": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.8,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 896,
+  "dims": [
+   0.306,
+   0.06,
+   0.306
+  ]
+ },
+ "food_sandwich": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.4,
+  "shape": "box",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 694,
+  "dims": [
+   0.245,
+   0.058,
+   0.245
+  ]
+ },
+ "food_scotch_egg": {
+  "category": "food",
+  "kind": "food",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 1038,
+  "dims": [
+   0.204,
+   0.09,
+   0.204
+  ]
+ },
+ "fruit_machine": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 110,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 784,
+  "dims": [
+   0.848,
+   1.75,
+   0.66
+  ]
+ },
+ "glass_dimple_jug": {
+  "category": "glassware",
+  "kind": "glass",
+  "mass": 0.6,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 428,
+  "dims": [
+   0.164,
+   0.13,
+   0.098
+  ]
+ },
+ "glass_empty_pint": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 302,
+  "dims": [
+   0.084,
+   0.15,
+   0.084
+  ]
+ },
+ "glass_flute": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.2,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 326,
+  "dims": [
+   0.07,
+   0.2,
+   0.07
+  ]
+ },
+ "glass_half": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.25,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 192,
+  "dims": [
+   0.07,
+   0.11,
+   0.069
+  ]
+ },
+ "glass_nonic": {
+  "category": "glassware",
+  "kind": "glass",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 218,
+  "dims": [
+   0.084,
+   0.15,
+   0.084
+  ]
+ },
+ "glass_sherry": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.18,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 326,
+  "dims": [
+   0.07,
+   0.13,
+   0.07
+  ]
+ },
+ "glass_shot": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.08,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 84,
+  "dims": [
+   0.048,
+   0.055,
+   0.047
+  ]
+ },
+ "glass_sleever": {
+  "category": "glassware",
+  "kind": "glass",
+  "mass": 0.35,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 98,
+  "dims": [
+   0.084,
+   0.155,
+   0.084
+  ]
+ },
+ "glass_snifter": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.25,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 334,
+  "dims": [
+   0.1,
+   0.15,
+   0.098
+  ]
+ },
+ "glass_tankard": {
+  "category": "glassware",
+  "kind": "glass",
+  "mass": 0.5,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 438,
+  "dims": [
+   0.162,
+   0.13,
+   0.096
+  ]
+ },
+ "glass_tumbler": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.3,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 170,
+  "dims": [
+   0.08,
+   0.09,
+   0.08
+  ]
+ },
+ "glass_wine_red": {
+  "category": "glassware",
+  "kind": "decor_glass",
+  "mass": 0.25,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 362,
+  "dims": [
+   0.076,
+   0.18,
+   0.075
+  ]
+ },
+ "grandfather_clock": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 60,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 636,
+  "dims": [
+   0.52,
+   2.15,
+   0.34
+  ]
+ },
+ "horse_brasses": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 2,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 764,
+  "dims": [
+   0.126,
+   0.8,
+   0.02
+  ]
+ },
+ "ice_bucket": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.8,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 288,
+  "dims": [
+   0.18,
+   0.155,
+   0.162
+  ]
+ },
+ "jukebox": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 120,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 600,
+  "dims": [
+   0.92,
+   1.46,
+   0.645
+  ]
+ },
+ "keg_steel": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 15,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 448,
+  "dims": [
+   0.4,
+   0.64,
+   0.4
+  ]
+ },
+ "log_basket": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 15,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 282,
+  "dims": [
+   0.643,
+   0.43,
+   0.52
+  ]
+ },
+ "menu_stand": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.4,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 26,
+  "dims": [
+   0.12,
+   0.165,
+   0.05
+  ]
+ },
+ "mirror_brewery": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 6,
+  "shape": "box",
+  "fragile": true,
+  "pinned": true,
+  "size": "big",
+  "tris": 766,
+  "dims": [
+   0.94,
+   0.768,
+   0.065
+  ]
+ },
+ "piano_stool": {
+  "category": "piano",
+  "kind": "furniture",
+  "mass": 12,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 824,
+  "dims": [
+   0.6,
+   0.52,
+   0.35
+  ]
+ },
+ "piano_upright": {
+  "category": "piano",
+  "kind": "piano",
+  "mass": 230,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1696,
+  "dims": [
+   1.54,
+   1.43,
+   0.62
+  ]
+ },
+ "picture_bull": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 2.5,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 446,
+  "dims": [
+   0.58,
+   0.46,
+   0.035
+  ]
+ },
+ "picture_hunt": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 2.5,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 446,
+  "dims": [
+   0.65,
+   0.51,
+   0.035
+  ]
+ },
+ "picture_landscape": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 3,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "big",
+  "tris": 766,
+  "dims": [
+   0.7,
+   0.57,
+   0.056
+  ]
+ },
+ "picture_portrait": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 3,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "big",
+  "tris": 766,
+  "dims": [
+   0.54,
+   0.698,
+   0.065
+  ]
+ },
+ "picture_ship": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 2.5,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 446,
+  "dims": [
+   0.58,
+   0.455,
+   0.035
+  ]
+ },
+ "picture_team_photo": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 1.5,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 446,
+  "dims": [
+   0.42,
+   0.33,
+   0.02
+  ]
+ },
+ "pint_ale": {
+  "category": "glassware",
+  "kind": "pint",
+  "mass": 0.9,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 402,
+  "dims": [
+   0.084,
+   0.15,
+   0.084
+  ]
+ },
+ "pint_cider": {
+  "category": "glassware",
+  "kind": "pint",
+  "mass": 0.9,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 342,
+  "dims": [
+   0.084,
+   0.15,
+   0.084
+  ]
+ },
+ "pint_jug_bitter": {
+  "category": "glassware",
+  "kind": "pint",
+  "mass": 1.0,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 548,
+  "dims": [
+   0.164,
+   0.13,
+   0.098
+  ]
+ },
+ "pint_lager": {
+  "category": "glassware",
+  "kind": "pint",
+  "mass": 0.9,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 218,
+  "dims": [
+   0.084,
+   0.155,
+   0.084
+  ]
+ },
+ "pint_stout": {
+  "category": "glassware",
+  "kind": "pint",
+  "mass": 0.9,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 462,
+  "dims": [
+   0.084,
+   0.15,
+   0.084
+  ]
+ },
+ "plate_chips_basket": {
+  "category": "food",
+  "kind": "plate",
+  "mass": 0.3,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 328,
+  "dims": [
+   0.17,
+   0.068,
+   0.162
+  ]
+ },
+ "plate_crumbs": {
+  "category": "food",
+  "kind": "plate",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 682,
+  "dims": [
+   0.265,
+   0.027,
+   0.265
+  ]
+ },
+ "plate_empty": {
+  "category": "food",
+  "kind": "plate",
+  "mass": 0.4,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 598,
+  "dims": [
+   0.265,
+   0.024,
+   0.265
+  ]
+ },
+ "plate_rack_plates": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 3,
+  "shape": "box",
+  "fragile": true,
+  "pinned": true,
+  "size": "big",
+  "tris": 1064,
+  "dims": [
+   0.9,
+   0.207,
+   0.08
+  ]
+ },
+ "poker": {
+  "category": "tools",
+  "kind": "poker",
+  "mass": 1.4,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 136,
+  "dims": [
+   0.062,
+   0.855,
+   0.034
+  ]
+ },
+ "pool_cue": {
+  "category": "games",
+  "kind": "pool_cue",
+  "mass": 0.5,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 160,
+  "dims": [
+   0.033,
+   1.461,
+   0.031
+  ]
+ },
+ "pool_cue_snapped": {
+  "category": "games",
+  "kind": "broken_cue",
+  "mass": 0.25,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 84,
+  "dims": [
+   0.033,
+   0.698,
+   0.031
+  ]
+ },
+ "pool_table": {
+  "category": "games",
+  "kind": "pool_table",
+  "mass": 300,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 860,
+  "dims": [
+   2.51,
+   0.85,
+   1.36
+  ]
+ },
+ "pub_sign_small": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 2,
+  "shape": "box",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 46,
+  "dims": [
+   0.5,
+   0.4,
+   0.026
+  ]
+ },
+ "pump_clip_stand": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.4,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 46,
+  "dims": [
+   0.12,
+   0.16,
+   0.03
+  ]
+ },
+ "salt_pepper": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.2,
+  "shape": "box",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 164,
+  "dims": [
+   0.09,
+   0.085,
+   0.04
+  ]
+ },
+ "sea_chest": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 30,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 428,
+  "dims": [
+   0.936,
+   0.58,
+   0.54
+  ]
+ },
+ "shelf_bottles": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 6,
+  "shape": "box",
+  "fragile": true,
+  "pinned": true,
+  "size": "big",
+  "tris": 620,
+  "dims": [
+   0.9,
+   0.405,
+   0.18
+  ]
+ },
+ "sideboard": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 55,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1000,
+  "dims": [
+   1.56,
+   0.92,
+   0.52
+  ]
+ },
+ "snack_crisps": {
+  "category": "food",
+  "kind": "snack",
+  "mass": 0.04,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 112,
+  "dims": [
+   0.11,
+   0.15,
+   0.027
+  ]
+ },
+ "snack_crisps_co": {
+  "category": "food",
+  "kind": "snack",
+  "mass": 0.04,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 112,
+  "dims": [
+   0.11,
+   0.15,
+   0.027
+  ]
+ },
+ "snack_crisps_sv": {
+  "category": "food",
+  "kind": "snack",
+  "mass": 0.04,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 112,
+  "dims": [
+   0.11,
+   0.15,
+   0.027
+  ]
+ },
+ "snack_peanuts_bowl": {
+  "category": "food",
+  "kind": "snack",
+  "mass": 0.3,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 862,
+  "dims": [
+   0.124,
+   0.048,
+   0.124
+  ]
+ },
+ "snack_pickled_eggs": {
+  "category": "food",
+  "kind": "snack",
+  "mass": 2.0,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 1000,
+  "dims": [
+   0.16,
+   0.275,
+   0.158
+  ]
+ },
+ "snack_scratchings": {
+  "category": "food",
+  "kind": "snack",
+  "mass": 0.05,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 112,
+  "dims": [
+   0.11,
+   0.15,
+   0.027
+  ]
+ },
+ "stool_backed": {
+  "category": "stools",
+  "kind": "stool",
+  "mass": 7,
+  "shape": "convex",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 344,
+  "dims": [
+   0.409,
+   1.076,
+   0.384
+  ]
+ },
+ "stool_bar_round": {
+  "category": "stools",
+  "kind": "stool",
+  "mass": 5,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 368,
+  "dims": [
+   0.38,
+   0.772,
+   0.38
+  ]
+ },
+ "stool_milking": {
+  "category": "stools",
+  "kind": "stool",
+  "mass": 2.5,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 112,
+  "dims": [
+   0.341,
+   0.443,
+   0.33
+  ]
+ },
+ "stool_padded": {
+  "category": "stools",
+  "kind": "stool",
+  "mass": 6,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 620,
+  "dims": [
+   0.424,
+   0.78,
+   0.424
+  ]
+ },
+ "stool_tavern": {
+  "category": "stools",
+  "kind": "stool",
+  "mass": 4,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 116,
+  "dims": [
+   0.359,
+   0.647,
+   0.359
+  ]
+ },
+ "table_britannia": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 30,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 944,
+  "dims": [
+   0.84,
+   0.765,
+   0.84
+  ]
+ },
+ "table_cask": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 45,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 446,
+  "dims": [
+   0.84,
+   0.855,
+   0.84
+  ]
+ },
+ "table_copper": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 18,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 796,
+  "dims": [
+   0.8,
+   0.776,
+   0.8
+  ]
+ },
+ "table_cricket": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 16,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 260,
+  "dims": [
+   0.84,
+   0.751,
+   0.84
+  ]
+ },
+ "table_gateleg": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 24,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1208,
+  "dims": [
+   1.1,
+   0.77,
+   0.792
+  ]
+ },
+ "table_leg": {
+  "category": "tools",
+  "kind": "table_leg",
+  "mass": 1.0,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "small",
+  "tris": 156,
+  "dims": [
+   0.075,
+   0.73,
+   0.071
+  ]
+ },
+ "table_oak_square": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 22,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 744,
+  "dims": [
+   0.9,
+   0.77,
+   0.9
+  ]
+ },
+ "table_round_pedestal": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 20,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 832,
+  "dims": [
+   0.964,
+   0.781,
+   0.964
+  ]
+ },
+ "table_trestle": {
+  "category": "tables",
+  "kind": "table",
+  "mass": 28,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 268,
+  "dims": [
+   1.199,
+   0.787,
+   0.724
+  ]
+ },
+ "tip_jar": {
+  "category": "barbits",
+  "kind": "decor_small",
+  "mass": 0.6,
+  "shape": "cyl",
+  "fragile": true,
+  "pinned": false,
+  "size": "small",
+  "tris": 446,
+  "dims": [
+   0.11,
+   0.16,
+   0.11
+  ]
+ },
+ "umbrella_stand": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 6,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 304,
+  "dims": [
+   0.26,
+   0.951,
+   0.256
+  ]
+ },
+ "wall_clock": {
+  "category": "pictures",
+  "kind": "picture",
+  "mass": 2,
+  "shape": "cyl",
+  "fragile": false,
+  "pinned": true,
+  "size": "small",
+  "tris": 720,
+  "dims": [
+   0.39,
+   0.39,
+   0.052
+  ]
+ },
+ "welsh_dresser": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 90,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 2188,
+  "dims": [
+   1.46,
+   2.02,
+   0.54
+  ]
+ },
+ "wine_rack": {
+  "category": "furniture",
+  "kind": "furniture",
+  "mass": 25,
+  "shape": "box",
+  "fragile": false,
+  "pinned": false,
+  "size": "big",
+  "tris": 1264,
+  "dims": [
+   0.81,
+   1.015,
+   0.31
+  ]
+ }
+}

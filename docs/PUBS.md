@@ -20,6 +20,7 @@ Every pub has at least one raised level, so fighters can be shoved, thrown or kn
 | `scripts/level/pub_level.gd` | `PubLevel`, the base for every pub: builds it, lighting, camera, occluder fading, player and prop spawning, and the pub flow. |
 | `scripts/level/pub_builder.gd` | `PubBuilder`, the greybox kit: floors, walls with doors and windows, beams, bar, back bar, fireplaces, dartboard, pool table, tables, lamps, markers. |
 | `scripts/level/pub_era.gd` | `PubEra`: colours, floor pattern, wall height and lighting for the 17th, 18th and 19th century. |
+| `scripts/level/pub_materials.gd`, `scripts/level/prop_library.gd` | Textured materials and the Blender prop models (tables, chairs, glasses, pictures, furniture, piano...). See [PROPS.md](PROPS.md). |
 | `scripts/physics/pub_physics.gd` | `PubPhysics`: every loose prop is a rigid body, simulated on the host and synced. See docs/PHYSICS.md. |
 | `scripts/level/occluder_fader.gd` | `OccluderFader`: fades anything in `camera_occluders` that sits between the camera and a player. |
 | `scripts/level/<pub_id>.gd` + `scenes/pubs/<pub_id>.tscn` | One per pub. The script sets `pub_id`, `era` and `room` and lays the pub out in `_build()`. |
@@ -101,5 +102,7 @@ camera and a player's feet, chest or head, and brings them back when they're cle
 3. Add it to `GameData.PUBS`. `tests/pubs_test.gd` checks it automatically, including
    walking up every flight of stairs and dropping off an open edge.
 
-Greybox is code so it stays easy to change. When real art arrives, swap the builder
-calls for imported models one piece at a time and keep the markers.
+The layout is still code so it stays easy to change, but the props are real models and
+the surfaces are textured (see [PROPS.md](PROPS.md)). After `_build()` the pub calls
+`PubBuilder.dress()`, which hangs pictures and stands furniture round the walls wherever
+there's room, so a new pub gets dressed automatically.
