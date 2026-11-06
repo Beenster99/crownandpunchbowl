@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Download the speech tools the game runs on the player's PC (no cloud, no account):
 
-  speech/whisper/   whisper.cpp (MIT) + the base.en model: push-to-talk speech to text
+  speech/whisper/   whisper.cpp (MIT) + the small.en model: push-to-talk speech to text
   speech/piper/     Piper (MIT, uses espeak-ng, GPLv3) text to speech
   speech/voices/    en_GB VCTK voice for Piper (CC BY 4.0): every punter's voice
 
@@ -27,7 +27,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 PIPER = "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/"
 WHISPER_TAG = "v1.8.2"
 WHISPER = "https://github.com/ggml-org/whisper.cpp/releases/download/%s/whisper-bin-x64.zip" % WHISPER_TAG
-WHISPER_MODEL = "ggml-base.en-q5_1.bin"
+WHISPER_MODEL = "ggml-small.en-q5_1.bin"  # base.en misheard too much in play-testing
 WHISPER_MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/" + WHISPER_MODEL
 VOICE = "en_GB-vctk-medium"
 VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/vctk/medium/"

@@ -1,13 +1,14 @@
 class_name SpeechTools
 extends RefCounted
 ## Where the on-PC speech programs live (fetched by tools/fetch_speech.py):
-##   <game folder>/speech/whisper/whisper-cli(.exe) + ggml-base.en-q5_1.bin   listening
+##   <game folder>/speech/whisper/whisper-cli(.exe) + ggml-small.en-q5_1.bin   listening
 ##   <game folder>/speech/piper/piper(.exe)                                   speaking
 ##   <game folder>/speech/voices/en_GB-vctk-medium.onnx(.json)                the voices
 ## <game folder> is the folder holding the .exe in a build, or the project folder in the
 ## editor. The CP_SPEECH_DIR environment variable overrides it (handy for testing).
 
-const WHISPER_MODEL := "ggml-base.en-q5_1.bin"
+## Most accurate first: small.en hears mumbles, accents and noisy mics much better than base.
+const WHISPER_MODELS := ["ggml-small.en-q5_1.bin", "ggml-base.en-q5_1.bin"]
 const VOICE_MODEL := "en_GB-vctk-medium.onnx"
 
 
@@ -29,7 +30,11 @@ static func whisper_exe() -> String:
 
 
 static func whisper_model() -> String:
-	return root().path_join("whisper").path_join(WHISPER_MODEL)
+	var dir := root().path_join("whisper")
+	for m in WHISPER_MODELS:
+		if FileAccess.file_exists(dir.path_join(m)):
+			return dir.path_join(m)
+	return dir.path_join(WHISPER_MODELS[0])
 
 
 static func piper_exe() -> String:

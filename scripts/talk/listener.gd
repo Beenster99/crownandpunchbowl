@@ -19,8 +19,9 @@ const MIN_SECONDS := 0.3
 ## Peak level (0..1) that counts as shouting.
 const LOUD_PEAK := 0.55
 const LOUD_RMS := 0.12
-## Biases whisper towards the words people say in a pub fight.
-const PROMPT := "Oi! Calm down, mate, it was an accident. Come on then! Sorry, let me buy you a pint."
+## Sets the scene for whisper without putting words in your mouth (a prompt full of
+## stock phrases made it "hear" them when it wasn't sure).
+const PROMPT := "Chatting in a village pub in England."
 
 var recording := false
 var busy := false
@@ -30,6 +31,7 @@ var _capture: AudioEffectCapture
 var _frames := PackedVector2Array()
 var _pre := PackedVector2Array()
 var _thread: Thread
+var _full := false
 
 
 func _exit_tree() -> void:
@@ -75,8 +77,9 @@ func start() -> void:
 func stop() -> void:
 	if not recording:
 		return
+	_drain()  # the last few milliseconds, before we stop keeping them
 	recording = false
-	_drain()
+	_full = false
 	var rate := AudioServer.get_mix_rate()
 	if _frames.size() < rate * MIN_SECONDS:
 		_frames.clear()
@@ -90,6 +93,8 @@ func _process(_delta: float) -> void:
 	if _capture == null:
 		return
 	_drain()
+	if _full:
+		stop()
 
 
 func _drain() -> void:
@@ -101,9 +106,10 @@ func _drain() -> void:
 	var buf := _capture.get_buffer(n)
 	var rate := AudioServer.get_mix_rate()
 	if recording:
-		_frames.append_array(buf)
-		if _frames.size() > rate * MAX_SECONDS:
-			stop()
+		if _frames.size() < rate * MAX_SECONDS:
+			_frames.append_array(buf)
+		else:
+			_full = true
 	else:
 		_pre.append_array(buf)
 		var keep := int(rate * PRE_ROLL)
@@ -143,6 +149,38 @@ static func is_loud(mono: PackedFloat32Array) -> bool:
 	return peak >= LOUD_PEAK and rms >= LOUD_RMS
 
 
+## Clean up a recording for whisper: cut the silence either side, and bring a quiet mic up
+## to a good level (whisper copes badly with very quiet speech).
+static func prepare(mono: PackedFloat32Array) -> PackedFloat32Array:
+	if mono.is_empty():
+		return mono
+	var peak := 0.0
+	for s in mono:
+		peak = maxf(peak, absf(s))
+	if peak < 0.003:
+		return mono  # nothing but hiss
+	var gate := peak * 0.08
+	var first := 0
+	while first < mono.size() and absf(mono[first]) < gate:
+		first += 1
+	var last := mono.size() - 1
+	while last > first and absf(mono[last]) < gate:
+		last -= 1
+	var pad := int(RATE * 0.2)
+	var out := mono.slice(maxi(first - pad, 0), mini(last + pad, mono.size() - 1) + 1)
+	var gain := minf(0.9 / peak, 10.0)
+	if gain > 1.05:
+		for i in out.size():
+			out[i] *= gain
+	# Whisper wants at least a second; pad short words like "Oi!" with quiet.
+	if out.size() < RATE * 1.1:
+		var tail := PackedFloat32Array()
+		tail.resize(int(RATE * 1.1) - out.size())
+		tail.fill(0.0)
+		out.append_array(tail)
+	return out
+
+
 static func to_wav(mono: PackedFloat32Array) -> AudioStreamWAV:
 	var data := PackedByteArray()
 	data.resize(mono.size() * 2)
@@ -165,6 +203,7 @@ func transcribe(mono: PackedFloat32Array) -> void:
 		return
 	busy = true
 	var loud := is_loud(mono)
+	mono = prepare(mono)
 	var path := OS.get_user_data_dir().path_join("talk_heard.wav")
 	to_wav(mono).save_to_wav(path)
 	if _thread != null and _thread.is_started():

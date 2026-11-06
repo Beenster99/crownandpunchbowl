@@ -183,6 +183,18 @@ func test_mic_helpers() -> void:
 	_check(Listener.clean_transcript(" [BLANK_AUDIO]\n Oi! Calm down. (laughs)\n") == "Oi! Calm down.",
 		"transcript cleaned of whisper's tags")
 	_check(Listener.clean_transcript("[BLANK_AUDIO]") == "", "silence is nothing")
+	# A quiet "Oi" in the middle of two seconds of silence: trimmed, padded, brought up.
+	var rec := PackedFloat32Array()
+	rec.resize(32000)
+	rec.fill(0.0)
+	for i in range(14000, 18000):
+		rec[i] = sin(i * 0.1) * 0.05
+	var ready := Listener.prepare(rec)
+	var peak := 0.0
+	for v in ready:
+		peak = maxf(peak, absf(v))
+	_check(ready.size() < rec.size() and ready.size() >= 16000, "silence trimmed, at least a second kept (%d)" % ready.size())
+	_check(peak > 0.45, "quiet mic brought up (up to 10x) (%.2f)" % peak)
 
 
 func test_calm_down_works() -> void:
