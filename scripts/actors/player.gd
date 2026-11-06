@@ -82,8 +82,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _read_input(delta: float) -> void:
-	if DartsBoard.local_input_locked():
-		# Playing darts: the darts panel has the controls.
+	if DartsBoard.local_input_locked() or TalkUi.typing:
+		# Playing darts (the darts panel has the controls), or typing a line to a punter.
 		move_input = Vector3.ZERO
 		_set_block(false, _want_zone)
 		return

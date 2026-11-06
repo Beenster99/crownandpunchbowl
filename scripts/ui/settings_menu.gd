@@ -8,7 +8,8 @@ extends Control
 
 signal closed()
 
-const TABS := [["gameplay", "Gameplay"], ["sound", "Sound"], ["graphics", "Graphics"], ["keybinds", "Keybinds"]]
+const TABS := [["gameplay", "Gameplay"], ["sound", "Sound"], ["graphics", "Graphics"], ["talk", "Talk"],
+	["keybinds", "Keybinds"]]
 
 var _tabs: TabContainer
 var _status: Label
@@ -82,6 +83,13 @@ func _build_section(section: String) -> Control:
 	grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(grid)
 	_controls[section] = {}
+	if section == "talk":
+		# What's installed: the speech tools ship in the speech folder next to the game.
+		var status := UiTheme.label(SpeechTools.status(), "HintLabel")
+		status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(status)
+		grid.add_child(Control.new())
 	for key in Settings.OPTIONS[section]:
 		var opt: Dictionary = Settings.OPTIONS[section][key]
 		var name_box := VBoxContainer.new()
@@ -103,6 +111,14 @@ func _build_section(section: String) -> Control:
 func _make_control(section: String, key: String, opt: Dictionary) -> Control:
 	var value: Variant = Settings.get_value(section, key)
 	match opt["type"]:
+		"text":
+			var le := LineEdit.new()
+			le.secret = bool(opt.get("secret", false))
+			le.placeholder_text = String(opt.get("placeholder", ""))
+			le.text = String(value)
+			le.clear_button_enabled = true
+			le.text_changed.connect(func(t: String): Settings.set_value(section, key, t.strip_edges()))
+			return le
 		"toggle":
 			var cb := CheckButton.new()
 			cb.button_pressed = bool(value)
@@ -145,13 +161,28 @@ func _choice_items(section: String, key: String, opt: Dictionary) -> Array:
 		return GameData.DIFFICULTIES.map(func(d): return d["name"])
 	if section == "graphics" and key == "resolution":
 		return Settings.resolution_choices().map(func(r): return Settings.resolution_label(r))
+	if section == "talk" and key == "mic_device":
+		return _mic_devices()
 	return opt["items"]
+
+
+func _mic_devices() -> Array:
+	var out: Array = ["Default"]
+	for d in AudioServer.get_input_device_list():
+		if not out.has(d):
+			out.append(d)
+	var current := String(Settings.get_value("talk", "mic_device"))
+	if not out.has(current):
+		out.append(current)
+	return out
 
 
 ## The stored values behind a choice's items, or [] when the stored value is the item index.
 func _choice_values(section: String, key: String) -> Array:
 	if section == "graphics" and key == "resolution":
 		return Settings.resolution_choices()
+	if section == "talk" and key == "mic_device":
+		return _mic_devices()
 	return Settings.OPTIONS[section][key].get("values", [])
 
 
@@ -183,6 +214,9 @@ func _refresh_section(section: String) -> void:
 			ctl.text = "On" if value else "Off"
 		elif ctl is OptionButton:
 			ctl.select(_choice_index(section, key, value))
+		elif ctl is LineEdit:
+			if ctl.text != String(value):
+				ctl.text = String(value)
 		else:
 			var slider: HSlider = ctl.get_child(0)
 			slider.set_value_no_signal(float(value))

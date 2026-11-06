@@ -20,6 +20,9 @@ const DEFAULTS := {
 		"msaa": 1, "ui_scale": 1.0, "resolution": "auto", "quality": 2, "shadow_quality": 2,
 		"ambient_occlusion": true, "bloom": true, "fog": true, "screen_aa": 0, "brightness": 1.0,
 		"fov": 40.0},
+	## Push-to-talk and punters answering back (scripts/autoload/talk.gd).
+	"talk": {"push_to_talk": true, "mic_device": "Default", "show_heard": true, "punter_voices": 0,
+		"ai_replies": true, "api_key": "", "ai_model": 0, "elevenlabs_key": ""},
 	## Remembered front-end choices, not shown on the settings screen.
 	"profile": {"name": "Farmer", "farmer": 0, "pub": 0, "camera_zoom": 0.7},
 }
@@ -52,6 +55,25 @@ const OPTIONS := {
 		"voice": {"label": "Voices (oofs, groans, shouting)", "type": "slider", "min": 0.0, "max": 1.0,
 			"step": 0.01, "percent": true},
 		"mute_unfocused": {"label": "Mute when the window loses focus", "type": "toggle"},
+	},
+	"talk": {
+		"push_to_talk": {"label": "Push to talk", "type": "toggle",
+			"hint": "Hold V (Back on a pad) and speak to the punter you're facing. \"Calm down mate, it was an accident\" can talk them down; \"OI!\" winds them up. Your words are turned into text on this PC. Press Enter to type a line instead."},
+		"mic_device": {"label": "Microphone", "type": "choice", "items": [], "values": []},
+		"show_heard": {"label": "Show what you said", "type": "toggle",
+			"hint": "A bubble over your farmer with the words the game heard, for everyone in the pub."},
+		"punter_voices": {"label": "Punter voices", "type": "choice",
+			"items": ["Natural (on this PC)", "Windows voices", "Off"],
+			"hint": "How punters' replies are spoken. Natural voices run on this PC with Piper. The words always show in a bubble."},
+		"ai_replies": {"label": "Punters answer back", "type": "toggle",
+			"hint": "Punters reply in their own words using Claude, and decide for themselves whether you've talked them round. Needs an Anthropic API key below. Off, or with no key, they still react, with stock replies. In co-op the host's key and setting are used."},
+		"api_key": {"label": "Anthropic API key", "type": "text", "secret": true, "placeholder": "sk-ant-...",
+			"hint": "From console.anthropic.com. Saved only on this PC, in your settings file. Only the words go to Claude, never your voice. About 2p per hundred replies with Haiku."},
+		"ai_model": {"label": "Punter brains", "type": "choice",
+			"items": ["Claude Haiku 5.5 (quick, pennies)", "Claude Sonnet 5.5 (sharper, ~20x the cost)"]},
+		"elevenlabs_key": {"label": "ElevenLabs key (optional)", "type": "text", "secret": true,
+			"placeholder": "leave blank for free voices",
+			"hint": "Paste an ElevenLabs API key for even more natural voices (their paid service). Blank uses the free voices on this PC."},
 	},
 	"graphics": {
 		"quality": {"label": "Graphics quality", "type": "choice", "items": ["Low", "Medium", "High", "Ultra", "Custom"],
@@ -130,6 +152,8 @@ const ACTIONS := {
 	"pause": ["Pause", {"key": KEY_ESCAPE}, {"joy": JOY_BUTTON_START}],
 	"zoom_in": ["Zoom in", {"mouse": MOUSE_BUTTON_WHEEL_UP}, {"joy": JOY_BUTTON_DPAD_UP}],
 	"zoom_out": ["Zoom out", {"mouse": MOUSE_BUTTON_WHEEL_DOWN}, {"joy": JOY_BUTTON_DPAD_DOWN}],
+	"push_to_talk": ["Push to talk (hold and speak)", {"key": KEY_V}, {"joy": JOY_BUTTON_BACK}],
+	"say_line": ["Type something to say", {"key": KEY_ENTER}, {}],
 }
 
 ## Bumped when the default controls change so much that old saved bindings would fight the
@@ -235,6 +259,8 @@ func resolution_label(value: String) -> String:
 ## Restores one section ("gameplay", "sound", "graphics") to its defaults.
 func reset_section(section: String) -> void:
 	for key in DEFAULTS[section]:
+		if key.ends_with("_key"):
+			continue  # don't throw away pasted API keys
 		set_value(section, key, DEFAULTS[section][key])
 
 
@@ -551,6 +577,9 @@ func _apply(section: String, key: String) -> void:
 				AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(float(v), 0.0001)))
 		["graphics", "window_mode"], ["graphics", "resolution"], ["graphics", "render_scale"]:
 			_apply_display()
+		["talk", "mic_device"]:
+			if String(v) in AudioServer.get_input_device_list():
+				AudioServer.input_device = String(v)
 		["graphics", "vsync"]:
 			DisplayServer.window_set_vsync_mode(
 				DisplayServer.VSYNC_ENABLED if v else DisplayServer.VSYNC_DISABLED)

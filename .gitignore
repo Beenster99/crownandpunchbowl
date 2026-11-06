@@ -10,3 +10,5 @@ build/
 # Blender build caches
 tools/blender/out/
 __pycache__/
+# On-PC speech tools (tools/fetch_speech.py), shipped next to the exe, not in git
+/speech/
