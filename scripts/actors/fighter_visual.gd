@@ -89,6 +89,8 @@ func _ready() -> void:
 		snap.name = "HeadSnap"
 		snap.setup(fighter, rig)
 		rig.skeleton.add_child(snap)
+	# Bruises, swelling and cuts where the punches land (scripts/fx/wounds.gd).
+	Wounds.attach(fighter, rig)
 	Events.nose_broken.connect(_on_nose_broken)
 	Events.attack_countered.connect(_on_countered)
 
