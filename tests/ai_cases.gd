@@ -8,12 +8,16 @@ var _arena: Node3D
 
 
 func run() -> void:
-	GameData.difficulty_index = 1  # Session Ale: max_attackers 3
+	GameData.difficulty_index = 1  # Session Ale: 2 attackers, 2 squaring up per player
+	# Hit-stop runs on real time; under --fixed-fps that would slow the whole sim to a crawl.
+	var fx := get_node_or_null(^"/root/Fx")
+	if fx != null and "hit_stop_time_scale" in fx:
+		fx.hit_stop_time_scale = 1.0
 	var tests := [
 		"test_calm_punters_leave_players_alone", "test_hit_punter_fights_back",
 		"test_mates_join_in", "test_attack_tokens_cap", "test_gang_up_rush",
 		"test_held_punter_struggles_free", "test_bar_staff", "test_waves_and_cleared",
-		"test_police_raid", "test_cooling_off",
+		"test_police_raid", "test_cooling_off", "test_one_or_two_at_a_time",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -146,7 +150,9 @@ func test_mates_join_in() -> void:
 	_hit(victim, p)
 	var engaged := mates.filter(func(m): return m.mood == Npc.Mood.ENGAGED and m.foe == p)
 	var calm := mates.filter(func(m): return m.mood == Npc.Mood.CALM)
-	_check(engaged.size() >= 2, "brave mates nearby wade in (%d of 4)" % engaged.size())
+	var room := d.engaged_cap() - 1  # the victim is already squaring up
+	_check(engaged.size() == room,
+		"only %d mate(s) wade in, the rest watch (%d of 4)" % [room, engaged.size()])
 	_check(calm.is_empty(), "every mate nearby at least notices")
 	_check(far.mood == Npc.Mood.ALERT, "the rest of the pub turns to watch")
 
@@ -186,13 +192,14 @@ func test_gang_up_rush() -> void:
 	var npcs: Array[Npc] = []
 	for i in 4:
 		var npc := d.spawn(&"rugby_lad" if i == 0 else &"local",
-			Vector3(-3.0 + i * 2.0, 0, -3.0))
+			Vector3(0, 0, -2.5) if i == 0 else Vector3(-4.0 + i * 2.0, 0, -4.0))
 		npc.mood = Npc.Mood.ALERT
 		npcs.append(npc)
 	await _wait(0.1)
 	d.heat = 0.0  # tokens would only allow one attacker
 	var crew := d.gang_up(p)
-	_check(crew.size() >= 3, "rush pulls in a crew (%d)" % crew.size())
+	var most_rushers := int(GameData.difficulty()["max_attackers"])
+	_check(crew.size() == most_rushers, "rush is just %d of them (%d)" % [most_rushers, crew.size()])
 	_check(crew.all(func(n): return n.mood == Npc.Mood.ENGAGED and n.foe == p and n.rushing > 0.0),
 		"crew all go for the same player")
 	_check(crew.any(func(n): return n.rush_grab), "a rugby lad is told to grab")
@@ -203,7 +210,7 @@ func test_gang_up_rush() -> void:
 		most = maxi(most, _swinging(npcs))
 		grabbed = grabbed or p.state == Fighter.State.HELD
 		await get_tree().physics_frame
-	_check(most >= 2, "rushers ignore the token cap (%d at once)" % most)
+	_check(most >= 1 and grabbed, "one holds while the other lays in (%d swinging)" % most)
 	_check(grabbed, "the rugby lad grabs the player for his mates")
 
 
@@ -329,3 +336,40 @@ func test_cooling_off() -> void:
 	npc._quiet_t = 16.0
 	await _wait(0.1)
 	_check(npc.mood == Npc.Mood.ENGAGED, "but stays in while the room is hot")
+
+
+func test_one_or_two_at_a_time() -> void:
+	var d := _director()
+	var p := _player(Vector3(0, 0, 0), 100000.0)
+	var npcs: Array[Npc] = []
+	for i in 6:
+		var a := TAU * i / 6.0
+		npcs.append(d.spawn(&"local", Vector3(cos(a), 0, sin(a)) * 3.0))
+	await _wait(0.1)
+	_hit(npcs[0], p)  # start the fight
+	for npc in npcs:
+		npc.engage(p, true)  # force the whole pub in at once
+	var cap := d.engaged_cap()
+	await _wait(1.5)
+	var engaged := npcs.filter(func(n): return n.mood == Npc.Mood.ENGAGED)
+	_check(engaged.size() <= cap, "only %d square up, the rest back off (%d)" % [cap, engaged.size()])
+	_check(npcs.filter(func(n): return n.mood == Npc.Mood.ALERT).size() >= 6 - cap,
+		"the others spectate")
+	# Spectators keep their distance and don't join in by themselves while there's no room.
+	var most := 0
+	var tells := []
+	var tel_cb := func(a, _t, _s): tells.append(a)
+	Events.attack_telegraphed.connect(tel_cb)
+	for i in 600:
+		d.heat = 1.0
+		most = maxi(most, _swinging(npcs))
+		await get_tree().physics_frame
+	Events.attack_telegraphed.disconnect(tel_cb)
+	engaged = npcs.filter(func(n): return n.mood == Npc.Mood.ENGAGED)
+	_check(engaged.size() <= cap, "still only %d squaring up after 10 s (%d)" % [cap, engaged.size()])
+	_check(most <= int(GameData.difficulty()["max_attackers"]), "never more than 2 swinging (%d)" % most)
+	var attackers := {}
+	for a in tells:
+		attackers[a] = true
+	_check(attackers.size() <= cap, "only the ones squaring up throw punches (%d)" % attackers.size())
+	_check(tells.size() >= 2 and tells.size() <= 10, "a steady pace, not a flurry (%d tells in 10 s)" % tells.size())
