@@ -19,6 +19,7 @@ var ragdoll: RagdollDriver
 ## Snaps the head back (or round, from a hook) when a punch lands. Null without a skeleton.
 var snap: HeadSnap
 var _last_state := -1
+var _coiled := false
 
 
 static func attach(f: Fighter) -> FighterVisual:
@@ -117,6 +118,15 @@ func _process(_delta: float) -> void:
 			bob = fighter.get("head_bob")
 		# The rig's y is +down (duck); ours is +up.
 		rig.call("set_head_bob", Vector2(bob.x, -bob.y) if _can_bob() else Vector2.ZERO)
+	# Loading a power shot: coiled down into the legs, shaking with it as it builds.
+	var load := fighter.charge_fraction()
+	if load > 0.0:
+		_coiled = true
+		var shake := 0.004 + 0.012 * load
+		rig.position = Vector3(randf_range(-shake, shake), -0.05 * load, randf_range(-shake, shake))
+	elif _coiled:
+		_coiled = false
+		rig.position = Vector3.ZERO
 	var partner: Variant = fighter.get("chatting_with") if "chatting_with" in fighter else null
 	rig.set_talking(partner != null and is_instance_valid(partner))
 

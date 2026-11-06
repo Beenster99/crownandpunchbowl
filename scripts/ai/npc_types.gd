@@ -16,6 +16,8 @@ extends RefCounted
 ##   guard_skill: float  0..1 chance that cover is the right one (head or body)
 ##   parry: float        0..1 chance a last-moment cover parries (Fighter.parry_skill)
 ##   hold_resist: float  0..1 how hard they are to hold (Fighter.hold_resist)
+##   stamina: float      the gas tank (Fighter.max_stamina). Soft types gas out sooner.
+##   counter: float      0..1 chance to fire a quick counter jab straight off a blocked punch
 ##   moves: Dictionary   move id -> weight. Enemy moves are telegraphed (see Moves.DATA).
 ##   grabs: bool         can grab a player during a gang-up so mates can lay into them
 ##   always_engaged: bool police never calm down
@@ -27,7 +29,7 @@ const DATA := {
 		"max_hp": 60.0, "power": 0.75, "move_speed": 3.9, "toughness": 0.8, "grip": 0.8,
 		"crawl_fraction": 0.35, "bravery": 0.25, "aggression": 0.7, "watch_distance": 5.5,
 		"circle_distance": 3.2, "struggle_interval": 0.5, "defence": 0.25, "guard_skill": 0.5,
-		"parry": 0.0, "hold_resist": 0.05,
+		"parry": 0.0, "hold_resist": 0.05, "stamina": 70.0, "counter": 0.1,
 		"moves": {&"shove": 3, &"swing": 2, &"body_swing": 1}, "grabs": false, "always_engaged": false,
 		"colour": Color("9aa77a"),
 	},
@@ -36,7 +38,7 @@ const DATA := {
 		"max_hp": 90.0, "power": 1.0, "move_speed": 4.1, "toughness": 1.0, "grip": 1.0,
 		"crawl_fraction": 0.25, "bravery": 0.6, "aggression": 1.0, "watch_distance": 4.0,
 		"circle_distance": 2.8, "struggle_interval": 0.35, "defence": 0.45, "guard_skill": 0.65,
-		"parry": 0.1, "hold_resist": 0.25,
+		"parry": 0.1, "hold_resist": 0.25, "stamina": 100.0, "counter": 0.3,
 		"moves": {&"swing": 3, &"body_swing": 2, &"haymaker": 1, &"shove": 1}, "grabs": false,
 		"always_engaged": false, "colour": Color("b9824f"),
 	},
@@ -45,7 +47,7 @@ const DATA := {
 		"max_hp": 140.0, "power": 1.3, "move_speed": 4.4, "toughness": 1.6, "grip": 1.3,
 		"crawl_fraction": 0.2, "bravery": 0.9, "aggression": 1.25, "watch_distance": 3.2,
 		"circle_distance": 2.6, "struggle_interval": 0.2, "defence": 0.4, "guard_skill": 0.6,
-		"parry": 0.05, "hold_resist": 0.6,
+		"parry": 0.05, "hold_resist": 0.6, "stamina": 120.0, "counter": 0.25,
 		"moves": {&"haymaker": 2, &"swing": 2, &"body_swing": 2, &"shove": 1}, "grabs": true,
 		"always_engaged": false, "colour": Color("8c2f39"),
 	},
@@ -54,7 +56,7 @@ const DATA := {
 		"max_hp": 130.0, "power": 1.15, "move_speed": 4.6, "toughness": 1.4, "grip": 1.4,
 		"crawl_fraction": 0.2, "bravery": 1.0, "aggression": 1.2, "watch_distance": 3.0,
 		"circle_distance": 2.6, "struggle_interval": 0.25, "defence": 0.55, "guard_skill": 0.75,
-		"parry": 0.15, "hold_resist": 0.45,
+		"parry": 0.15, "hold_resist": 0.45, "stamina": 110.0, "counter": 0.4,
 		"moves": {&"baton": 3, &"shove": 1}, "grabs": true, "always_engaged": true,
 		"colour": Color("1f2d5c"),
 	},
@@ -63,7 +65,7 @@ const DATA := {
 		"max_hp": 100.0, "power": 0.0, "move_speed": 2.5, "toughness": 1.5, "grip": 1.0,
 		"crawl_fraction": 0.0, "bravery": 0.0, "aggression": 0.0, "watch_distance": 0.0,
 		"circle_distance": 0.0, "struggle_interval": 0.3, "defence": 0.0, "guard_skill": 0.0,
-		"parry": 0.0, "hold_resist": 0.0, "moves": {}, "grabs": false,
+		"parry": 0.0, "hold_resist": 0.0, "stamina": 100.0, "counter": 0.0, "moves": {}, "grabs": false,
 		"always_engaged": false, "colour": Color("d9d2c0"),
 	},
 }

@@ -17,6 +17,10 @@ extends Fighter
 ## string, and known strings are combos that hit harder (see Moves.COMBOS): jab, body jab,
 ## kick is "Below the belt", which kicks them in the groin. Hammering the buttons before a
 ## punch has finished fumbles the string and leaves you off balance, so timing beats mashing.
+## Every strike costs stamina (a miss costs double) and it only comes back when you stop
+## throwing, so a man who throws everything ends up gassed: soft, slow and with a guard that
+## folds. Hold a hook or an uppercut to load a power shot and let go to throw it; a jab in
+## the face while you're loading cancels it. Jabs are cheap and drain a guard hard.
 ##
 ## Nobody is chased across the room: you walk into range, and a punch only steps in a
 ## short way. Near an active enemy you take a stance and square up to them.
@@ -41,6 +45,8 @@ var _want_zone: StringName = Moves.GUARD_HEAD
 ## After LB + RB (a hold), the guards stay down until both buttons are let go.
 var _guards_latched := false
 var _prompts: Node = null
+## The punch button holding a power shot, or &"".
+var _power_button: StringName = &""
 
 
 func _ready() -> void:
@@ -119,9 +125,12 @@ func _read_input(delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("headbutt"):
 		press(&"headbutt")
+	if _power_button != &"" and not Input.is_action_pressed(String(_power_button)):
+		release_power()
 	for b in Moves.PUNCHES:
 		if Input.is_action_just_pressed(String(b)):
-			button(b, lb, rb, head_bob.y < -0.5)
+			if button(b, lb, rb, head_bob.y < -0.5, true):
+				_power_button = b
 	_tick_buffer(delta)
 
 
@@ -155,14 +164,21 @@ func guards(lb: bool, rb: bool, lb_now := false, rb_now := false) -> bool:
 
 ## A punch button (`b` is &"jab", &"hook" or &"uppercut") with the shoulder buttons held as
 ## they are: LB turns it into kick / clinch knee / shoulder charge, RB (or ducking) sends it
-## to the body.
-func button(b: StringName, lb := false, rb := false, duck := false) -> void:
+## to the body. `hold`: the button stays down, so a hook or uppercut loads into a power shot
+## until release_power(). Returns true if a held punch went out.
+func button(b: StringName, lb := false, rb := false, duck := false, hold := false) -> bool:
 	if lb and not rb:
-		press(Moves.LB_MOVES[b])
+		return press(Moves.LB_MOVES[b], hold)
 	elif rb or duck:
-		press(Moves.BODY_PUNCHES[b])
-	else:
-		press(Moves.PUNCHES[b])
+		return press(Moves.BODY_PUNCHES[b], hold)
+	return press(Moves.PUNCHES[b], hold)
+
+
+## Let go of the punch button: a loading power shot goes.
+func release_power() -> void:
+	_power_button = &""
+	if state == State.WINDUP and _hold_power:
+		request_unleash()
 
 
 ## Right stick: move the head. A flick past the threshold slips (head shots miss for a moment).
@@ -174,22 +190,25 @@ func set_head_bob(v: Vector2) -> void:
 
 
 ## A button asking for `move`. It goes now if we're free or in the chain window, is
-## buffered if the window is about to open, and otherwise counts as mashing.
-func press(move: StringName) -> void:
+## buffered if the window is about to open, and otherwise counts as mashing. Returns true if
+## it went out now as a held (chargeable) punch.
+func press(move: StringName, hold := false) -> bool:
 	if _fumble_t > 0.0:
-		return
+		return false
 	if state == State.GRABBING or can_attack():
-		_perform(move)
-		return
+		hold = hold and state != State.GRABBING and bool(Moves.get_move(move)["chargeable"])
+		_perform(move, hold)
+		return hold
 	if state == State.WINDUP or state == State.ATTACK:
 		if _buffered == &"" and _time_to_chain() <= Moves.INPUT_BUFFER:
 			_buffered = move
 			_buffer_t = Moves.INPUT_BUFFER + 0.05
-			return
+			return false
 		# Too early, or a second press on top of a buffered one: that's mashing.
 		_mash += 1
 		if _mash >= Moves.MASH_LIMIT:
 			_fumble()
+	return false
 
 
 func _set_block(on: bool, zone: StringName = Moves.GUARD_HEAD) -> void:
@@ -233,7 +252,7 @@ func _fumble() -> void:
 
 
 ## Turn a move into a target and a combo, then ask the host.
-func _perform(move: StringName) -> void:
+func _perform(move: StringName, hold := false) -> void:
 	if state == State.GRABBING:
 		request_attack(&"knee")
 		return
@@ -261,7 +280,7 @@ func _perform(move: StringName) -> void:
 		_history.clear()  # a finished string starts afresh
 	_mash = 0
 	_since_attack = 0.0
-	request_attack(move, tgt, bonus, cname)
+	request_attack(move, tgt, bonus, cname, hold)
 
 
 func _tick_combo(delta: float) -> void:

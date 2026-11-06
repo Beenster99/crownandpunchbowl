@@ -40,6 +40,11 @@ extends RefCounted
 ##   clinch: bool       the attacker grabs the victim's head with both hands first (the clinch
 ##                      knee): it ignores a guard and pulls the victim in.
 ##   doubles: bool      a hit doubles the victim over (on all fours, holding their crotch).
+##   stamina: float     stamina it costs to throw (default 3 + damage * 0.8). A whiff costs
+##                      the same again on top.
+##   guard_drain: float stamina a blocker loses when it hits their guard (default damage *
+##                      1.2). Jabs drain far more than they cost: that's how you open a guard.
+##   chargeable: bool   held down, it loads into a power shot (hooks and uppercuts).
 
 const HELD_DAMAGE_MULT := 1.5      ## held fighters take this much more damage from everyone
 const GROUND_DAMAGE_MULT := 0.7    ## fighters on the floor take less (stomps excepted)
@@ -67,7 +72,7 @@ const BLOCK_MOVE_SCALE := 0.45     ## speed while blocking
 const PARRY_WINDOW := 0.2          ## block this soon before a punch lands to parry it
 const PARRY_STAGGER := 1.0         ## how long a parried attacker reels
 const COUNTER_WINDOW := 0.9        ## after a parry, a punch this soon is a counter
-const COUNTER_BONUS := 1.6         ## damage multiplier on a counter
+const COUNTER_BONUS := 1.8         ## damage multiplier on a counter
 const GUARD_BREAK_STAGGER := 0.7   ## a blocker hit by a guard breaker reels this long
 const ENGAGE_RANGE := 3.2          ## a player within this of an active enemy takes a stance
 const STANCE_MOVE_SCALE := 0.6     ## speed in a fighting stance (footwork, not sprinting)
@@ -97,6 +102,30 @@ const CHARGE_HIT_RANGE := 0.95     ## metres from the charger's centre that a bo
 ## Holds: a victim with hold_resist shrugs a grab off with this chance (resist / holder grip),
 ## halved if they're reeling or doubled over. Resist also makes them wriggle free faster.
 const SHRUG_STAGGER := 0.45        ## the would-be holder reels this long when shrugged off
+## Stamina is the gas tank. Every strike costs some, a miss costs double, blocking a hit
+## drains it, and body shots sap it. It only comes back when you stop throwing. A gassed
+## fighter (under GASSED of it) hits soft, winds up slow, moves slow, and a guard that
+## runs dry is crushed: they reel, wide open. So the man who throws everything loses.
+const STAMINA := 100.0
+const STAMINA_REGEN := 22.0         ## per second, once you've stopped throwing
+const STAMINA_REGEN_DELAY := 0.6    ## after a strike or a drain before it starts coming back
+const STAMINA_BLOCK_REGEN := 0.5    ## regen rate while holding a guard
+const WHIFF_STAMINA := 1.0          ## a miss costs this many times the move's cost again
+const GASSED := 0.25                ## fraction of stamina below which you're gassed
+const GASSED_DAMAGE := 0.6
+const GASSED_WINDUP := 1.3
+const GASSED_SPEED := 0.8
+const GUARD_CRUSH_STAGGER := 0.9    ## a guard that runs out of stamina: they reel this long
+const BODY_SHOT_DRAIN := 1.5        ## a body or groin shot also drains damage * this stamina
+## Power shots: hold a hook or an uppercut and it loads. Let go to throw it. You're stood
+## there coiled, so a jab in the face cancels it. Full power breaks a guard.
+const CHARGE_TIME := 0.8            ## seconds of holding to full power
+const CHARGE_HOLD := 0.5            ## held at full power this long, it goes on its own
+const POWER_MAX := 1.9              ## damage (and stagger/poise) multiplier at full power
+const POWER_MIN := 0.15             ## less charge than this is just a normal punch
+const POWER_STAMINA := 0.8          ## a full-power shot costs this much extra (x its cost)
+## Catch a man in the recovery of a punch (above all one that missed) and it's a punish.
+const PUNISH_BONUS := 1.35
 const NOSE_BREAK_DAMAGE := 9.0     ## a face hit this hard can break a nose
 const CRAWL_SPEED := 0.7
 const GRAB_MOVE_SCALE := 0.45      ## holder's speed multiplier
@@ -113,24 +142,32 @@ const DATA := {
 	# Paced to read as weighty, not frantic: every punch has a visible load and a recovery
 	# you have to respect. Heavier punches commit you for longer. Poise is the knockdown
 	# meter: no single punch drops a fresh man, a good combination or a body-head mix does.
-	&"jab": {"damage": 5.0, "windup": 0.12, "active": 0.06, "recover": 0.3, "reach": 1.3,
+	&"jab": {"stamina": 6.0, "guard_drain": 13.0,
+		"damage": 5.0, "windup": 0.12, "active": 0.06, "recover": 0.3, "reach": 1.3,
 		"arc": 70.0, "stagger": 0.25, "poise": 6.0, "knockback": 1.2, "to_face": true},
-	&"cross": {"damage": 9.0, "windup": 0.2, "active": 0.06, "recover": 0.4, "reach": 1.35,
+	&"cross": {"stamina": 10.0, "guard_drain": 11.0, "chargeable": true,
+		"damage": 9.0, "windup": 0.2, "active": 0.06, "recover": 0.4, "reach": 1.35,
 		"arc": 70.0, "stagger": 0.4, "poise": 12.0, "knockback": 2.2, "to_face": true},
-	&"hook": {"damage": 11.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.25,
+	&"hook": {"stamina": 13.0, "guard_drain": 10.0, "chargeable": true,
+		"damage": 11.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.25,
 		"arc": 90.0, "stagger": 0.5, "poise": 16.0, "knockback": 2.4, "heavy": true,
 		"to_face": true, "side": 1.0},
-	&"uppercut": {"damage": 14.0, "windup": 0.3, "active": 0.07, "recover": 0.55, "reach": 1.15,
+	&"uppercut": {"stamina": 17.0, "guard_drain": 9.0, "chargeable": true,
+		"damage": 14.0, "windup": 0.3, "active": 0.07, "recover": 0.55, "reach": 1.15,
 		"arc": 70.0, "stagger": 0.6, "poise": 22.0, "knockback": 3.0, "heavy": true, "to_face": true},
 	# Body shots (RB + punch): less damage, but they sap poise and slow a man down, and a
 	# fighter covering his head is open to them.
-	&"body_jab": {"damage": 4.0, "windup": 0.13, "active": 0.06, "recover": 0.32, "reach": 1.25,
+	&"body_jab": {"stamina": 6.0, "guard_drain": 10.0,
+		"damage": 4.0, "windup": 0.13, "active": 0.06, "recover": 0.32, "reach": 1.25,
 		"arc": 70.0, "stagger": 0.25, "poise": 10.0, "knockback": 0.9, "zone": &"body"},
-	&"body_hook": {"damage": 8.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.2,
+	&"body_hook": {"stamina": 12.0, "guard_drain": 12.0, "chargeable": true,
+		"damage": 8.0, "windup": 0.22, "active": 0.07, "recover": 0.45, "reach": 1.2,
 		"arc": 90.0, "stagger": 0.45, "poise": 22.0, "knockback": 1.6, "zone": &"body", "side": 1.0},
-	&"body_uppercut": {"damage": 10.0, "windup": 0.28, "active": 0.07, "recover": 0.5, "reach": 1.1,
+	&"body_uppercut": {"stamina": 15.0, "guard_drain": 12.0, "chargeable": true,
+		"damage": 10.0, "windup": 0.28, "active": 0.07, "recover": 0.5, "reach": 1.1,
 		"arc": 70.0, "stagger": 0.55, "poise": 26.0, "knockback": 1.8, "heavy": true, "zone": &"body"},
-	&"kick": {"damage": 11.0, "windup": 0.3, "active": 0.08, "recover": 0.5, "reach": 1.65,
+	&"kick": {"stamina": 18.0,
+		"damage": 11.0, "windup": 0.3, "active": 0.08, "recover": 0.5, "reach": 1.65,
 		"arc": 70.0, "stagger": 0.55, "poise": 20.0, "knockback": 4.0, "heavy": true,
 		"guard_break": true, "zone": &"body"},
 	# The end of "Below the belt": a kick to the crotch that drops them on all fours.
@@ -142,19 +179,23 @@ const DATA := {
 		"to_face": true, "self_damage": 2.0, "guard_break": true},
 	# LB + Y: drop the shoulder and drive through them. Knocks them flat and sends them into
 	# (or over) whatever is behind them.
-	&"shoulder_charge": {"damage": 10.0, "windup": 0.28, "active": 0.42, "recover": 0.55,
+	&"shoulder_charge": {"stamina": 24.0,
+		"damage": 10.0, "windup": 0.28, "active": 0.42, "recover": 0.55,
 		"reach": 1.0, "arc": 60.0, "stagger": 0.6, "poise": 0.0, "knockback": 9.5,
 		"knockdown": true, "heavy": true, "guard_break": true, "lunge": false, "charge": true,
 		"zone": &"body"},
 	# LB + B: both hands behind their head, pull it down onto a rising knee.
-	&"clinch_knee": {"damage": 15.0, "windup": 0.3, "active": 0.08, "recover": 0.55, "reach": 1.1,
+	&"clinch_knee": {"stamina": 18.0,
+		"damage": 15.0, "windup": 0.3, "active": 0.08, "recover": 0.55, "reach": 1.1,
 		"arc": 70.0, "stagger": 0.8, "poise": 30.0, "knockback": 1.6, "heavy": true,
 		"to_face": true, "guard_break": true, "clinch": true},
 	&"stomp": {"damage": 9.0, "windup": 0.32, "active": 0.06, "recover": 0.5, "reach": 1.4,
 		"arc": 90.0, "ground": true, "heavy": true},
-	&"knee": {"damage": 8.0, "windup": 0.0, "active": 0.05, "recover": 0.0, "reach": 1.4,
+	&"knee": {"stamina": 3.0,
+		"damage": 8.0, "windup": 0.0, "active": 0.05, "recover": 0.0, "reach": 1.4,
 		"arc": 60.0, "poise": 8.0, "keeps_hold": true, "lunge": false, "to_face": true},
-	&"throw": {"damage": 8.0, "knockdown": true, "knockback": 7.0, "heavy": true, "lunge": false,
+	&"throw": {"stamina": 8.0,
+		"damage": 8.0, "knockdown": true, "knockback": 7.0, "heavy": true, "lunge": false,
 		"guard_break": true},
 
 	# --- Enemy moves (telegraphed, counterable) --------------------------------
@@ -164,6 +205,10 @@ const DATA := {
 	&"body_swing": {"damage": 7.0, "telegraph": true, "windup_scale": 1.0, "active": 0.06,
 		"recover": 0.7, "reach": 1.3, "arc": 70.0, "stagger": 0.35, "poise": 14.0,
 		"knockback": 1.4, "zone": &"body"},
+	# Off the back of a blocked punch: a short, quick tell, then a stiff jab back.
+	&"counter_jab": {"damage": 6.0, "telegraph": true, "windup_scale": 0.55, "active": 0.06,
+		"recover": 0.45, "reach": 1.35, "arc": 70.0, "stagger": 0.3, "poise": 8.0,
+		"knockback": 1.4, "to_face": true},
 	&"haymaker": {"damage": 14.0, "telegraph": true, "windup_scale": 1.5, "active": 0.07,
 		"recover": 0.95, "reach": 1.4, "arc": 80.0, "stagger": 0.6, "poise": 30.0,
 		"knockback": 4.0, "heavy": true, "to_face": true, "guard_break": true, "side": 1.0},
@@ -258,7 +303,11 @@ static func get_move(move_id: StringName) -> Dictionary:
 		"stagger": 0.3, "poise": 8.0, "knockback": 1.0, "knockdown": false, "heavy": false,
 		"to_face": false, "ground": false, "telegraph": false, "keeps_hold": false,
 		"self_damage": 0.0, "guard_break": false, "zone": &"head", "side": 0.0,
-		"charge": false, "clinch": false, "doubles": false,
+		"charge": false, "clinch": false, "doubles": false, "chargeable": false,
 	}
 	m.merge(DATA.get(move_id, {}), true)
+	if not m.has("stamina"):
+		m["stamina"] = 3.0 + float(m["damage"]) * 0.8
+	if not m.has("guard_drain"):
+		m["guard_drain"] = float(m["damage"]) * 1.2
 	return m

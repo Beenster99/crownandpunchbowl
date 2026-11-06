@@ -18,6 +18,7 @@ func run() -> void:
 		"test_mates_join_in", "test_attack_tokens_cap", "test_gang_up_rush",
 		"test_held_punter_struggles_free", "test_bar_staff", "test_waves_and_cleared",
 		"test_police_raid", "test_cooling_off", "test_one_or_two_at_a_time",
+		"test_punters_counter_cover_and_breathe",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -397,3 +398,52 @@ func test_one_or_two_at_a_time() -> void:
 		attackers[a] = true
 	_check(attackers.size() <= cap, "only the ones squaring up throw punches (%d)" % attackers.size())
 	_check(tells.size() >= 2 and tells.size() <= 10, "a steady pace, not a flurry (%d tells in 10 s)" % tells.size())
+
+
+## Punters make you work: a jab on the gloves gets a jab straight back, a man who keeps
+## getting tagged shells up, and a gassed one backs off to breathe.
+func test_punters_counter_cover_and_breathe() -> void:
+	var d := _director()
+	var p := _player(Vector3(0, 0, 0), 1000.0)
+	var npc := d.spawn(&"local", Vector3(0, 0, -1.2))
+	await _wait(0.1)
+	var t: Dictionary = npc._type.duplicate()
+	t["counter"] = 1.0
+	t["defence"] = 1.0
+	t["guard_skill"] = 1.0
+	npc._type = t
+	npc.engage(p, true)
+	npc._attack_cd = 99.0  # not throwing anything of his own here
+	npc.global_position = Vector3(0, 0, -1.2)
+	p.rotation.y = 0.0  # facing -Z, at him
+	await _wait(0.1)
+	# He reads the jab, covers up, and fires one back off the guard.
+	var tells := []
+	var cb := func(a, _t, _s): tells.append(a)
+	Events.attack_telegraphed.connect(cb)
+	p.request_attack(&"jab", npc)
+	await _wait(1.0)
+	Events.attack_telegraphed.disconnect(cb)
+	_check(npc.current_move == &"counter_jab" or tells.has(npc),
+		"a jab on his gloves gets a counter jab back (%s)" % [npc.current_move])
+	# Tagged clean twice: he shells up.
+	await _until_can_act(npc)
+	await _wait(0.3)
+	npc._cover_zone = &""
+	npc._pressure = 0.0
+	_hit(npc, p)
+	await _wait(0.05)
+	_hit(npc, p)
+	await _wait(0.4)
+	_check(npc.state == Fighter.State.BLOCK, "tagged twice, he covers up (%s)" % Fighter.State.keys()[npc.state])
+	# Gassed: he backs off and won't come in until he's got his breath.
+	npc.request_block(false)
+	await _wait(0.1)
+	npc.stamina = 5.0
+	npc._attack_cd = 0.0
+	npc._recover_t = 0.0
+	var start := npc.global_position.distance_to(p.global_position)
+	await _wait(0.8)
+	_check(npc.global_position.distance_to(p.global_position) > start + 0.3,
+		"a gassed punter backs off to breathe (%.2f -> %.2f)" % [start,
+		npc.global_position.distance_to(p.global_position)])

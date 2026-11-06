@@ -6,7 +6,7 @@ extends CanvasLayer
 ## World-space pickup and bar prompts belong to the items workstream (they use Settings.prompt()).
 ##
 ## It only reads, never drives gameplay. What it reads (all optional, so placeholders work):
-## - Nodes in group `players`: `hp`, `max_hp` (floats), `tipsy` (0..1), and
+## - Nodes in group `players`: `hp`, `max_hp`, `stamina`, `max_stamina` (floats), `tipsy` (0..1), and
 ##   The name and farmer come from Net.players[peer_id], keyed by the node's multiplayer authority.
 ## - Nodes in group `npcs`: counted as standing unless `is_down()` returns true.
 ## - The first node in group `director`: `heat` (0..1). The meter hides when there is none.
@@ -14,9 +14,12 @@ extends CanvasLayer
 ##   Those flow events get their banner here, so other systems needn't send one for them.
 
 const PANEL_WIDTH := 280.0
+## The stamina bar under health, and its colour when you're gassed.
+const STAMINA_COLOUR := Color(0.55, 0.78, 0.35)
+const STAMINA_LOW := Color(0.95, 0.5, 0.15)
 
 var _players_box: HBoxContainer
-var _panels := {}  # player node -> {"hp": ProgressBar, "tipsy": ProgressBar}
+var _panels := {}  # player node -> {"hp", "stamina", "tipsy": ProgressBar, ...}
 var _standing: Label
 var _heat_box: VBoxContainer
 var _heat: ProgressBar
@@ -26,7 +29,7 @@ var _hints: VBoxContainer
 var _combo_tween: Tween
 var _banner_tween: Tween
 ## Shown in the controls reminder, in this order, if the action exists in Settings.ACTIONS.
-const HINTS := [["jab", "Jab"], ["hook", "Hook"], ["uppercut", "Uppercut"],
+const HINTS := [["jab", "Jab"], ["hook", "Hook (hold: power)"], ["uppercut", "Uppercut (hold: power)"],
 	["guard_head", "Head guard / parry"], ["guard_body", "Body guard"], ["headbutt", "Headbutt"],
 	["dodge", "Dodge"], ["interact", "Pick up / order drink"], ["order_food", "Order food"],
 	["throw", "Throw"]]
@@ -158,6 +161,15 @@ func _update_players() -> void:
 		var hp: float = p.get("hp") if p.get("hp") != null else max_hp
 		ui["hp"].max_value = max_hp
 		ui["hp"].value = hp
+		var stamina: Variant = p.get("stamina")
+		ui["stamina"].visible = stamina != null
+		if stamina != null:
+			var max_st: float = p.get("max_stamina") if p.get("max_stamina") != null else 100.0
+			ui["stamina"].max_value = max_st
+			ui["stamina"].value = float(stamina)
+			# Gassed: the bar goes a sickly orange so you know to back off and breathe.
+			var gassed := float(stamina) < max_st * Moves.GASSED
+			(ui["stamina_fill"] as StyleBoxFlat).bg_color = STAMINA_LOW if gassed else STAMINA_COLOUR
 		var tipsy: Variant = p.get("tipsy")
 		ui["tipsy"].visible = tipsy != null
 		if tipsy != null:
@@ -179,12 +191,16 @@ func _add_panel(p: Node) -> void:
 		box.add_child(UiTheme.label(GameData.FARMERS[farmer]["name"], "HintLabel"))
 	var hp := _bar(UiTheme.BLOOD, 18)
 	box.add_child(hp)
+	var stamina := _bar(STAMINA_COLOUR, 8)
+	stamina.tooltip_text = "Stamina"
+	box.add_child(stamina)
 	var tipsy := _bar(UiTheme.ALE, 8)
 	tipsy.max_value = 1.0
 	tipsy.tooltip_text = "Tipsy"
 	box.add_child(tipsy)
 	_players_box.add_child(panel)
-	_panels[p] = {"panel": panel, "hp": hp, "tipsy": tipsy}
+	_panels[p] = {"panel": panel, "hp": hp, "tipsy": tipsy, "stamina": stamina,
+		"stamina_fill": stamina.get_theme_stylebox("fill")}
 
 
 func _update_room() -> void:
