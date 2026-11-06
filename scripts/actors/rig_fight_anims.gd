@@ -315,10 +315,10 @@ static func _kicks_and_dirty(defs: Dictionary, guard: Dictionary) -> void:
 # --- Defence --------------------------------------------------------------------
 
 static func _defence(defs: Dictionary, guard: Dictionary) -> void:
-	# Head guard (LB): gloves to the temples, elbows about shoulder width apart, chin buried, peeking out.
+	# Head guard (LB): both gloves up in front of the face, elbows in, chin buried, peeking out between them.
 	var high := _w(guard, {&"Hips": Vector3(0, -10, 0), &"Spine": Vector3(-14, 6, 0), &"Head": Vector3(-22, 4, 0),
-		&"ShoulderL": Vector3(80, -6, 0), &"ElbowL": Vector3(150, 0, 0), &"HandL": Vector3(-30, 0, 0),
-		&"ShoulderR": Vector3(80, 6, 0), &"ElbowR": Vector3(150, 0, 0), &"HandR": Vector3(-30, 0, 0),
+		&"ShoulderL": Vector3(55, -30, 30), &"ElbowL": Vector3(130, 0, 0), &"HandL": Vector3(-30, 0, 0),
+		&"ShoulderR": Vector3(55, 30, -30), &"ElbowR": Vector3(130, 0, 0), &"HandR": Vector3(-30, 0, 0),
 		&"KneeL": Vector3(-26, 0, 0), &"KneeR": Vector3(-24, 0, 0), &"_hips": Vector3(0, -0.05, 0), &"_brow": Vector3(0.9, 0, 0)})
 	defs[&"guard_head"] = {"length": 1.2, "loop": true, "keys": [
 		[0.0, high],
@@ -326,11 +326,11 @@ static func _defence(defs: Dictionary, guard: Dictionary) -> void:
 		[0.8, _w(high, {&"Spine": Vector3(-15, 2, -3), &"_hips": Vector3(-0.01, -0.06, 0)})],
 		[1.2, high],
 	]}
-	# Body guard (RB): elbows dropped onto the sides of the ribs, forearms up in front of the body, hunched
+	# Body guard (RB): elbows tucked in over the ribs, fists up by the chin, hunched
 	# and sat down on the legs.
 	var low := _w(guard, {&"Hips": Vector3(0, -12, 0), &"Spine": Vector3(-24, 4, 0), &"Chest": Vector3(-6, 0, 0), &"Head": Vector3(-6, 6, 0),
-		&"ShoulderL": Vector3(6, 0, -2), &"ElbowL": Vector3(140, 0, 0), &"HandL": Vector3(-10, 0, 0),
-		&"ShoulderR": Vector3(6, 0, 2), &"ElbowR": Vector3(140, 0, 0), &"HandR": Vector3(-10, 0, 0),
+		&"ShoulderL": Vector3(30, -35, 30), &"ElbowL": Vector3(140, 0, 0), &"HandL": Vector3(0, -70, 0),
+		&"ShoulderR": Vector3(30, 35, -30), &"ElbowR": Vector3(140, 0, 0), &"HandR": Vector3(0, 70, 0),
 		&"HipL": Vector3(24, 0, -8), &"KneeL": Vector3(-36, 0, 0), &"HipR": Vector3(-4, 0, 8), &"KneeR": Vector3(-34, 0, 0),
 		&"_hips": Vector3(0, -0.09, 0.01), &"_brow": Vector3(0.9, 0, 0)})
 	defs[&"guard_body"] = {"length": 1.2, "loop": true, "keys": [
@@ -342,7 +342,7 @@ static func _defence(defs: Dictionary, guard: Dictionary) -> void:
 	var cover := _key(defs, &"block", 0)
 	defs[&"block_hit_head"] = {"length": 0.36, "keys": [
 		[0.0, high], [0.05, _w(high, {&"Head": Vector3(-6, -4, 0), &"Spine": Vector3(-4, 2, 0), &"_hips": Vector3(0, -0.05, 0.06),
-			&"ElbowL": Vector3(140, 0, 0), &"ElbowR": Vector3(140, 0, 0)}), "snap"],
+			&"ElbowL": Vector3(124, 0, 0), &"ElbowR": Vector3(124, 0, 0)}), "snap"],
 		[0.18, _w(high, {&"_hips": Vector3(0, -0.06, 0.04)}), "out"], [0.36, high],
 	]}
 	defs[&"block_hit_body"] = {"length": 0.4, "keys": [
