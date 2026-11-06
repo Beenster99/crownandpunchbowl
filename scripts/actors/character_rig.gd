@@ -22,18 +22,46 @@ const ANIMATIONS: Array[StringName] = [
 	&"cheer", &"taunt", &"block", &"hook_l", &"hook_r", &"uppercut_r", &"hit_left", &"hit_right",
 	# Calm, before anyone kicks off: relaxed stances, a pint, chatting, staff polishing.
 	&"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
+	# The fight set (RigFightAnims): stances, footwork, punch variants, body shots, kicks,
+	# the clinch knee, shoulder charge and groin kick, guards, parries, slips and dodges,
+	# and the reactions that go with them.
+	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r",
+	&"punch_l_b", &"punch_l_c", &"punch_r_b", &"hook_l_b", &"hook_r_b", &"uppercut_l", &"uppercut_r_b", &"headbutt_b",
+	&"jab_body", &"cross_body", &"hook_l_body", &"hook_r_body", &"uppercut_body",
+	&"kick_b", &"kick_low", &"groin_kick", &"clinch_knee", &"shoulder_charge", &"body_swing",
+	&"guard_head", &"guard_body", &"block_hit", &"block_hit_head", &"block_hit_body", &"parry_l", &"parry_r",
+	&"slip_l", &"slip_r", &"dodge_l", &"dodge_r", &"dodge_back", &"dodge_fwd",
+	&"hit_body", &"hit_body_l", &"hit_body_r", &"hit_uppercut", &"hit_front_b", &"groin_down", &"groin_hold", &"clinched",
 ]
 
 ## The calm idles a character picks from (by seed). Staff polish glasses instead.
 const CALM_IDLES: Array[StringName] = [&"idle_relaxed", &"idle_pint", &"idle_relaxed"]
 ## Standing loops that guard/talk changes switch between.
-const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed"]
+const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
+	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r", &"guard_head", &"guard_body"]
+## Fighting stances, picked by seed so everyone squares up their own way.
+const FIGHT_IDLES: Array[StringName] = [&"idle", &"idle_brawler", &"idle", &"idle_wary", &"idle_brawler"]
+## Strikes with more than one take. play_move() picks one at random each time.
+const VARIANTS := {
+	&"punch_l": [&"punch_l", &"punch_l_b", &"punch_l_c"], &"punch_r": [&"punch_r", &"punch_r_b"],
+	&"hook_l": [&"hook_l", &"hook_l_b"], &"hook_r": [&"hook_r", &"hook_r_b"],
+	&"uppercut_r": [&"uppercut_r", &"uppercut_r_b", &"uppercut_l"], &"kick": [&"kick", &"kick_b", &"kick_low"],
+	&"headbutt": [&"headbutt", &"headbutt_b"], &"hook_l_body": [&"hook_l_body", &"hook_r_body"],
+	&"hit_front": [&"hit_front", &"hit_front_b"],
+}
+## Body-shot takes of a move, for play_move(move, &"body").
+const BODY_ANIMS := {
+	"jab": &"jab_body", "punch_l": &"jab_body", "cross": &"cross_body", "punch_r": &"cross_body",
+	"hook": &"hook_l_body", "hook_l": &"hook_l_body", "hook_r": &"hook_r_body", "uppercut": &"uppercut_body",
+	"uppercut_r": &"uppercut_body", "swing": &"body_swing", "haymaker": &"body_swing",
+}
 
 ## Fighter state name (lower case, as in Fighter.State) -> animation.
 const STATE_ANIMS := {
 	"idle": &"idle", "attack": &"punch_r", "windup": &"windup", "stagger": &"stagger",
 	"down": &"knockdown", "crawl": &"crawl", "ko": &"ko", "held": &"held_struggle",
-	"grabbing": &"grab", "dodge": &"dodge", "block": &"block",
+	"grabbing": &"grab", "dodge": &"dodge", "block": &"block", "doubled": &"groin_hold", "parry": &"parry_l",
+	"clinched": &"clinched",
 }
 
 ## Move names (as in Events.hit_landed "move") -> animation. "punch" alternates hands.
@@ -45,16 +73,25 @@ const MOVE_ANIMS := {
 	"jab": &"punch_l", "cross": &"punch_r", "hook": &"hook_r", "uppercut": &"uppercut_r",
 	"hook_l": &"hook_l", "hook_r": &"hook_r", "uppercut_r": &"uppercut_r",
 	"haymaker": &"punch_r", "counter": &"punch_r", "counter_whiff": &"dodge", "shove": &"punch_l",
-	"knee": &"kick", "stomp": &"kick", "baton": &"swing",
+	"knee": &"clinch_knee", "stomp": &"stomp", "baton": &"swing",
+	"clinch_knee": &"clinch_knee", "groin_kick": &"groin_kick", "shoulder_charge": &"shoulder_charge",
+	"body_swing": &"body_swing", "body_jab": &"jab_body", "body_hook": &"hook_l_body", "body_uppercut": &"uppercut_body",
+	"parry": &"parry_l", "slip_l": &"slip_l", "slip_r": &"slip_r",
 }
 
 ## One-shots that hand over to another animation when they finish.
-const CHAINS := {&"knockdown": &"down", &"grab": &"hold"}
+const CHAINS := {&"knockdown": &"down", &"grab": &"hold", &"groin_down": &"groin_hold"}
 ## One-shots that go back to idle (or walk) when they finish.
 const RETURNS_TO_IDLE: Array[StringName] = [
 	&"punch_l", &"punch_r", &"kick", &"headbutt", &"swing", &"throw", &"hit_front",
 	&"hit_back", &"stagger", &"get_up", &"drink", &"eat", &"dodge", &"cheer", &"taunt",
 	&"hook_l", &"hook_r", &"uppercut_r", &"hit_left", &"hit_right",
+	&"punch_l_b", &"punch_l_c", &"punch_r_b", &"hook_l_b", &"hook_r_b", &"uppercut_l", &"uppercut_r_b", &"headbutt_b",
+	&"jab_body", &"cross_body", &"hook_l_body", &"hook_r_body", &"uppercut_body",
+	&"kick_b", &"kick_low", &"groin_kick", &"clinch_knee", &"shoulder_charge", &"body_swing",
+	&"block_hit", &"block_hit_head", &"block_hit_body", &"parry_l", &"parry_r", &"slip_l", &"slip_r",
+	&"dodge_l", &"dodge_r", &"dodge_back", &"dodge_fwd",
+	&"hit_body", &"hit_body_l", &"hit_body_r", &"hit_uppercut", &"hit_front_b",
 ]
 ## Lying on the floor. Drunken sway is switched off for these.
 const ON_FLOOR: Array[StringName] = [&"knockdown", &"down", &"crawl", &"ko"]
@@ -67,7 +104,9 @@ const SOCKETS: Array[StringName] = [&"hand_r", &"hand_l", &"head", &"chest", &"h
 const ANIM_JOINTS: Array[StringName] = [
 	&"Hips", &"Spine", &"Spine2", &"Chest", &"Neck", &"Head", &"Jaw", &"BrowL", &"BrowR",
 	&"ClavicleL", &"ShoulderL", &"ElbowL", &"HandL", &"Thumb1L", &"Thumb2L", &"Index1L", &"Index2L", &"Fingers1L", &"Fingers2L",
+	&"Ring1L", &"Ring2L", &"Pinky1L", &"Pinky2L",
 	&"ClavicleR", &"ShoulderR", &"ElbowR", &"HandR", &"Thumb1R", &"Thumb2R", &"Index1R", &"Index2R", &"Fingers1R", &"Fingers2R",
+	&"Ring1R", &"Ring2R", &"Pinky1R", &"Pinky2R",
 	&"HipL", &"KneeL", &"FootL", &"HipR", &"KneeR", &"FootR",
 ]
 ## Follow-through: seconds each joint trails the pose. The hips lead and the chest, head,
@@ -76,7 +115,9 @@ const OVERLAP := {
 	&"Spine2": 0.015, &"Chest": 0.03, &"Neck": 0.04, &"Head": 0.06, &"Jaw": 0.08, &"BrowL": 0.05, &"BrowR": 0.05,
 	&"ClavicleL": 0.02, &"ClavicleR": 0.02, &"HandL": 0.02, &"HandR": 0.02,
 	&"Thumb1L": 0.03, &"Thumb2L": 0.04, &"Index1L": 0.03, &"Index2L": 0.04, &"Fingers1L": 0.03, &"Fingers2L": 0.04,
+	&"Ring1L": 0.035, &"Ring2L": 0.045, &"Pinky1L": 0.04, &"Pinky2L": 0.05,
 	&"Thumb1R": 0.03, &"Thumb2R": 0.04, &"Index1R": 0.03, &"Index2R": 0.04, &"Fingers1R": 0.03, &"Fingers2R": 0.04,
+	&"Ring1R": 0.035, &"Ring2R": 0.045, &"Pinky1R": 0.04, &"Pinky2R": 0.05,
 }
 ## Animations are baked from the keyed poses at this rate.
 const BAKE_FPS := 30.0
@@ -127,6 +168,19 @@ var _sockets := {}
 var _bone := {}
 var _rest_global := {}
 var _scale := 1.0
+## The take actually playing (current is its base name). See play().
+var current_take: StringName = &""
+
+## Takes and pools with the motion-captured clips (RigMixamo) merged in, built once.
+static var _mixamo_merged := false
+static var _takes := {}
+static var _base := {}
+static var _fight_idles: Array[StringName] = []
+static var _calm_idles: Array[StringName] = []
+static var _drunk_idles: Array[StringName] = []
+static var _standing := {}
+static var _returns := {}
+static var _chains := {}
 var _lie := 0.0
 var _time := 0.0
 var _moving := false
@@ -141,6 +195,10 @@ var _windup_hold := -1.0  # freeze the lead-in here (the loaded pose) until rele
 var _strike_anim := &""   # what release_strike() plays, from its load time
 var _model_path := ""
 var _timing := {}  # anim name -> Vector2(load, contact)
+var _kneel := -0.45  # hips offset that puts the knees on the floor
+var _reactor: RigReactor
+var _guard_zone := &""  # "", "head" (LB) or "body" (RB)
+var _move_local := Vector2.ZERO  # x right, y forward, m/s
 
 static var _lib_cache := {}
 
@@ -156,6 +214,9 @@ func _process(delta: float) -> void:
 	if _model == null or look == null:
 		return
 	_tick_windup()
+	if _reactor:
+		_reactor.active = not ragdolling
+		_reactor.breath = 1.0 + clampf(_blood, 0.0, 1.0)
 	_time += delta
 	var w := 0.0 if ON_FLOOR.has(current) or ragdolling else look.sway
 	_model.rotation.z = sin(_time * 1.3) * 0.07 * w
@@ -165,16 +226,25 @@ func _process(delta: float) -> void:
 # --- Public API ------------------------------------------------------------
 
 ## Plays an animation by name with a short blend.
-func play(anim_name: StringName, blend := 0.1) -> void:
-	if anim == null or not anim.has_animation(anim_name):
+## Plays an animation by name. Where it has several takes (keyed and motion-captured) one
+## is picked at random unless pick is false. `current` is always the name asked for (the
+## base name of a take), so code can check what is happening without knowing the takes;
+## `current_take` is the one actually playing.
+func play(anim_name: StringName, blend := 0.1, pick := true) -> void:
+	_merge_mixamo()
+	var take := _variant(anim_name) if pick and _takes.has(anim_name) else anim_name
+	if anim == null or not anim.has_animation(take):
+		take = anim_name
+	if anim == null or not anim.has_animation(take):
 		push_warning("CharacterRig: no animation '%s'" % anim_name)
 		return
 	if ragdolling:
 		stop_ragdoll()
-	current = anim_name
+	current = base_of(take)
+	current_take = take
 	anim.speed_scale = 1.0
-	anim.play(anim_name, blend)
-	if STANDING.has(anim_name) or anim_name == &"hold":
+	anim.play(take, blend)
+	if _standing.has(take) or take == &"hold":
 		anim.seek(randf() * anim.current_animation_length if not Engine.is_editor_hint() else 0.0, true)
 
 
@@ -186,6 +256,10 @@ func play_state(state_name: String) -> void:
 		start_ragdoll(dir.normalized() * ragdoll_impulse + Vector3.UP * ragdoll_impulse * 0.25)
 	elif key == "idle":
 		play(_standing_anim())
+	elif key == "block":
+		play(_block_anim())
+	elif key == "doubled" and current in [&"groin_down", &"groin_hold"]:
+		return
 	elif STATE_ANIMS.has(key):
 		play(STATE_ANIMS[key])
 	else:
@@ -193,13 +267,12 @@ func play_state(state_name: String) -> void:
 
 
 ## Plays an attack or action by move name. "punch" alternates left and right.
-func play_move(move: String) -> void:
+## zone &"body" throws the body-shot take of the move where there is one.
+func play_move(move: String, zone := &"head") -> void:
 	guard = true
-	if move == "punch":
-		play(&"punch_l" if _next_punch_left else &"punch_r", 0.05)
-		_next_punch_left = not _next_punch_left
-	elif MOVE_ANIMS.has(move):
-		play(MOVE_ANIMS[move], 0.05)
+	var a := _strike_for(move, zone)
+	if a != &"":
+		play(a, 0.05, false)
 	else:
 		push_warning("CharacterRig: no animation for move '%s'" % move)
 
@@ -215,8 +288,8 @@ const _WINDUP_LEADS := {"haymaker": &"windup"}
 ## Lines up a move over `seconds`: plays the strike's load slowly into the loaded pose
 ## (most of the way through the wind-up) and holds it there, so you can see the punch
 ## coming. release_strike() then throws it. Falls back to play_move() for unknown moves.
-func play_windup(move: String, seconds: float) -> void:
-	var strike := _strike_for(move)
+func play_windup(move: String, seconds: float, zone := &"head") -> void:
+	var strike := _strike_for(move, zone)
 	if strike == &"" or anim == null or not anim.has_animation(strike):
 		play_move(move)
 		return
@@ -225,7 +298,7 @@ func play_windup(move: String, seconds: float) -> void:
 	if not anim.has_animation(lead):
 		lead = strike
 	var load_t := _load_time(lead)
-	play(lead, 0.08)
+	play(lead, 0.08, false)
 	# Load over the first 70% of the wind-up, then hold the coiled pose until release.
 	anim.speed_scale = clampf(load_t / maxf(seconds * 0.7, 0.01), 0.05, 1.5)
 	_windup_anim = lead
@@ -241,14 +314,34 @@ func release_strike() -> void:
 	_strike_anim = &""
 	_windup_anim = &""
 	_windup_hold = -1.0
-	play(strike, 0.04)
+	play(strike, 0.04, false)
 	anim.seek(_load_time(strike), true)
 
 
-func _strike_for(move: String) -> StringName:
-	if move == "hook" and anim != null and anim.has_animation(&"hook_r"):
-		return &"hook_r"
-	return MOVE_ANIMS.get(move, &"")
+## The animation for a move, with a random take where there are several.
+func _strike_for(move: String, zone := &"head") -> StringName:
+	var base: StringName = &""
+	if move == "punch":
+		base = &"punch_l" if _next_punch_left else &"punch_r"
+		_next_punch_left = not _next_punch_left
+	elif zone == &"body" and BODY_ANIMS.has(move):
+		base = BODY_ANIMS[move]
+	elif move == "hook":
+		base = &"hook_r"  # B is always the right hand
+	else:
+		base = MOVE_ANIMS.get(move, &"")
+	if base == &"stomp" and anim != null and not anim.has_animation(&"stomp"):
+		base = &"kick"
+	return _variant(base)
+
+
+func _variant(base: StringName) -> StringName:
+	_merge_mixamo()
+	if not _takes.has(base) or Engine.is_editor_hint():
+		return base
+	var takes: Array = _takes[base]
+	var pick: StringName = takes[randi() % takes.size()]
+	return pick if anim == null or anim.has_animation(pick) else base
 
 
 func _load_time(anim_name: StringName) -> float:
@@ -273,10 +366,33 @@ func _tick_windup() -> void:
 
 ## Plays a hit reaction. Pass the hit's world direction (attacker to victim) so a KO
 ## that follows throws the ragdoll the right way.
-func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> void:
+## zone is &"head", &"body" or &"groin" (down on all fours). move is the attacker's move
+## id, if known (an uppercut throws the head up). The head snaps away from the blow on a
+## spring (RigReactor) on top of whichever reaction plays.
+func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO, zone := &"head", move := "") -> void:
 	guard = true
 	if direction != Vector3.ZERO:
 		_last_hit = direction
+	var side := 0.0
+	var push := Vector3.BACK if from_front else Vector3.FORWARD
+	if direction.length() > 0.01 and is_inside_tree():
+		push = global_basis.inverse() * direction.normalized()
+		side = global_basis.x.normalized().dot(direction.normalized())
+	var upper := move.begins_with("uppercut") or move in ["uppercut_r", "uppercut_l", "clinch_knee", "knee"]
+	if _reactor:
+		_reactor.hit(push, zone, (2.2 if heavy else 1.2) + (0.6 if absf(side) > 0.45 else 0.0), upper)
+	match zone:
+		&"groin":
+			play(&"groin_down", 0.05)
+			return
+		&"body":
+			if side > 0.45:
+				play(&"hit_body_l", 0.03)
+			elif side < -0.45:
+				play(&"hit_body_r", 0.03)
+			else:
+				play(&"hit_body", 0.03)
+			return
 	if heavy:
 		play(&"stagger", 0.04)
 		return
@@ -284,23 +400,97 @@ func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> 
 		play(&"hit_back", 0.03)
 		return
 	# From the front: a blow coming across (a hook) whips the head round to that side.
-	var side := 0.0
-	if direction.length() > 0.01 and is_inside_tree():
-		side = global_basis.x.normalized().dot(direction.normalized())
 	if side > 0.45:
 		play(&"hit_left", 0.03)  # pushed to our right: struck on the left
 	elif side < -0.45:
 		play(&"hit_right", 0.03)
+	elif upper:
+		play(&"hit_uppercut", 0.03)
 	else:
-		play(&"hit_front", 0.03)
+		play(_variant(&"hit_front"), 0.03)
+
+
+## A blow taken on the guard: a small knock back in whichever cover is up.
+func play_block_hit(direction := Vector3.ZERO, zone := &"head") -> void:
+	if _reactor:
+		var push := global_basis.inverse() * direction.normalized() if direction.length() > 0.01 and is_inside_tree() else Vector3.BACK
+		_reactor.hit(push, &"head", 0.35)
+	if _guard_zone == &"body" or zone == &"body":
+		play(&"block_hit_body", 0.03)
+	elif _guard_zone == &"head":
+		play(&"block_hit_head", 0.03)
+	else:
+		play(&"block_hit", 0.03)
+
+
+## Which cover is up: &"" (the normal guard), &"head" (LB) or &"body" (RB).
+func set_guard_zone(zone: StringName) -> void:
+	if zone == _guard_zone:
+		return
+	_guard_zone = zone
+	if zone != &"":
+		guard = true
+	if current in [&"block", &"guard_head", &"guard_body"]:
+		play(_block_anim(), 0.12)
+	else:
+		_refresh_standing(0.12)
+
+
+func _block_anim() -> StringName:
+	match _guard_zone:
+		&"head":
+			return &"guard_head"
+		&"body":
+			return &"guard_body"
+	return &"block"
+
+
+## Head movement from the right stick: x slips (+ right), y ducks (+ down) or leans back
+## (- up), -1..1. Layered over whatever is playing. Call every frame.
+func set_head_bob(v: Vector2) -> void:
+	if _reactor:
+		_reactor.set_bob(v)
+
+
+## A dodge in a world direction: a step left, right, back or a dip forward, relative to facing.
+func play_dodge(world_dir: Vector3) -> void:
+	guard = true
+	var d := Vector3.ZERO
+	if world_dir.length() > 0.01 and is_inside_tree():
+		d = global_basis.inverse() * world_dir.normalized()
+	if d.length() < 0.01:
+		play(&"dodge", 0.04)  # no direction: duck under it
+	elif absf(d.x) >= absf(d.z):
+		play(&"dodge_r" if d.x > 0.0 else &"dodge_l", 0.04)
+	else:
+		play(&"dodge_back" if d.z > 0.0 else &"dodge_fwd", 0.04)
+
+
+## A parry: the lead hand slaps it away, now and then the rear hand catches it.
+func play_parry() -> void:
+	guard = true
+	play(&"parry_r" if randf() < 0.3 else &"parry_l", 0.03)
+
+
+## Head dragged down into a clinch, for the victim of a clinch knee.
+func play_clinched() -> void:
+	play(&"clinched", 0.08)
 
 
 ## Call every frame with horizontal speed in m/s. Switches between idle and walk.
 func set_move_speed(speed: float) -> void:
 	_moving = speed > 0.2
 	_refresh_standing(0.15)
-	if current == &"walk" or current == &"walk_relaxed":
-		anim.speed_scale = clampf(speed / (2.6 if current == &"walk" else 2.0), 0.6, 2.2)
+	if current in [&"walk", &"walk_back", &"strafe_l", &"strafe_r"]:
+		anim.speed_scale = clampf(speed / 2.6, 0.6, 2.2)
+	elif current == &"walk_relaxed":
+		anim.speed_scale = clampf(speed / 2.0, 0.6, 2.2)
+
+
+## Velocity in the character's own frame (x right, y forward), m/s. With the guard up,
+## picks walking, backing off or side-stepping. Call before set_move_speed().
+func set_move_vector(local: Vector2) -> void:
+	_move_local = local
 
 
 ## Fists up (a fight is on) or relaxed (calm pub). Blends over if standing or walking.
@@ -321,23 +511,109 @@ func set_talking(on: bool) -> void:
 
 ## The idle or walk that fits right now.
 func _standing_anim() -> StringName:
+	if _guard_zone != &"":
+		return _block_anim() if _block_anim() != &"block" else &"idle"
 	if _moving:
-		return &"walk" if guard else &"walk_relaxed"
+		if not guard:
+			return &"walk_relaxed"
+		var m := _move_local
+		if m.length() > 0.2 and absf(m.x) > absf(m.y) * 1.2:
+			return &"strafe_r" if m.x > 0.0 else &"strafe_l"
+		if m.y < -0.2 and absf(m.y) >= absf(m.x):
+			return &"walk_back"
+		return &"walk"
+	_merge_mixamo()
+	var fight := _available(_fight_idles)
 	if guard:
-		return &"idle"
+		return fight[absi(look_seed) % fight.size()]
 	if talking:
 		return &"idle_chat"
 	if staff:
 		return &"idle_polish"
-	return CALM_IDLES[absi(look_seed) % CALM_IDLES.size()]
+	var drunk := _available(_drunk_idles)
+	if look.sway > 0.3 and drunk.size() > 0:
+		return drunk[absi(look_seed) % drunk.size()]
+	var calm := _available(_calm_idles)
+	return calm[absi(look_seed) % calm.size()]
 
 
 func _refresh_standing(blend: float) -> void:
-	if anim == null or not STANDING.has(current):
+	if anim == null or not _standing.has(current_take):
 		return
 	var want := _standing_anim()
 	if want != current:
 		play(want, blend)
+
+
+static func _merge_mixamo() -> void:
+	if _mixamo_merged:
+		return
+	_mixamo_merged = true
+	for base in VARIANTS:
+		_takes[base] = (VARIANTS[base] as Array).duplicate()
+	_fight_idles.assign(FIGHT_IDLES)
+	_calm_idles.assign(CALM_IDLES)
+	for n in STANDING:
+		_standing[n] = true
+	var t := RigMixamo.table()
+	for anim_name in t:
+		var def: Dictionary = t[anim_name]
+		if def.has("variant_of"):
+			var base := StringName(def["variant_of"])
+			if not _takes.has(base):
+				_takes[base] = [base]
+			(_takes[base] as Array).append(anim_name)
+		match String(def.get("pool", "")):
+			"fight_idle":
+				_fight_idles.append(anim_name)
+			"calm_idle":
+				_calm_idles.append(anim_name)
+			"drunk_idle":
+				_drunk_idles.append(anim_name)
+		if def.get("pool", "") != "":
+			_standing[anim_name] = true
+		var then := String(def.get("then", ""))
+		if then == "idle":
+			_returns[anim_name] = true
+		elif then != "":
+			_chains[anim_name] = StringName(then)
+	for base in _takes:
+		for take in _takes[base]:
+			if take != base:
+				_base[take] = base
+				if _standing.has(base):
+					_standing[take] = true
+
+
+## The animation a take stands in for (itself if it isn't a take of another).
+static func base_of(take: StringName) -> StringName:
+	_merge_mixamo()
+	return _base.get(take, take)
+
+
+## Every take of an animation, keyed and motion-captured.
+static func takes_of(base: StringName) -> Array:
+	_merge_mixamo()
+	return _takes.get(base, [base])
+
+
+## The fighting stances and calm idles characters pick from, by seed.
+static func fight_idles() -> Array[StringName]:
+	_merge_mixamo()
+	return _fight_idles
+
+
+static func calm_idles() -> Array[StringName]:
+	_merge_mixamo()
+	return _calm_idles
+
+
+func _available(pool: Array[StringName]) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for n in pool:
+		if anim == null or anim.has_animation(n):
+			out.append(n)
+	return out
 
 
 ## When a strike's wind-up ends (the coiled, loaded pose), in seconds. 0 if it has none.
@@ -503,9 +779,16 @@ func rebuild() -> void:
 	_scale = look.model_height
 	var hips_rest: Vector3 = (_rest_global[_bone[&"Hips"]] as Transform3D).origin
 	_lie = ((0.15 * look.girth + 0.04 * look.belly) * look.model_height - hips_rest.y) / _scale
+	# Kneeling: the hips come down by the height of the knee, less a little for the kneecap.
+	var knee_y: float = (_rest_global[_bone[&"KneeL"]] as Transform3D).origin.y
+	_kneel = -(knee_y - 0.035 * _scale) / _scale
 	_dress()
 	_build_sockets()
 	_build_animations()
+	_reactor = RigReactor.new()
+	_reactor.name = "Reactor"
+	_reactor.setup(self, skeleton)
+	skeleton.add_child(_reactor)
 	if not Engine.is_editor_hint():
 		_build_ragdoll()
 	set_blood(_blood)
@@ -536,6 +819,7 @@ func _dress() -> void:
 		&"boots": L.boots_color, &"hat": L.hat_color, &"neckerchief": L.neckerchief_color, &"metal": Color("c8ccd4"),
 		&"leather": Color("6b4a2a"), &"dark": Color("161616"), &"white": Color("ececec"), &"socks": Color("6a6a60"),
 		&"blood": Color("7a0b0b"), &"hivis_band": Color("b9bcc4"),
+		&"eyes": Color.WHITE, &"lashes": Color("1c1612"),
 	}
 	var mats := {}
 	var wanted := {
@@ -554,34 +838,125 @@ func _dress() -> void:
 		mi.visible = show
 		_meshes.append(mi)
 		for i in mi.mesh.get_surface_count():
-			var src := mi.mesh.surface_get_material(i)
-			var key := StringName(src.resource_name if src else "top")
-			if not mats.has(key):
-				mats[key] = _material(key, colours.get(key, Color.MAGENTA))
-			mi.set_surface_override_material(i, mats[key])
+			var src := mi.mesh.surface_get_material(i) as BaseMaterial3D
+			# Blender suffixes repeated names ("top.001"), so the palette key is the base name.
+			var key := StringName((src.resource_name if src else "top").get_slice(".", 0))
+			var tex: Texture2D = src.albedo_texture if src else null
+			var cache_key := [key, tex.get_rid() if tex else RID()]
+			if not mats.has(cache_key):
+				var default_colour := Color.WHITE if tex else Color.MAGENTA
+				mats[cache_key] = _material(key, colours.get(key, default_colour), src)
+			mi.set_surface_override_material(i, mats[cache_key])
 	for n in ["Blood_Nose", "Blood_Face", "Blood_Shirt", "Blood_Cheek"]:
 		if blood.has(n):
 			_blood_nodes.append(blood[n])
 
 
-func _material(key: StringName, colour: Color) -> StandardMaterial3D:
+## Surface detail per material: [noise frequency, contrast, triplanar scale, roughness].
+## The models have no UVs or tangents, so the detail is a tiling noise mapped triplanar
+## into the colour and the roughness: a weave mottle on cloth, blotches and pores on skin,
+## grain and scuffs on leather, strands in hair.
+const SURFACES := {
+	&"skin": [0.06, 0.1, 6.0, 0.6], &"flush": [0.06, 0.1, 6.0, 0.58], &"lips": [0.12, 0.1, 9.0, 0.45],
+	&"top": [0.3, 0.22, 7.0, 0.9], &"trim": [0.3, 0.2, 7.0, 0.88], &"over": [0.14, 0.24, 4.0, 0.78],
+	&"trousers": [0.35, 0.26, 8.0, 0.92], &"socks": [0.4, 0.2, 9.0, 0.95], &"neckerchief": [0.3, 0.2, 8.0, 0.85],
+	&"hat": [0.25, 0.2, 6.0, 0.9], &"boots": [0.05, 0.25, 3.0, 0.42], &"leather": [0.05, 0.28, 3.0, 0.5],
+	&"hair": [0.45, 0.35, 5.0, 0.55], &"beard": [0.45, 0.35, 8.0, 0.6], &"stubble": [0.6, 0.3, 12.0, 0.7],
+	&"brow": [0.5, 0.3, 10.0, 0.6], &"dark": [0.08, 0.15, 5.0, 0.6],
+}
+static var _detail_cache := {}
+
+
+## A greyscale tiling noise between 1 - contrast and 1, to multiply into a colour (and to
+## break up the roughness). Built synchronously and shared by every character.
+static func _detail_texture(freq: float, contrast: float) -> Texture2D:
+	var key := Vector2(freq, contrast)
+	if _detail_cache.has(key):
+		return _detail_cache[key]
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_CELLULAR if freq < 0.1 else FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.frequency = freq
+	n.fractal_octaves = 3
+	var src := n.get_seamless_image(128, 128)
+	var img := Image.create(128, 128, false, Image.FORMAT_RGB8)
+	for y in 128:
+		for x in 128:
+			var v := 1.0 - contrast * (1.0 - src.get_pixel(x, y).r)
+			img.set_pixel(x, y, Color(v, v, v))
+	img.generate_mipmaps()
+	var t := ImageTexture.create_from_image(img)
+	_detail_cache[key] = t
+	return t
+
+
+## Detail maps baked from MakeHuman textures average this grey (tools/blender/build_humans.py),
+## so the tint is scaled back up to land on the look's colour.
+const DETAIL_MEAN := 0.8
+## Surfaces cut with alpha (strands of hair, lashes) are drawn both sides and clipped.
+const ALPHA_SURFACES := [&"hair", &"beard", &"brow", &"lashes"]
+
+
+func _material(key: StringName, colour: Color, src: BaseMaterial3D = null) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = colour
 	m.roughness = 0.82
+	var textured := src != null and src.albedo_texture != null
+	if textured:
+		# MakeHuman models carry UVs, a greyscale detail map (or real colours for "keep_*" and
+		# the eyes) and a normal map: tint the detail with the look's colour.
+		m.albedo_texture = src.albedo_texture
+		if not String(key).begins_with("keep") and key != &"eyes" and key != &"dark":
+			m.albedo_color = Color(colour.r / DETAIL_MEAN, colour.g / DETAIL_MEAN, colour.b / DETAIL_MEAN)
+		if src.normal_enabled and src.normal_texture:
+			m.normal_enabled = true
+			m.normal_texture = src.normal_texture
+			m.normal_scale = 0.8
+		if key in ALPHA_SURFACES:
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			m.alpha_scissor_threshold = 0.35
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if SURFACES.has(key):
+			m.roughness = SURFACES[key][3]
+	elif SURFACES.has(key):
+		var sf: Array = SURFACES[key]
+		var tex := _detail_texture(sf[0], sf[1])
+		m.roughness = sf[3]
+		m.albedo_texture = tex
+		m.roughness_texture = tex
+		m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		m.uv1_triplanar = true
+		m.uv1_scale = Vector3.ONE * float(sf[2])
 	match key:
-		&"eye_white", &"eye_dark":
-			m.roughness = 0.25
+		&"eye_white", &"eye_dark", &"eyes":
+			m.roughness = 0.08
+			m.clearcoat_enabled = true
+			m.clearcoat = 1.0
 		&"metal":
 			m.metallic = 0.8
 			m.roughness = 0.35
+		&"stubble", &"hair" when not textured:
+			# Shaved heads and stubble are shells over the skin: let the skin show through.
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+			m.albedo_color.a = 0.4
 		&"blood":
-			m.roughness = 0.3
+			m.roughness = 0.15
+			m.clearcoat_enabled = true
+		&"boots", &"leather":
+			m.clearcoat_enabled = true
+			m.clearcoat = 0.35
+			m.clearcoat_roughness = 0.4
+		&"hair", &"beard":
+			m.anisotropy_enabled = true
+			m.anisotropy = 0.6
 		&"skin", &"flush", &"lips":
 			m.rim_enabled = true
 			m.rim = 0.25
 			m.rim_tint = 0.6
+			m.subsurf_scatter_enabled = true
+			m.subsurf_scatter_strength = 0.35
+			m.subsurf_scatter_skin_mode = true
 		&"top":
-			if look.top == CharacterLook.Top.SHIRT:
+			if look.top == CharacterLook.Top.SHIRT and not textured:
 				m.albedo_color = Color.WHITE
 				m.albedo_texture = _check_texture(look.top_color, look.top_trim)
 				m.uv1_triplanar = true
@@ -695,7 +1070,8 @@ func _bone_length(i: int) -> float:
 	for k in kids:
 		var n := skeleton.get_bone_name(k)
 		if n in ["Nose", "Jaw", "BrowL", "BrowR", "ClavicleL", "ClavicleR"] or n.begins_with("Thumb") \
-				or n.begins_with("Index") or n.begins_with("Fingers"):
+				or n.begins_with("Index") or n.begins_with("Fingers") \
+				or n.begins_with("Ring") or n.begins_with("Pinky"):
 			continue
 		best = maxf(best, skeleton.get_bone_rest(k).origin.length())
 	if best > 0.0:
@@ -716,7 +1092,7 @@ func _build_animations() -> void:
 	anim.root_node = anim.get_path_to(_model)
 	# Baking is the slow part, and every character built from the same model and build gets
 	# the same result, so a crowd shares one library per model.
-	var key := "%s|%.2f|%.3f" % [_model_path, _lie, _scale]
+	var key := "%s|%.2f|%.3f|%.3f|%s" % [_model_path, _lie, _scale, _kneel, RigMixamo.preview_all]
 	if not _lib_cache.has(key) or Engine.is_editor_hint():
 		var lib := AnimationLibrary.new()
 		var defs := _anim_defs()
@@ -724,19 +1100,39 @@ func _build_animations() -> void:
 		for anim_name in defs:
 			lib.add_animation(anim_name, _make_animation(defs[anim_name]))
 			timing[anim_name] = Vector2(float(defs[anim_name].get("load", 0.0)), float(defs[anim_name].get("contact", 0.0)))
+		# Motion-captured takes (RigMixamo) on top of the keyed set.
+		var mx := RigMixamo.definitions()
+		for anim_name in mx:
+			var def: Dictionary = mx[anim_name]
+			var a := RigMixamo.make(self, def)
+			if a == null:
+				continue
+			var t := Vector2(float(def.get("load", 0.0)), float(def.get("contact", 0.0)))
+			lib.add_animation(anim_name, a)
+			timing[anim_name] = t
+			if def.has("replaces"):
+				# Plays under the keyed animation's name, so every caller gets it.
+				var r := StringName(def["replaces"])
+				if lib.has_animation(r):
+					lib.remove_animation(r)
+				lib.add_animation(r, a)
+				timing[r] = t
 		_lib_cache[key] = [lib, timing]
 	anim.add_animation_library(&"", _lib_cache[key][0])
 	_timing = _lib_cache[key][1]
 	anim.animation_finished.connect(_on_animation_finished)
 
 
-func _on_animation_finished(anim_name: StringName) -> void:
+func _on_animation_finished(take: StringName) -> void:
+	var anim_name := base_of(take)
 	animation_finished.emit(anim_name)
 	if ragdolling:
 		return
-	if CHAINS.has(anim_name):
+	if _chains.has(take):
+		play(_chains[take], 0.15)
+	elif CHAINS.has(anim_name):
 		play(CHAINS[anim_name], 0.15)
-	elif auto_return_to_idle and RETURNS_TO_IDLE.has(anim_name):
+	elif auto_return_to_idle and (RETURNS_TO_IDLE.has(anim_name) or _returns.has(take)):
 		play(_standing_anim(), 0.15)
 
 
@@ -878,7 +1274,8 @@ static func _expand(pose: Dictionary) -> Dictionary:
 			p[StringName("Clavicle" + s)] = Vector3(0, reach * side, lift * side)
 		var f: float = (p.get(StringName("_fist" + s), Vector3(0.25, 0, 0)) as Vector3).x
 		var c := -side  # curl towards the palm
-		for bone in [["Index1", 80.0], ["Index2", 95.0], ["Fingers1", 88.0], ["Fingers2", 100.0]]:
+		for bone in [["Index1", 80.0], ["Index2", 95.0], ["Fingers1", 88.0], ["Fingers2", 100.0],
+				["Ring1", 90.0], ["Ring2", 100.0], ["Pinky1", 92.0], ["Pinky2", 100.0]]:
 			var key := StringName(bone[0] + s)
 			if not p.has(key):
 				p[key] = Vector3(0, 0, bone[1] * f * c)
@@ -983,6 +1380,7 @@ func _anim_defs() -> Dictionary:
 
 	var defs := {}
 	_calm_defs(defs, relaxed)
+	var fight_pain := {&"_jaw": Vector3(0.55, 0, 0), &"_brow": Vector3(-0.9, 0, 0), &"_fistL": Vector3(0.6, 0, 0), &"_fistR": Vector3(0.6, 0, 0)}
 
 	# --- Stance and footwork ------------------------------------------------
 	# On the balls of the feet: a small bounce, hands circling, eyes on the man in front.
@@ -1095,8 +1493,8 @@ func _anim_defs() -> Dictionary:
 	]}
 	# Block: forearms up in front of the face, chin tucked, braced.
 	var cover := _with(guard, {&"Hips": Vector3(0, -8, 0), &"Spine": Vector3(-16, 4, 0), &"Head": Vector3(-16, 0, 0),
-		&"ShoulderL": Vector3(72, 0, 22), &"ElbowL": Vector3(138, 0, 0), &"HandL": Vector3(-20, 0, 0),
-		&"ShoulderR": Vector3(72, 0, -22), &"ElbowR": Vector3(138, 0, 0), &"HandR": Vector3(-20, 0, 0),
+		&"ShoulderL": Vector3(72, -6, 0), &"ElbowL": Vector3(138, 0, 0), &"HandL": Vector3(-20, 0, 0),
+		&"ShoulderR": Vector3(72, 6, 0), &"ElbowR": Vector3(138, 0, 0), &"HandR": Vector3(-20, 0, 0),
 		&"KneeL": Vector3(-26, 0, 0), &"KneeR": Vector3(-24, 0, 0), &"_hips": Vector3(0, -0.05, 0), &"_brow": Vector3(0.9, 0, 0)})
 	defs[&"block"] = {"length": 1.0, "loop": true, "keys": [
 		[0.0, cover], [0.5, _with(cover, {&"Spine": Vector3(-17, 7, 0), &"_hips": Vector3(0, -0.06, 0)})], [1.0, cover],
@@ -1274,6 +1672,7 @@ func _anim_defs() -> Dictionary:
 	defs[&"taunt"] = {"length": 1.4, "keys": [
 		[0.0, guard], [0.25, beckon], [0.45, curl], [0.65, beckon], [0.85, curl], [1.05, beckon], [1.4, guard],
 	]}
+	RigFightAnims.add(defs, guard, fight_pain, _kneel)
 	return defs
 
 

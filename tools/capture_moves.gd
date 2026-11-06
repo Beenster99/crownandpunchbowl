@@ -2,7 +2,7 @@ extends SceneTree
 ## Renders one character through a move, frame by frame, as a contact sheet, so you can
 ## judge a punch's wind-up, contact and recovery. Needs a real renderer:
 ## xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_moves.gd -- <out.png> [look] [view] anim[@t1,t2,...] ...
-##   view: side (default), front, top, three or close (head and fists)
+##   view: side (default), front, top, three, close (head and fists) or hand (right hand)
 ##   e.g. -- /tmp/cross.png tom side punch_r@0,0.04,0.08,0.11,0.13,0.19,0.3,0.46
 
 const CELL := Vector2i(360, 420)
@@ -85,6 +85,12 @@ func _initialize() -> void:
 		rig.anim.seek(shot[1], true)
 		rig.anim.pause()
 		await process_frame
+		if view == "hand":
+			# Close on the right hand, wherever the pose puts it.
+			var hp := rig.get_socket(&"hand_r").global_position
+			cam.fov = 14.0
+			cam.position = hp + Vector3(1.4, 0.5, -1.2)
+			cam.look_at(hp)
 		await process_frame
 		await RenderingServer.frame_post_draw
 		var img := vp.get_texture().get_image()

@@ -97,6 +97,8 @@ func _process(_delta: float) -> void:
 	if fighter == null or rig == null:
 		return
 	var v := fighter.velocity
+	var local := fighter.global_basis.inverse() * Vector3(v.x, 0.0, v.z)
+	rig.set_move_vector(Vector2(local.x, -local.z))  # facing is -Z
 	rig.set_move_speed(Vector2(v.x, v.z).length())
 	# Clients see `state` arrive through the state synchroniser, which doesn't fire
 	# state_changed; catch those changes here.
@@ -156,7 +158,8 @@ func _play_state(s: int) -> void:
 		return
 	if key == "windup":
 		return
-	if key == "stagger" and rig.current in [&"hit_front", &"hit_back", &"hit_left", &"hit_right"]:
+	if key == "stagger" and rig.current in [&"hit_front", &"hit_back", &"hit_front_b", &"hit_left", &"hit_right",
+			&"hit_uppercut", &"hit_body", &"hit_body_l", &"hit_body_r"]:
 		return
 	# Knockdowns and KOs go to physics; getting up blends back out of it.
 	if ragdoll != null and ragdoll.on_state(key):
@@ -201,7 +204,10 @@ func _on_move_started(move_id: StringName) -> void:
 		move = MOVE_FALLBACKS[move]
 	# A wind-up long enough to see is played as a visible load-up, held until the hit.
 	if fighter.state == Fighter.State.WINDUP and fighter.windup_remaining() >= 0.1:
-		rig.play_windup(move, fighter.windup_remaining())
+		if zoned and rig.get_method_argument_count(&"play_windup") >= 3:
+			rig.call("play_windup", move, fighter.windup_remaining(), parts[1])
+		else:
+			rig.play_windup(move, fighter.windup_remaining())
 	elif zoned:
 		rig.call("play_move", move, parts[1])
 	else:
@@ -211,15 +217,15 @@ func _on_move_started(move_id: StringName) -> void:
 func _on_hit_taken(info: Dictionary) -> void:
 	if bool(info.get("slipped", false)):
 		return  # slipped it: the head was already moving out of the way
-	if fighter.is_down() or bool(info.get("blocked", false)) or bool(info.get("parried", false)):
-		return  # a hit taken on the guard keeps the block pose
+	if fighter.is_down() or bool(info.get("parried", false)):
+		return
 	if fighter.state == Fighter.State.DOUBLED:
 		return  # curled up on the floor; the groin animation holds
 	if bool(info.get("clinch", false)) and rig.has_method("play_clinched"):
 		rig.call("play_clinched")
 		return
 	var from_front := true
-	var dir := Vector3.ZERO
+	var dir: Vector3 = info.get("direction", Vector3.ZERO)
 	var a := info.get("attacker") as Node3D
 	if a != null and is_instance_valid(a):
 		var to_a := a.global_position - fighter.global_position
@@ -230,8 +236,15 @@ func _on_hit_taken(info: Dictionary) -> void:
 	var push: Vector3 = info.get("direction", Vector3.ZERO)
 	if push.length() > 0.01:
 		dir = push.normalized()
+	dir.y = 0.0
 	var zone := StringName(info.get("zone", &"head"))
-	if rig.get_method_argument_count(&"play_hit") >= 4:
+	if bool(info.get("blocked", false)):
+		if rig.has_method("play_block_hit"):
+			rig.call("play_block_hit", dir, zone)  # knocked back a touch in the cover
+		return
+	if rig.get_method_argument_count(&"play_hit") >= 5:
+		rig.call("play_hit", from_front, bool(info.get("heavy", false)), dir, zone, String(info.get("move", "")))
+	elif rig.get_method_argument_count(&"play_hit") >= 4:
 		rig.call("play_hit", from_front, bool(info.get("heavy", false)), dir, zone)
 	else:
 		rig.play_hit(from_front, bool(info.get("heavy", false)), dir)

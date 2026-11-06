@@ -7,4 +7,6 @@
 Thumbs.db
 *.tmp
 build/
+# Blender build caches
+tools/blender/out/
 __pycache__/
