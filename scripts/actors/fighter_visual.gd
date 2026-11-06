@@ -16,6 +16,8 @@ var fighter: Fighter
 var rig: CharacterRig
 var lean: HitLean
 var ragdoll: RagdollDriver
+## Snaps the head back (or round, from a hook) when a punch lands. Null without a skeleton.
+var snap: HeadSnap
 var _last_state := -1
 
 
@@ -72,6 +74,7 @@ func _ready() -> void:
 	fighter.state_changed.connect(_on_state_changed)
 	fighter.move_started.connect(_on_move_started)
 	fighter.hit_taken.connect(_on_hit_taken)
+	fighter.slipped.connect(_on_slipped)
 	lean = HitLean.new()
 	lean.name = "HitLean"
 	lean.setup(fighter, rig)
@@ -80,7 +83,14 @@ func _ready() -> void:
 	ragdoll.name = RagdollDriver.NODE_NAME
 	ragdoll.setup(fighter, rig)
 	add_child(ragdoll)
+	# The characters' RigReactor snaps the head itself once it lands; don't double it.
+	if rig.skeleton != null and not ResourceLoader.exists("res://scripts/actors/rig_reactor.gd"):
+		snap = HeadSnap.new()
+		snap.name = "HeadSnap"
+		snap.setup(fighter, rig)
+		rig.skeleton.add_child(snap)
 	Events.nose_broken.connect(_on_nose_broken)
+	Events.attack_countered.connect(_on_countered)
 
 
 func _process(_delta: float) -> void:
@@ -95,6 +105,16 @@ func _process(_delta: float) -> void:
 	if fighter.max_hp > 0.0:
 		rig.set_blood(clampf(1.0 - fighter.hp / fighter.max_hp, 0.0, 1.0) * 1.1 - 0.1)
 	rig.set_guard(_wants_guard())
+	# Which guard is up (LB head, RB body), and where the head is (right stick, or a slip).
+	if rig.has_method("set_guard_zone"):
+		var zone: StringName = fighter.guard_zone if fighter.state == Fighter.State.BLOCK else &""
+		rig.call("set_guard_zone", zone)
+	if rig.has_method("set_head_bob"):
+		var bob: Vector2 = fighter.slip_dir
+		if "head_bob" in fighter and fighter.is_multiplayer_authority():
+			bob = fighter.get("head_bob")
+		# The rig's y is +down (duck); ours is +up.
+		rig.call("set_head_bob", Vector2(bob.x, -bob.y) if _can_bob() else Vector2.ZERO)
 	var partner: Variant = fighter.get("chatting_with") if "chatting_with" in fighter else null
 	rig.set_talking(partner != null and is_instance_valid(partner))
 
@@ -110,6 +130,11 @@ func _wants_guard() -> bool:
 		return true
 	return "mood" in fighter and int(fighter.get("mood")) != 0  # Npc.Mood.CALM
 
+
+
+func _can_bob() -> bool:
+	return not fighter.is_down() and fighter.state != Fighter.State.HELD \
+		and fighter.state != Fighter.State.DOUBLED
 
 
 func head_position() -> Vector3:
@@ -131,10 +156,21 @@ func _play_state(s: int) -> void:
 		return
 	if key == "windup":
 		return
-	if key == "stagger" and rig.current in [&"hit_front", &"hit_back"]:
+	if key == "stagger" and rig.current in [&"hit_front", &"hit_back", &"hit_left", &"hit_right"]:
 		return
 	# Knockdowns and KOs go to physics; getting up blends back out of it.
 	if ragdoll != null and ragdoll.on_state(key):
+		return
+	if key == "doubled":
+		# Kicked in the groin: down on all fours, holding it.
+		if rig.has_method("play_hit") and rig.get_method_argument_count(&"play_hit") >= 4:
+			rig.call("play_hit", true, true, Vector3.ZERO, &"groin")
+		else:
+			rig.play_state("stagger")
+		return
+	if key == "dodge" and rig.has_method("play_dodge"):
+		rig.call("play_dodge", fighter.velocity if fighter.velocity.length() > 0.5 \
+			else -fighter.get_facing())
 		return
 	rig.play_state(key)
 
@@ -143,17 +179,45 @@ func _on_state_changed(_old: Fighter.State, new_state: Fighter.State) -> void:
 	_play_state(new_state)
 
 
+## Body shots are the same punches thrown low: "body_hook" plays "hook" at the body.
+static func split_move(move_id: StringName) -> Array:
+	var m := String(move_id)
+	if m.begins_with("body_"):
+		return [m.trim_prefix("body_"), &"body"]
+	return [m, &"head"]
+
+
+## Stand-ins for new moves on a rig that doesn't have their animations yet.
+const MOVE_FALLBACKS := {"body_jab": "jab", "body_hook": "hook", "body_uppercut": "uppercut",
+	"body_swing": "swing", "groin_kick": "kick", "clinch_knee": "kick",
+	"shoulder_charge": "headbutt"}
+
+
 func _on_move_started(move_id: StringName) -> void:
+	var parts := split_move(move_id)
+	var zoned := rig.get_method_argument_count(&"play_move") >= 2
+	var move: String = parts[0] if zoned else String(move_id)
+	if not CharacterRig.MOVE_ANIMS.has(move) and MOVE_FALLBACKS.has(move) and not zoned:
+		move = MOVE_FALLBACKS[move]
 	# A wind-up long enough to see is played as a visible load-up, held until the hit.
 	if fighter.state == Fighter.State.WINDUP and fighter.windup_remaining() >= 0.1:
-		rig.play_windup(String(move_id), fighter.windup_remaining())
+		rig.play_windup(move, fighter.windup_remaining())
+	elif zoned:
+		rig.call("play_move", move, parts[1])
 	else:
-		rig.play_move(String(move_id))
+		rig.play_move(move)
 
 
 func _on_hit_taken(info: Dictionary) -> void:
+	if bool(info.get("slipped", false)):
+		return  # slipped it: the head was already moving out of the way
 	if fighter.is_down() or bool(info.get("blocked", false)) or bool(info.get("parried", false)):
 		return  # a hit taken on the guard keeps the block pose
+	if fighter.state == Fighter.State.DOUBLED:
+		return  # curled up on the floor; the groin animation holds
+	if bool(info.get("clinch", false)) and rig.has_method("play_clinched"):
+		rig.call("play_clinched")
+		return
 	var from_front := true
 	var dir := Vector3.ZERO
 	var a := info.get("attacker") as Node3D
@@ -161,7 +225,26 @@ func _on_hit_taken(info: Dictionary) -> void:
 		var to_a := a.global_position - fighter.global_position
 		from_front = fighter.get_facing().dot(to_a) >= 0.0
 		dir = -to_a.normalized()  # the way the blow pushes them, for a KO ragdoll
-	rig.play_hit(from_front, bool(info.get("heavy", false)), dir)
+	# Hooks come in from the side, so their push (info "direction") knocks the head sideways;
+	# straight shots snap it back. Body shots fold the body instead.
+	var push: Vector3 = info.get("direction", Vector3.ZERO)
+	if push.length() > 0.01:
+		dir = push.normalized()
+	var zone := StringName(info.get("zone", &"head"))
+	if rig.get_method_argument_count(&"play_hit") >= 4:
+		rig.call("play_hit", from_front, bool(info.get("heavy", false)), dir, zone)
+	else:
+		rig.play_hit(from_front, bool(info.get("heavy", false)), dir)
+
+
+func _on_slipped(dir: Vector2) -> void:
+	if rig != null and rig.has_method("set_head_bob") and not fighter.is_multiplayer_authority():
+		rig.call("set_head_bob", Vector2(dir.x, -dir.y))
+
+
+func _on_countered(defender: Node, _attacker: Node) -> void:
+	if defender == fighter and rig != null and rig.has_method("play_parry"):
+		rig.call("play_parry")
 
 
 func _on_nose_broken(f: Node) -> void:

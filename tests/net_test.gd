@@ -30,6 +30,7 @@ func _host() -> bool:
 		return _fail("host: couldn't open port")
 	net.set_pub(2)
 	net.set_difficulty(3)
+	net.set_friendly_fire(true)
 	if not await _wait(func(): return net.players.size() == 2, 15.0):
 		return _fail("host: client never joined")
 	if not await _wait(func(): return net.can_start(), 10.0):
@@ -79,6 +80,8 @@ func _client() -> bool:
 		return _fail("client: never got into the lobby")
 	if gd.current_pub_index != 2 or gd.difficulty_index != 3:
 		return _fail("client: lobby settings not synced (%d, %d)" % [gd.current_pub_index, gd.difficulty_index])
+	if not await _wait(func(): return gd.friendly_fire, 5.0):
+		return _fail("client: host's friendly fire setting not synced")
 	if net.players[net.local_id()]["farmer"] != 3:
 		return _fail("client: farmer choice lost")
 	net.set_ready(true)

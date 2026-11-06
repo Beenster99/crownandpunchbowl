@@ -76,6 +76,8 @@ const DIFFICULTIES := [
 ## Session state chosen in the lobby. The host owns these and syncs them to clients.
 var current_pub_index := 0
 var difficulty_index := 1
+## Players can hit each other (friendly fire). Host's choice, synced by Net.
+var friendly_fire := false
 ## Pub crawl progress: the host's chosen first pub and how many pubs are cleared.
 ## The crawl visits every pub once, in order, wrapping round from the start pub.
 var start_pub_index := 0

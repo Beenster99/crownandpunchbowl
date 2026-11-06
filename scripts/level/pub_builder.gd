@@ -551,6 +551,9 @@ func dartboard(pos: Vector3, facing: Vector3) -> void:
 	var root := Node3D.new()
 	root.name = "Dartboard"
 	root.position = pos
+	# DartsBoard finds playable boards by this group and reads which way they face.
+	root.add_to_group(DartsBoard.GROUP)
+	root.set_meta("facing", facing)
 	world.add_child(root, true)
 	var board := cylinder(root, 0.23, 0.05, Vector3.ZERO, material(Color("1a1a1a")))
 	board.rotation = Vector3(PI * 0.5, 0, 0) if absf(facing.z) > 0.5 else Vector3(0, 0, PI * 0.5)

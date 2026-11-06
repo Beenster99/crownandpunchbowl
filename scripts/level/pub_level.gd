@@ -86,6 +86,7 @@ func _ready() -> void:
 	_build(builder)
 	_build_environment()
 	items = PubItems.install(self)
+	DartsBoard.install(self)  # every dartboard is playable (501 / 301, online too)
 	_spawn_props()
 	physics = PubPhysics.install(self)
 	add_child(GAME_UI_SCENE.instantiate())  # HUD and pause menu

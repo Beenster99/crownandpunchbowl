@@ -56,6 +56,8 @@ func kick(dir: Vector3, strength: float) -> void:
 
 
 func _on_hit_taken(info: Dictionary) -> void:
+	if bool(info.get("slipped", false)):
+		return  # it missed
 	var dir: Vector3 = info.get("direction", Vector3.ZERO)
 	var a: Variant = info.get("attacker")
 	if dir.length() < 0.01 and a is Node3D and is_instance_valid(a):

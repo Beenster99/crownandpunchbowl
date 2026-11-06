@@ -18,14 +18,14 @@ func _initialize() -> void:
 
 	# Rebinding swaps a clash rather than leaving an action unbound.
 	settings.reset_binds()
-	var punch_kb: Dictionary = settings.binds["punch_left"]["kb"].duplicate()
-	var swapped: String = settings.set_bind("punch_right", "kb", punch_kb)
-	_check(swapped == "punch_left", "binding right punch to left punch's button should swap them")
-	_check(settings.binding_equals(settings.binds["punch_right"]["kb"], punch_kb), "right punch takes the new binding")
-	_check(settings.binds["punch_left"]["kb"].has("mouse") and settings.binds["punch_left"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT,
+	var punch_kb: Dictionary = settings.binds["jab"]["kb"].duplicate()
+	var swapped: String = settings.set_bind("hook", "kb", punch_kb)
+	_check(swapped == "jab", "binding hook to jab's button should swap them")
+	_check(settings.binding_equals(settings.binds["hook"]["kb"], punch_kb), "right punch takes the new binding")
+	_check(settings.binds["jab"]["kb"].has("mouse") and settings.binds["jab"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT,
 		"left punch gets right punch's old binding")
 	settings.reset_binds("kb")
-	_check(settings.binds["punch_right"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT, "reset keyboard binds")
+	_check(settings.binds["hook"]["kb"]["mouse"] == MOUSE_BUTTON_RIGHT, "reset keyboard binds")
 
 	# Event conversion respects the device column.
 	var key := InputEventKey.new()
@@ -37,8 +37,8 @@ func _initialize() -> void:
 	axis.axis = JOY_AXIS_TRIGGER_LEFT
 	axis.axis_value = 0.9
 	_check(settings.binding_from_event(axis, "pad") == {"axis": JOY_AXIS_TRIGGER_LEFT, "dir": 1}, "trigger -> pad")
-	_check(settings.action_label("punch_left", "kb") == "Left mouse", "punch label")
-	_check(settings.action_label("block", "pad") == "LB", "block pad label")
+	_check(settings.action_label("jab", "kb") == "Left mouse", "punch label")
+	_check(settings.action_label("guard_head", "pad") == "LB", "head guard pad label")
 	_check(settings.action_label("move_up", "pad") == "Left stick up", "stick label")
 	for action in settings.ACTIONS:
 		_check(InputMap.has_action(action), "input action exists: " + action)
@@ -74,6 +74,30 @@ func _initialize() -> void:
 	_check(InputMap.has_action("zoom_in") and InputMap.has_action("zoom_out"), "zoom actions")
 	_check(not settings.binding_equals(settings.binds["throw"]["pad"], settings.binds["zoom_in"]["pad"]),
 		"throw and zoom in differ on pad")
+	var cam = load("res://scripts/level/brawl_camera.gd").new()
+	root.add_child(cam)
+	_check(is_equal_approx(cam.zoom, clampf(settings.get_value("profile", "camera_zoom"), cam.min_zoom, cam.max_zoom)),
+		"camera starts at the saved zoom")
+	var z0: float = cam.zoom
+	var plus := InputEventKey.new()
+	plus.physical_keycode = KEY_EQUAL
+	plus.pressed = true
+	cam._input(plus)
+	_check(cam.zoom < z0, "+ key zooms in")
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	cam._input(wheel)
+	cam._input(wheel)
+	_check(cam.zoom > z0, "mouse wheel zooms out")
+	_check(load("res://scripts/level/brawl_camera.gd").DEFAULT_ZOOM < 1.0, "default view is zoomed in")
+	cam.zoom = z0
+	cam.queue_free()
+	# Friendly fire is a gameplay setting; solo counts as host, so it applies straight away.
+	settings.set_value("gameplay", "friendly_fire", true)
+	_check(root.get_node("GameData").friendly_fire, "friendly fire setting reaches GameData")
+	settings.set_value("gameplay", "friendly_fire", false)
+	_check(not root.get_node("GameData").friendly_fire, "friendly fire off")
 
 	# Graphics presets set the detail options; touching one detail flips to Custom.
 	settings.set_value("graphics", "quality", 0)

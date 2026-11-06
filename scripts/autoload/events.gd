@@ -29,6 +29,8 @@ signal fighter_fell(fighter: Node, height: float)
 signal nose_broken(fighter: Node)
 signal grab_started(holder: Node, victim: Node)
 signal grab_ended(holder: Node, victim: Node)
+## A grab failed: the victim (a strong man) shrugged the holder off.
+signal grab_shrugged(holder: Node, victim: Node)
 signal combo_changed(player: Node, combo: int)
 
 # --- Items & bar ----------------------------------------------------------

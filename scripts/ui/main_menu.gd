@@ -177,6 +177,12 @@ func _build_setup() -> Control:
 	_difficulty_hint = UiTheme.label("", "HintLabel")
 	_difficulty_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(_difficulty_hint)
+	var ff := CheckButton.new()
+	ff.text = "Players can hit each other"
+	ff.tooltip_text = "Friendly fire: your punches, kicks and throws land on your mates too."
+	ff.button_pressed = bool(Settings.get_value("gameplay", "friendly_fire"))
+	ff.toggled.connect(func(on: bool): Settings.set_value("gameplay", "friendly_fire", on))
+	right.add_child(ff)
 
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_END
