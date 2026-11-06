@@ -48,6 +48,10 @@ const GLASS_WORDS := ["bottle", "glass", "pint", "jug", "mirror", "window"]
 @export var ko_moan_every := Vector2(8.0, 16.0)
 @export var ko_moan_chance := 0.4
 @export var max_ko_moaners := 4
+## Moans per spell on the floor. Without a limit, anyone left crawling or knocked out kept
+## groaning every few seconds for the rest of the night, long after the fight was over.
+@export var crawl_moans := 4
+@export var ko_moans := 2
 @export var hurt_bark_chance := 0.05  ## a spoken complaint instead of an oof
 @export var taunt_chance := 0.03
 @export var win_bark_chance := 0.3
@@ -132,8 +136,8 @@ func _ready() -> void:
 	Events.food_ordered.connect(_on_food)
 	Events.police_called.connect(func(): play_flat("police_whistle"))
 	Events.fight_started.connect(_on_fight_started)
-	Events.pub_cleared.connect(func(_id): _fighting = false)
-	Events.all_players_down.connect(func(): _fighting = false)
+	Events.pub_cleared.connect(func(_id): _fight_over())
+	Events.all_players_down.connect(_fight_over)
 	Events.reinforcements_arrived.connect(func(_n): play_flat("door_bang"))
 	# Added by the combat PR; connected by name so this works before and after it lands.
 	_connect_optional("fighter_thrown_off_ledge", _on_thrown_off_ledge)
@@ -329,6 +333,27 @@ func shake(amount: float) -> void:
 		cam.add_shake(amount)
 
 
+## Moans this fighter still has in them (crawling or knocked out); 0 once they've gone quiet.
+func moans_left(fighter: Node) -> int:
+	if not _valid(fighter):
+		return 0
+	var id := fighter.get_instance_id()
+	var c: Dictionary = _crawlers.get(id, _knocked_out.get(id, {}))
+	return int(c.get("left", 0))
+
+
+## The fight's over (pub cleared or every player down): the floor goes quiet.
+func _fight_over() -> void:
+	_fighting = false
+	for id in _crawlers:
+		_crawlers[id]["left"] = 0
+	_knocked_out.clear()
+	for id in _speaking.keys():
+		var p: Variant = _speaking[id]["player"]
+		if is_instance_valid(p) and p.playing and String(p.get_meta("cue", "")).begins_with("groan"):
+			p.stop()
+
+
 func is_crawling(fighter: Node) -> bool:
 	return _valid(fighter) and _crawlers.has(fighter.get_instance_id())
 
@@ -455,6 +480,7 @@ func _on_crawling(fighter: Node) -> void:
 	_crawlers[fighter.get_instance_id()] = {
 		"fighter": fighter, "next": now + randf_range(0.6, 1.2),
 		"last_pos": (fighter as Node3D).global_position,
+		"left": crawl_moans,
 	}
 
 
@@ -475,7 +501,8 @@ func _on_knocked_out(fighter: Node) -> void:
 	if by != null and _valid(by.get_ref()) and randf() < win_bark_chance:
 		_later(0.7, bark.bind(by.get_ref(), "win", 2, true), by.get_ref())
 	var now := Time.get_ticks_msec() / 1000.0
-	_knocked_out[id] = {"fighter": fighter, "next": now + randf_range(ko_moan_every.x, ko_moan_every.y)}
+	_knocked_out[id] = {"fighter": fighter, "left": ko_moans,
+		"next": now + randf_range(ko_moan_every.x, ko_moan_every.y)}
 
 
 func _on_grab_started(holder: Node, victim: Node) -> void:
@@ -644,7 +671,8 @@ func _tick_crawlers(now: float) -> void:
 		if moved.length() >= crawl_smear_step:
 			blood.smear(pos, moved)
 			c["last_pos"] = pos
-		if now >= float(c["next"]):
+		if now >= float(c["next"]) and int(c["left"]) > 0:
+			c["left"] = int(c["left"]) - 1
 			if randf() >= crawl_words_chance or not bark(f, "crawl", 1):
 				say(f, "groan", 1)
 			c["next"] = now + randf_range(crawl_moan_every.x, crawl_moan_every.y)
@@ -663,6 +691,9 @@ func _tick_knocked_out(now: float) -> void:
 			if moaners < max_ko_moaners and randf() < ko_moan_chance:
 				say(f, "groan", 0)
 				moaners += 1
+				c["left"] = int(c["left"]) - 1
+				if int(c["left"]) <= 0:
+					_knocked_out.erase(id)
 
 
 func _make_player(bus: String) -> AudioStreamPlayer3D:
@@ -694,6 +725,7 @@ func _start(p: AudioStreamPlayer3D, cue: String, pos: Vector3, volume_db: float,
 	p.max_distance = float(c["range"])
 	p.pitch_scale = pitch
 	p.global_position = pos
+	p.set_meta("cue", cue)
 	p.play()
 
 
