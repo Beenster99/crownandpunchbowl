@@ -4,8 +4,9 @@ extends Node
 ## one or two they're fighting), so you can see who's nearly done. It fades in when the
 ## fight starts, follows the punter, and fades out a moment after they leave the fight or
 ## go down for good. A thin strip under it shows their stamina, so you can see when they're
-## gassed and their guard is there for the taking. PlayerFighter adds one of these for the
-## local player.
+## gassed and their guard is there for the taking, and a word under that says where his guard
+## is open right now (HEAD, BODY or WIDE OPEN), unless the "opening_hints" setting is off.
+## PlayerFighter adds one of these for the local player.
 
 const WIDTH_PX := 70          ## bar size in texture pixels
 const HEIGHT_PX := 5
@@ -18,6 +19,9 @@ const FILL_LOW := Color(1.0, 0.55, 0.15)
 const STAMINA_PX := 2         ## stamina strip height, just under the health bar
 const STAMINA_FILL := Color(0.75, 0.85, 0.45)
 const STAMINA_GASSED := Color(1.0, 0.75, 0.2)
+## The opening word under the bar.
+const OPEN_WORDS := {&"head": "HEAD OPEN", &"body": "BODY OPEN", &"all": "WIDE OPEN"}
+const OPEN_COLOUR := Color(0.7, 1.0, 0.5)
 
 var player: Fighter
 
@@ -72,6 +76,10 @@ func _process(delta: float) -> void:
 		st.region_rect = Rect2(0, 0, maxf(WIDTH_PX * sfrac, 0.01), STAMINA_PX)
 		st.modulate = (STAMINA_GASSED if fighter.is_gassed() else STAMINA_FILL) \
 			* Color(1, 1, 1, float(b["alpha"]) * 0.85)
+		var word: Label3D = b["open"]
+		var open := fighter.open_zone() if show_openings() else &""
+		word.text = OPEN_WORDS.get(open, "")
+		word.modulate = OPEN_COLOUR * Color(1, 1, 1, float(b["alpha"]))
 		(b["root"] as Node3D).visible = float(b["alpha"]) > 0.01
 		if float(b["alpha"]) <= 0.0 and want == 0.0:
 			(b["root"] as Node3D).queue_free()
@@ -106,8 +114,24 @@ func _make(f: Fighter) -> Dictionary:
 	root.add_child(bg)
 	root.add_child(fill)
 	root.add_child(stamina)
-	return {"root": root, "fill": fill, "bg": bg, "stamina": stamina, "alpha": 0.0,
+	var open := Label3D.new()
+	open.name = "Opening"
+	open.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	open.fixed_size = true
+	open.pixel_size = PIXEL_SIZE
+	open.font_size = 14
+	open.outline_size = 5
+	open.outline_modulate = Color(0, 0, 0, 0.8)
+	open.offset = Vector2(0, -(STAMINA_PX + 12))
+	open.render_priority = 7
+	open.modulate = Color(1, 1, 1, 0)
+	root.add_child(open)
+	return {"root": root, "fill": fill, "bg": bg, "stamina": stamina, "open": open, "alpha": 0.0,
 		"seen": LINGER}
+
+
+func show_openings() -> bool:
+	return bool(Settings.get_value("gameplay", "opening_hints"))
 
 
 func _sprite(priority: int) -> Sprite3D:

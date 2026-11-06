@@ -58,6 +58,13 @@ var _pressure := 0.0      # recent punches taken (blocked or not); makes them co
 var _cover_zone: StringName = &""  # cover up with this guard as soon as we're free
 var _counter_pending := false      # fire a counter jab off the guard
 var _winded := false      # gassed: back off and breathe until the tank's half full
+## Squared up and in range, a punter keeps a guard up (high or low) between his own attacks,
+## and it follows where he's being hit: tag his head and the hands come up, leaving the body;
+## dig the body and the elbows come down, leaving the chin. That's what the player reads.
+var _stance_guard := false  # the guard up now is the waiting guard, not a reaction to a punch
+var _stance_zone: StringName = Moves.GUARD_HEAD
+var _stance_roll_t := 0.0   # re-decide whether to hold a guard after this
+var _zone_heat := {Moves.GUARD_HEAD: 0.0, Moves.GUARD_BODY: 0.0}
 ## Talked down (Npc.hear_words): seconds left where it won't volunteer to rejoin the fight.
 var _settled_t := 0.0
 var _pleas := 0.0         # recent attempts to talk this NPC down; each one works less
@@ -184,6 +191,9 @@ func _on_hit_taken(info: Dictionary) -> void:
 	var blocked := bool(info.get("blocked", false))
 	if not bool(info.get("slipped", false)):
 		_pressure += 1.0
+		var hit_zone := Moves.GUARD_HEAD if StringName(info.get("zone", Moves.GUARD_HEAD)) == Moves.GUARD_HEAD \
+			else Moves.GUARD_BODY
+		_zone_heat[hit_zone] = float(_zone_heat[hit_zone]) + (0.6 if blocked else 1.0)
 	var defence := float(_type.get("defence", 0.0))
 	if blocked and not bool(info.get("parried", false)) and mood == Mood.ENGAGED \
 			and _rng.randf() < float(_type.get("counter", 0.0)):
@@ -379,6 +389,9 @@ func _think(delta: float) -> void:
 	_face_t = maxf(_face_t - delta, 0.0)
 	_recover_t = maxf(_recover_t - delta, 0.0)
 	_pressure = maxf(_pressure - delta * 0.6, 0.0)
+	for z in _zone_heat:
+		_zone_heat[z] = maxf(float(_zone_heat[z]) - delta * 0.25, 0.0)
+	_stance_roll_t -= delta
 	if is_gassed():
 		_winded = true
 	elif stamina_fraction() > 0.6:
@@ -414,6 +427,9 @@ func _think(delta: float) -> void:
 					and _flat_dist(foe) < 1.7 and foe.can_be_targeted():
 				_counter_pending = false
 				request_attack(&"counter_jab", foe)
+				return
+			if _stance_guard:
+				_hold_stance_guard(delta)
 				return
 			if _guard_t <= 0.0 or mood != Mood.ENGAGED or team == Team.STAFF:
 				request_block(false)
@@ -523,10 +539,12 @@ func _think_engaged(delta: float) -> void:
 		var zone := _cover_zone
 		_cover_zone = &""
 		_drop_token()
+		_stance_guard = false
 		request_block(true, zone)
 		_guard_t = _rng.randf_range(0.8, 1.4)
 		return
 	if _read_foe():
+		_stance_guard = false
 		return
 	var to := foe.global_position - global_position
 	to.y = 0.0
@@ -569,8 +587,15 @@ func _think_engaged(delta: float) -> void:
 		if rushing > 0.0:
 			_attack_cd *= 0.6
 		return
-	# Waiting for a turn: size them up. Circle slowly on a ring round the foe, sometimes
-	# just stand and stare, keeping apart from mates.
+	if _wants_stance_guard(d):
+		_stance_guard = true
+		request_block(true, _pick_stance_zone())
+	_circle(delta, d, dir)
+
+
+## Waiting for a turn: size them up. Circle slowly on a ring round the foe, sometimes just
+## stand and stare, keeping apart from mates.
+func _circle(delta: float, d: float, dir: Vector3) -> void:
 	_strafe_t -= delta
 	if _strafe_t <= 0.0:
 		_strafe_t = _rng.randf_range(1.5, 3.5)
@@ -583,6 +608,60 @@ func _think_engaged(delta: float) -> void:
 	var radial := clampf(d - ring, -1.0, 1.0)
 	var tangent := Vector3(-dir.z, 0.0, dir.x) * _strafe
 	move_input = (dir * radial * 0.6 + tangent * 0.25 + _separation()).limit_length(0.5)
+
+
+## Squared up, in range and not blowing: hold a guard while waiting (how often depends on
+## how handy he is: defence).
+func _wants_stance_guard(d: float) -> bool:
+	if _winded or rushing > 0.0 or foe == null or foe.is_down() or d > 2.6 or team == Team.STAFF:
+		return false
+	if _stance_roll_t > 0.0:
+		return false
+	_stance_roll_t = _rng.randf_range(0.6, 1.2)
+	return _rng.randf() < float(_type.get("defence", 0.0)) + 0.45
+
+
+## Which guard to hold: where he's been getting hit, once it's clearly more one than the
+## other. Handier punters switch sooner (guard_skill).
+func _pick_stance_zone() -> StringName:
+	var skill := float(_type.get("guard_skill", 0.5))
+	var margin := 0.6 + (1.0 - skill) * 1.6
+	var head := float(_zone_heat[Moves.GUARD_HEAD])
+	var body := float(_zone_heat[Moves.GUARD_BODY])
+	if body > head + margin:
+		_stance_zone = Moves.GUARD_BODY
+	elif head > body + margin:
+		_stance_zone = Moves.GUARD_HEAD
+	return _stance_zone
+
+
+## Holding the waiting guard: keep circling behind it, switch it to where the shots are
+## coming, and drop it to throw when it's our turn (or when we're blown or out of range).
+func _hold_stance_guard(delta: float) -> void:
+	if mood != Mood.ENGAGED or foe == null or not is_instance_valid(foe) or foe.is_down() \
+			or _winded:
+		_stance_guard = false
+		request_block(false)
+		return
+	var to := foe.global_position - global_position
+	to.y = 0.0
+	var d := to.length()
+	if _attack_cd <= 0.0 and _recover_t <= 0.0 and not _has_token:
+		_has_token = _request_token()
+		_token_used = false
+		_token_t = 0.0
+	if d > 3.2 or (_attack_cd <= 0.0 and _has_token):
+		_stance_guard = false
+		request_block(false)  # our go (or he's backed off): hands down to throw
+		return
+	_look_at = foe.global_position
+	if _read_foe():
+		_stance_guard = false  # now it's a cover for what's coming, held for _guard_t
+		return
+	var zone := _pick_stance_zone()
+	if zone != guard_zone:
+		request_block(true, zone)
+	_circle(delta, d, to / d if d > 0.01 else get_facing())
 
 
 ## The foe is lining something up at us. Once per wind-up, maybe read it: cover the right

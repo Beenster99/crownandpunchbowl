@@ -14,6 +14,7 @@ const PATH := "user://settings.cfg"
 
 const DEFAULTS := {
 	"gameplay": {"difficulty": 1, "camera_shake": 1.0, "blood": 1, "counter_prompts": true,
+		"opening_hints": true,
 		"subtitles": true, "context_prompts": true, "vibration": true, "control_hints": true, "friendly_fire": false},
 	"sound": {"master": 0.9, "music": 0.6, "sfx": 1.0, "voice": 1.0, "mute_unfocused": false},
 	"graphics": {"window_mode": 0, "vsync": true, "max_fps": 0, "render_scale": 1.0, "shadows": true,
@@ -40,6 +41,8 @@ const OPTIONS := {
 		"blood": {"label": "Blood", "type": "choice", "items": ["Off", "Normal", "Buckets"]},
 		"counter_prompts": {"label": "Defend prompts", "type": "toggle",
 			"hint": "Show which button blocks or dodges over punters about to hit you."},
+		"opening_hints": {"label": "Show openings", "type": "toggle",
+			"hint": "Under the punter you're fighting, say where his guard is open (head or body). Turn it off to read it from his hands alone."},
 		"context_prompts": {"label": "Button prompts", "type": "toggle",
 			"hint": "Show prompts like \"E: Order pint\" near the bar and items."},
 		"control_hints": {"label": "Controls reminder", "type": "toggle",

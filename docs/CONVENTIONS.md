@@ -204,6 +204,14 @@ Rules other workstreams rely on:
   `power_charging` signal) until `request_unleash()` or `CHARGE_TIME + CHARGE_HOLD`. Damage,
   stagger and poise scale up to `POWER_MAX`; full charge breaks guards. Being hit cancels it.
   Hits carry `power` (the charge fraction).
+- **Openings and clean shots.** `Fighter.open_zone()` says where a punch would get through:
+  `body` under a head guard, `head` over a body guard, `all` when reeling, gassed, doubled or
+  recovering, `""` otherwise. A hit on a blocker into the uncovered zone does `CLEAN_BONUS` and
+  carries `opening: true` (and `clean`). Engaged punters in range hold a stance guard between
+  attacks that follows where they're being hit (`Npc._zone_heat`, `guard_skill`); the foe bar
+  shows the opening unless `gameplay/opening_hints` is off.
+- **Perfect reads.** A parry within `PERFECT_WINDOW` of raising the guard, or a slip that close
+  to the hit, carries `perfect: true`; the local player gets slow motion (`Fx.slow_mo`, solo only).
 - **Punishes.** A hit on a fighter in the recovery of their own strike does `PUNISH_BONUS` and
   carries `punish: true`. Parry and slip counters do `COUNTER_BONUS`.
 - **Stance.** `in_stance` / `stance_changed` say when a fighter is squared up for a fight

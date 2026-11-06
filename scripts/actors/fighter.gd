@@ -302,6 +302,18 @@ func is_gassed() -> bool:
 	return stamina < max_stamina * Moves.GASSED
 
 
+## Where a punch would get through right now: &"body" when the head is covered, &"head" when
+## the body is, &"all" when the guard is down and he's in trouble (gassed, reeling, doubled
+## over, or recovering from a punch), and &"" when there's nothing to read (just standing).
+func open_zone() -> StringName:
+	if state == State.BLOCK:
+		return Moves.GUARD_BODY if guard_zone == Moves.GUARD_HEAD else Moves.GUARD_HEAD
+	if state == State.STAGGER or state == State.DOUBLED or is_gassed() \
+			or (state == State.ATTACK and _attack_t > float(_move.get("active", 0.0))):
+		return &"all"
+	return &""
+
+
 ## Stood coiled, loading a power shot.
 func is_charging() -> bool:
 	return _charging
@@ -481,6 +493,7 @@ func _server_slipped(info: Dictionary, attacker: Fighter) -> void:
 	if Moves.SLIP_WINDOW - _slip_t <= Moves.SLIP_COUNTER_WINDOW:
 		# Slipped it at the last moment: they're overextended and you're set to counter.
 		info["parried"] = true
+		info["perfect"] = Moves.SLIP_WINDOW - _slip_t <= Moves.PERFECT_WINDOW
 		_counter_ready = Moves.COUNTER_WINDOW
 		attacker._rpc_react.rpc(State.STAGGER, Moves.PARRY_STAGGER * 0.6, attacker.hp,
 			attacker.get_facing() * 1.2, {}, false)
@@ -509,6 +522,7 @@ func _server_guard(info: Dictionary, attacker: Fighter) -> bool:
 		# Parried: no damage, the attacker reels, and our next punch is a counter.
 		info["damage"] = 0.0
 		info["parried"] = true
+		info["perfect"] = _state_t <= Moves.PERFECT_WINDOW
 		_counter_ready = Moves.COUNTER_WINDOW
 		attacker._rpc_react.rpc(State.STAGGER, Moves.PARRY_STAGGER, attacker.hp,
 			-dir * 1.5, {}, false)
@@ -827,6 +841,11 @@ func _server_resolve_hit() -> void:
 			and not bool(m["ground"])
 		if punish:
 			dmg *= Moves.PUNISH_BONUS
+		# Into the gap in his guard: a clean shot.
+		var opening := v.state == State.BLOCK and not bool(m["ground"]) \
+			and not v.is_blocking_from(global_position, zone)
+		if opening:
+			dmg *= Moves.CLEAN_BONUS
 		var height := 1.45 if bool(m["to_face"]) else 1.1
 		if zone == &"groin":
 			height = 0.85
@@ -849,6 +868,11 @@ func _server_resolve_hit() -> void:
 			info["knockback"] = float(info["knockback"]) * (1.0 + (_power - 1.0) * 0.6)
 			if _power_frac >= 0.5:
 				info["heavy"] = true
+		if opening:
+			info["opening"] = true
+			info["clean"] = true
+			info["heavy"] = true
+			info["poise"] = float(info["poise"]) * Moves.CLEAN_BONUS
 		if punish:
 			info["punish"] = true
 			info["heavy"] = true

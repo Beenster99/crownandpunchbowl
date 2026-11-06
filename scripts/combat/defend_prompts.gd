@@ -81,6 +81,13 @@ func flash(text: String, colour: Color, seconds := 0.6) -> void:
 func _on_hit_landed(info: Dictionary) -> void:
 	if player == null:
 		return
+	if info.get("victim") == player and bool(info.get("parried", false)) \
+			and bool(info.get("perfect", false)):
+		flash("PERFECT!  COUNTER", Color(0.45, 1.0, 0.6), 0.8)
+		var fx := get_node_or_null(^"/root/Fx")
+		if fx != null and fx.has_method("slow_mo"):
+			fx.slow_mo(Moves.PERFECT_SLOWMO, Moves.PERFECT_TIME_SCALE)
+		return
 	if info.get("attacker") == player:
 		if bool(info.get("guard_crushed", false)):
 			flash("GUARD BROKEN", Color(1.0, 0.8, 0.3))
@@ -88,6 +95,8 @@ func _on_hit_landed(info: Dictionary) -> void:
 			flash("FULL POWER", Color(1.0, 0.55, 0.2))
 		elif bool(info.get("punish", false)):
 			flash("PUNISHED", Color(0.4, 1.0, 0.45))
+		elif bool(info.get("opening", false)):
+			flash("CLEAN SHOT", Color(1.0, 0.9, 0.4))
 	elif info.get("victim") == player and bool(info.get("guard_crushed", false)):
 		flash("GUARD CRUSHED", Color(1.0, 0.35, 0.25))
 
