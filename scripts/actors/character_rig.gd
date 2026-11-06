@@ -695,22 +695,81 @@ func _dress() -> void:
 			_blood_nodes.append(blood[n])
 
 
+## Surface detail per material: [noise frequency, contrast, triplanar scale, roughness].
+## The models have no UVs or tangents, so the detail is a tiling noise mapped triplanar
+## into the colour and the roughness: a weave mottle on cloth, blotches and pores on skin,
+## grain and scuffs on leather, strands in hair.
+const SURFACES := {
+	&"skin": [0.06, 0.1, 6.0, 0.6], &"flush": [0.06, 0.1, 6.0, 0.58], &"lips": [0.12, 0.1, 9.0, 0.45],
+	&"top": [0.3, 0.22, 7.0, 0.9], &"trim": [0.3, 0.2, 7.0, 0.88], &"over": [0.14, 0.24, 4.0, 0.78],
+	&"trousers": [0.35, 0.26, 8.0, 0.92], &"socks": [0.4, 0.2, 9.0, 0.95], &"neckerchief": [0.3, 0.2, 8.0, 0.85],
+	&"hat": [0.25, 0.2, 6.0, 0.9], &"boots": [0.05, 0.25, 3.0, 0.42], &"leather": [0.05, 0.28, 3.0, 0.5],
+	&"hair": [0.45, 0.35, 5.0, 0.55], &"beard": [0.45, 0.35, 8.0, 0.6], &"stubble": [0.6, 0.3, 12.0, 0.7],
+	&"brow": [0.5, 0.3, 10.0, 0.6], &"dark": [0.08, 0.15, 5.0, 0.6],
+}
+static var _detail_cache := {}
+
+
+## A greyscale tiling noise between 1 - contrast and 1, to multiply into a colour (and to
+## break up the roughness). Built synchronously and shared by every character.
+static func _detail_texture(freq: float, contrast: float) -> Texture2D:
+	var key := Vector2(freq, contrast)
+	if _detail_cache.has(key):
+		return _detail_cache[key]
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_CELLULAR if freq < 0.1 else FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.frequency = freq
+	n.fractal_octaves = 3
+	var src := n.get_seamless_image(128, 128)
+	var img := Image.create(128, 128, false, Image.FORMAT_RGB8)
+	for y in 128:
+		for x in 128:
+			var v := 1.0 - contrast * (1.0 - src.get_pixel(x, y).r)
+			img.set_pixel(x, y, Color(v, v, v))
+	img.generate_mipmaps()
+	var t := ImageTexture.create_from_image(img)
+	_detail_cache[key] = t
+	return t
+
+
 func _material(key: StringName, colour: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = colour
 	m.roughness = 0.82
+	if SURFACES.has(key):
+		var sf: Array = SURFACES[key]
+		var tex := _detail_texture(sf[0], sf[1])
+		m.roughness = sf[3]
+		m.albedo_texture = tex
+		m.roughness_texture = tex
+		m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		m.uv1_triplanar = true
+		m.uv1_scale = Vector3.ONE * float(sf[2])
 	match key:
 		&"eye_white", &"eye_dark":
-			m.roughness = 0.25
+			m.roughness = 0.08
+			m.clearcoat_enabled = true
+			m.clearcoat = 1.0
 		&"metal":
 			m.metallic = 0.8
 			m.roughness = 0.35
 		&"blood":
-			m.roughness = 0.3
+			m.roughness = 0.15
+			m.clearcoat_enabled = true
+		&"boots", &"leather":
+			m.clearcoat_enabled = true
+			m.clearcoat = 0.35
+			m.clearcoat_roughness = 0.4
+		&"hair", &"beard":
+			m.anisotropy_enabled = true
+			m.anisotropy = 0.6
 		&"skin", &"flush", &"lips":
 			m.rim_enabled = true
 			m.rim = 0.25
 			m.rim_tint = 0.6
+			m.subsurf_scatter_enabled = true
+			m.subsurf_scatter_strength = 0.35
+			m.subsurf_scatter_skin_mode = true
 		&"top":
 			if look.top == CharacterLook.Top.SHIRT:
 				m.albedo_color = Color.WHITE

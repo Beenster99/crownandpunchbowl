@@ -21,6 +21,10 @@ files are needed, and changing a look and rebuilding takes about a minute for al
   and limbs are voxel-remeshed into one watertight surface, smoothed so the joins
   fillet, and decimated. Each body part is remeshed separately so an arm never welds to
   the torso, and the part is remembered per vertex so skin weights never bleed across.
+- **Anatomy:** pecs, trapezius, shoulder blades and backside on the torso, deltoids,
+  biceps, triceps and forearms on the arms, quads, hamstrings, kneecaps and calves on the
+  legs, so the body reads as a person under the clothes.
+- **Footwear** has a sole, a heel block and a welt under every boot and shoe.
 - **Hands** are their own finer sculpt: a palm, four fingers and a thumb, so fists clench,
   hands open to grab and fingers wrap a pint.
 - **Heads** are sculpted the same way (cranium, jaw, brow ridge, cheeks, chin) with a
@@ -234,6 +238,52 @@ What makes them move like a person rather than a puppet:
 
 Baking is the slow part (about 0.1 s per model), so characters built from the same model
 share one animation library.
+
+### The fight set
+
+`RigFightAnims` (scripts/actors/rig_fight_anims.gd) adds the extended set on top, from the
+same guard:
+
+- **Stances and footwork:** each fighter squares up their own way, picked by seed
+  (`FIGHT_IDLES`: boxer, pub brawler, wary). With the guard up, `set_move_vector()` picks
+  walking in, backpedalling (`walk_back`) or side-stepping (`strafe_l`/`strafe_r`).
+- **Variants:** `VARIANTS` lists several takes of each strike (a slipping jab, a double jab,
+  an overhand right, wide looping hooks, a lead uppercut, a chopping uppercut, a teep, a
+  low kick, a lapel-grab headbutt). `play_move()` picks one at random; every take keeps the
+  load/contact timing of the move it varies.
+- **Body shots:** `play_move(move, &"body")` throws `jab_body`, `cross_body`,
+  `hook_l_body`/`hook_r_body` (shovel hooks) or `uppercut_body`.
+- **New moves:** `clinch_knee` (both hands behind his head, drag down, knee up),
+  `shoulder_charge`, `groin_kick`, and the punter's `body_swing`.
+- **Defence:** `set_guard_zone(&"head")` (LB, gloves to the temples) or `&"body"` (RB,
+  elbows on the ribs), `play_block_hit()`, `play_parry()` (`parry_l`, `parry_r`),
+  `play_dodge(world_dir)` (`dodge_l`/`_r`/`_back`/`_fwd`), `slip_l`/`slip_r`.
+- **Reactions:** `play_hit(from_front, heavy, dir, zone, move)`. Head shots snap back or to
+  the side, an uppercut lifts the chin (`hit_uppercut`), body shots fold (`hit_body`,
+  `hit_body_l`/`_r`), and `zone = &"groin"` plays `groin_down`, which chains into the
+  `groin_hold` loop on all fours. `play_clinched()` is the knee's victim.
+
+### The procedural layer
+
+`RigReactor` is a `SkeletonModifier3D` under the skeleton that runs after the animation each
+frame, so hits don't look canned:
+
+- **Head snap and body flinch:** every hit kicks a damped spring that whips the head away
+  from the blow (back, round to the side for a hook, up for an uppercut) or folds the
+  torso, then wobbles it back, whatever animation is playing underneath.
+- **Head movement:** `set_head_bob(Vector2)` (right stick; x slips, +y ducks, -y leans
+  back) bends the spine and the legs together so the feet stay put.
+- **Breathing:** the chest rises and falls, harder as they get hurt.
+
+It is switched off while ragdolling. Note that `get_bone_global_pose()` shows the animated
+pose; sockets (BoneAttachment3D) follow the modified one.
+
+### Materials
+
+The models have no UVs or tangents, so `_material()` adds surface detail as a tiling noise
+mapped triplanar into the colour and roughness (`SURFACES`): a weave mottle on cloth,
+blotches on skin (plus subsurface scattering), grain on leather and boots (with a light
+clearcoat), strands in hair (anisotropic), glossy eyes.
 
 ## Performance
 

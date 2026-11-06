@@ -545,25 +545,52 @@ class Character:
         if b.belly > 0.05:
             torso.append(ellip(p["spine"] + Vector((0, td * 0.18 + 0.05 * b.belly, 0.08)),
                                (tw * 0.42, td * 0.35 + 0.1 * b.belly, 0.12 + 0.04 * b.belly), stiff=1.5))
+        # Anatomy, so the body reads as a person under the clothes rather than a tube: pecs,
+        # trapezius sloping from the neck to the shoulders, shoulder blades, the small of the
+        # back and the backside.
+        muscle = L["shoulders"] * (0.7 if b.fem else 1.0)
+        for s in (-1, 1):
+            if not b.fem:
+                torso.append(ellip(cp(0.085 * s * g, td * 0.3, 0.235), (0.085 * g, 0.045 * muscle + 0.01, 0.06), cr, stiff=1.5))
+            torso.append(ellip(cp((b.shx * 0.52) * s, -td * 0.05, 0.33), (b.shx * 0.42, td * 0.3, 0.04 + 0.012 * muscle),
+                               cr @ Matrix.Rotation(-0.35 * s, 3, "Y"), stiff=1.5))
+            torso.append(ellip(cp(0.08 * s * g, -td * 0.32, 0.25), (0.075 * g, 0.035, 0.08), cr, stiff=1.5))
+            torso.append(ellip(p["hips"] + Vector((0.065 * s * b.hw / 0.38, -td * 0.34, -0.06)),
+                               (0.085 * b.hw / 0.38, 0.06 + (0.015 if b.fem else 0.0), 0.085), stiff=1.5))
         if b.fem:
             for s in (-1, 1):
                 torso.append(ball(cp(0.07 * s, td * 0.32, 0.22), 0.065, stiff=1.2))
-        torso_me = metaballs("torso", torso)
+        torso_me = metaballs("torso", torso, resolution=0.013)
         tag_part(torso_me, PART_TORSO)
         parts = [(torso_me, 0)]
 
         limbs = []
         for s in "LR":
             hs = L["hand_size"]
+            sh, el, wr = p["shoulder" + s], p["elbow" + s], p["wrist" + s]
+            side = -1 if s == "L" else 1
             arm = [
-                capsule(p["shoulder" + s], p["elbow" + s], 0.07 * t, 2.0),
-                ball(p["shoulder" + s], 0.08 * t, 2.0),
-                capsule(p["elbow" + s], p["wrist" + s] + (p["wrist" + s] - p["elbow" + s]).normalized() * 0.01, 0.058 * t, 2.0),
+                capsule(sh, el, 0.064 * t, 2.0),
+                ball(sh, 0.08 * t, 2.0),
+                # Deltoid capping the shoulder, biceps in front, triceps behind.
+                ellip(sh + (el - sh) * 0.18 + Vector((0.012 * side, 0, 0)), (0.07 * t, 0.075 * t, 0.085 * t), stiff=1.5),
+                ellip(sh + (el - sh) * 0.55 + Vector((0, 0.022 * t, 0)), (0.05 * t, 0.05 * t, 0.085 * t), stiff=1.5),
+                ellip(sh + (el - sh) * 0.45 + Vector((0, -0.024 * t, 0)), (0.052 * t, 0.05 * t, 0.1 * t), stiff=1.5),
+                # Forearm: meaty below the elbow, tapering to the wrist.
+                capsule(el, wr + (wr - el).normalized() * 0.01, 0.048 * t, 2.0),
+                ellip(el + (wr - el) * 0.3, (0.06 * t, 0.058 * t, 0.085 * t), stiff=1.5),
             ]
             limbs.append(("arm" + s, tag_part(metaballs("arm" + s, arm, resolution=0.013), PART_ARM_L if s == "L" else PART_ARM_R)))
+            hip, kn, an = p["hip" + s], p["knee" + s], p["ankle" + s]
             leg = [
-                capsule(p["hip" + s] + Vector((0, 0, 0.04)), p["knee" + s], 0.09 * t * (0.9 + 0.1 * g), 2.0),
-                capsule(p["knee" + s], p["ankle" + s], 0.072 * t, 2.0),
+                capsule(hip + Vector((0, 0, 0.04)), kn, 0.085 * t * (0.9 + 0.1 * g), 2.0),
+                # Quads in front of the thigh, the hamstring behind, a kneecap.
+                ellip(hip + (kn - hip) * 0.45 + Vector((0, 0.025 * t, 0)), (0.085 * t, 0.07 * t, 0.16), stiff=1.5),
+                ellip(hip + (kn - hip) * 0.4 + Vector((0, -0.03 * t, 0)), (0.075 * t, 0.06 * t, 0.15), stiff=1.5),
+                ball(kn + Vector((0, 0.04 * t, 0.01)), 0.045 * t, 1.5),
+                capsule(kn, an, 0.06 * t, 2.0),
+                # Calf: a bulge high on the back of the shin.
+                ellip(kn + (an - kn) * 0.3 + Vector((0, -0.028 * t, 0)), (0.068 * t, 0.07 * t, 0.12), stiff=1.5),
                 ellip((p["ankle" + s] + p["toe" + s]) * 0.5 + Vector((0, 0.0, 0.0)), (0.065, 0.14, 0.055), stiff=2.0),
             ]
             limbs.append(("leg" + s, tag_part(metaballs("leg" + s, leg, resolution=0.016), PART_LEG_L if s == "L" else PART_LEG_R)))
@@ -585,10 +612,26 @@ class Character:
             if overalls and mi == 2:
                 mi = 4
             poly.material_index = mi
-        body = decimate(body, 7000)
-        self.body_me = decimate(self.body_dense, 10000)
+        body = decimate(body, 11000)
+        self.body_me = decimate(self.body_dense, 14000)
         self.add("Body", body, mats)
         self.build_hands()
+        self.build_soles()
+
+    def build_soles(self):
+        """Proper footwear: a sole with a raised heel block and a welt line under each boot or
+        shoe, so feet read as footwear and not blobs. One rigid piece per foot."""
+        p = self.b.p
+        for s in "LR":
+            an, toe = p["ankle" + s], p["toe" + s]
+            cy = (an.y + toe.y) * 0.5
+            length = 0.27
+            parts = [
+                (box_mesh("sole", (toe.x, cy + 0.005, 0.007), (0.112, length, 0.014), bevel=0.005), 0),
+                (box_mesh("heel", (toe.x, cy - length * 0.36, 0.017), (0.1, 0.07, 0.034), bevel=0.005), 0),
+                (box_mesh("welt", (toe.x, cy + 0.005, 0.017), (0.118, length * 0.97, 0.006), bevel=0.002), 1),
+            ]
+            self.add("Sole" + s, join_meshes("Sole" + s, parts), ["dark", "leather"], rigid="Foot" + s)
 
     def build_hands(self):
         """Proper hands with fingers, so fists clench, hands open to grab and fingers wrap a

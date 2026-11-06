@@ -17,6 +17,7 @@ func _initialize() -> void:
 	_check_calm_and_guard()
 	_check_rich_rig()
 	_check_fight_set()
+	await _check_head_snap()
 	await _check_ragdoll()
 	if _failures == 0:
 		print("CHARACTERS OK: %d looks, %d animations" % [CharacterLooks.all_ids().size(), CharacterRig.ANIMATIONS.size()])
@@ -260,6 +261,38 @@ func _check_fight_set() -> void:
 	rig.play_hit(true, false, Vector3.BACK, &"head", "uppercut")
 	if rig.current != &"hit_uppercut":
 		_fail("an uppercut should lift the chin, got %s" % rig.current)
+	rig.queue_free()
+
+
+## The procedural layer: a punch snaps the head away over a few frames, then it settles.
+func _check_head_snap() -> void:
+	var rig := CharacterRig.new()
+	rig.look_id = "tom"
+	rig.auto_return_to_idle = false
+	root.add_child(rig)
+	rig.play(&"block", 0.0)
+	for i in 10:
+		await process_frame
+	# Sockets follow the modified skeleton (get_bone_global_pose shows the animated pose).
+	var head := rig.get_socket(&"head")
+	var rest := head.global_basis.get_rotation_quaternion()
+	rig._reactor.hit(Vector3.BACK, &"head", 2.0)
+	var most := 0.0
+	for i in 30:
+		await process_frame
+		most = maxf(most, rest.angle_to(head.global_basis.get_rotation_quaternion()))
+	if most < 0.15:
+		_fail("a hit should snap the head back, it moved %.2f rad" % most)
+	rig.set_head_bob(Vector2(1, 0))
+	for i in 80:
+		await process_frame
+	var chest_x := rig.to_local(rig.get_socket(&"chest").global_position).x
+	rig.set_head_bob(Vector2(-1, 0))
+	for i in 80:
+		await process_frame
+	var moved := chest_x - rig.to_local(rig.get_socket(&"chest").global_position).x
+	if moved < 0.05:
+		_fail("slipping right then left should swing the chest across, moved %.2f m" % moved)
 	rig.queue_free()
 
 
