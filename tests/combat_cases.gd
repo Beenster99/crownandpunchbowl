@@ -24,6 +24,8 @@ func run() -> void:
 		"test_player_combos_and_mashing", "test_player_kick_stomps", "test_player_input",
 		"test_sparring_punter", "test_sandbox_loads", "test_throw_over_railing",
 		"test_throw_off_open_edge", "test_throw_away_from_edge", "test_short_drop_no_damage",
+		"test_enemy_windup_is_readable", "test_windup_pose_holds", "test_hit_lean",
+		"test_footwork_has_weight",
 	]
 	for t in tests:
 		print("  ", t)
@@ -94,7 +96,7 @@ func test_jab_hits_and_lunges() -> void:
 	_check(p.target == e, "soft lock picks the enemy in front")
 	await _wait(0.6)
 	_check(hits.size() == 1, "jab steps in a little and lands (got %d)" % hits.size())
-	_check(is_equal_approx(e.hp, e.max_hp - 5.0), "jab did 5 damage (hp %.1f)" % e.hp)
+	_check(is_equal_approx(e.hp, e.max_hp - 6.0), "jab did 6 damage (hp %.1f)" % e.hp)
 
 
 func test_no_snapping_to_far_enemies() -> void:
@@ -123,12 +125,12 @@ func test_held_takes_bonus_damage() -> void:
 	await _wait(0.1)
 	mate.request_attack(&"cross", e)
 	await _wait(0.5)
-	_check(is_equal_approx(e.hp, e.max_hp - 7.0 * Moves.HELD_DAMAGE_MULT),
+	_check(is_equal_approx(e.hp, e.max_hp - 9.0 * Moves.HELD_DAMAGE_MULT),
 		"held victim takes bonus damage (hp %.1f)" % e.hp)
 	_check(e.state == Fighter.State.HELD, "a light hit doesn't free the held victim")
 	holder.request_attack(&"jab")  # becomes a knee
 	await _wait(0.1)
-	_check(e.hp < e.max_hp - 10.5, "holder knees the held victim")
+	_check(e.hp < e.max_hp - 9.0 * Moves.HELD_DAMAGE_MULT - 1.0, "holder knees the held victim")
 
 
 func test_counter() -> void:
@@ -147,7 +149,7 @@ func test_counter() -> void:
 	e.request_attack(&"swing", p)
 	_check(telegraphs.size() == 1, "enemy swing is telegraphed")
 	_check(e.defend_hint() == "block", "a swing is prompted as block")
-	await _wait(0.9)
+	await _until_free(e)
 	_check(is_equal_approx(p.hp, p.max_hp - 8.0 * Moves.BLOCK_CHIP), "blocked for chip damage (hp %.2f)" % p.hp)
 	_check(p.state == Fighter.State.BLOCK, "the guard holds")
 	_check(counters.is_empty(), "an early block isn't a parry")
@@ -165,15 +167,15 @@ func test_counter() -> void:
 	_check(p.has_counter_ready(), "counter ready after a parry")
 	p.request_attack(&"cross", e)
 	await _wait(0.4)
-	_check(is_equal_approx(e.hp, e.max_hp - 7.0 * Moves.COUNTER_BONUS),
+	_check(is_equal_approx(e.hp, e.max_hp - 9.0 * Moves.COUNTER_BONUS),
 		"counter hits harder (hp %.1f)" % e.hp)
 	Events.attack_telegraphed.disconnect(tel_cb)
 	Events.attack_countered.disconnect(cnt_cb)
 	# Without a guard the swing lands.
-	await _wait(1.0)
+	await _until_free(e)
 	before = p.hp
 	e.request_attack(&"swing", p)
-	await _wait(1.0)
+	await _wait(e.windup_remaining() + 0.2)
 	_check(p.hp < before, "unguarded swing lands")
 
 
@@ -187,11 +189,12 @@ func test_guard_breakers() -> void:
 	p.request_block(true)
 	e.request_attack(&"haymaker", p)
 	_check(e.defend_hint() == "dodge", "a haymaker is prompted as dodge")
-	await _wait(1.2)
+	await _wait(e.windup_remaining() + 0.2)
 	_check(broken.size() == 1, "haymaker breaks the guard")
 	_check(p.hp < p.max_hp - 5.0, "guard break hurts (hp %.1f)" % p.hp)
 	Events.guard_broken.disconnect(cb)
-	await _wait(1.0)
+	await _until_free(e)
+	await _until_free(p)
 	# Dodging it works.
 	var before := p.hp
 	p.request_block(false)
@@ -342,7 +345,7 @@ func test_weapon_hooks() -> void:
 	p.request_attack(&"jab")
 	await _wait(0.5)
 	_check(chair.hits == 2, "sweeping weapon hits both (got %d)" % chair.hits)
-	_check(is_equal_approx(a.hp, a.max_hp - 15.0), "weapon modifies damage (hp %.1f)" % a.hp)
+	_check(is_equal_approx(a.hp, a.max_hp - 18.0), "weapon modifies damage (hp %.1f)" % a.hp)
 	_check(p.unequip() == chair and p.weapon == null, "unequip returns the item")
 
 
@@ -360,6 +363,14 @@ func _tap(p: PlayerFighter, hand: StringName) -> void:
 func _hold(p: PlayerFighter, hand: StringName) -> void:
 	p.hand_down(hand)
 	p.tick_hands(Moves.PUNCH_HOLD_TIME + 0.01)
+
+
+## Waits until `f` is free to act again (its attack or stagger is over).
+func _until_free(f: Fighter) -> void:
+	var n := 0
+	while f.state != Fighter.State.IDLE and f.state != Fighter.State.BLOCK and n < 300:
+		await get_tree().physics_frame
+		n += 1
 
 
 func _until_chain(p: PlayerFighter) -> void:
@@ -387,7 +398,7 @@ func test_player_punch_chain() -> void:
 	p.hand_down(&"left")
 	p.hand_down(&"right")
 	await _wait(0.8)
-	_check(moves == [&"jab", &"cross", &"hook", &"uppercut", &"headbutt"],
+	_check(moves == [&"jab", &"hook", &"cross", &"uppercut", &"headbutt"],
 		"tap/hold left and right, and both together (got %s)" % [moves])
 	_check(p.combo == 5, "combo counts hits (got %d)" % p.combo)
 
@@ -402,21 +413,24 @@ func test_player_combos_and_mashing() -> void:
 	var combos := []
 	var cb := func(_f, n): combos.append(n)
 	Events.combo_performed.connect(cb)
-	# In rhythm: jab, cross, hook.
+	# In rhythm: jab, cross, hook, uppercut.
 	await _tap(p, &"left")
+	await _until_chain(p)
+	_hold(p, &"left")
 	await _until_chain(p)
 	await _tap(p, &"right")
 	await _until_chain(p)
-	_hold(p, &"left")
-	await _wait(0.8)
-	_check(combos == ["One-two", "Left, right, goodnight"], "rhythm strings are combos (got %s)" % [combos])
-	var expected := 500.0 - 5.0 - 7.0 * 1.15 - 10.0 * 1.4
+	_hold(p, &"right")
+	await _wait(0.9)
+	_check(combos == ["One-two", "One-two-hook", "The Full English"],
+		"rhythm strings are combos (got %s)" % [combos])
+	var expected := 500.0 - 6.0 - 9.0 * 1.15 - 11.0 * 1.35 - 15.0 * 1.7
 	_check(absf(e.hp - expected) < 0.01, "combos hit harder (hp %.2f, want %.2f)" % [e.hp, expected])
 	# Out of rhythm: no combo.
 	combos.clear()
 	await _wait(1.0)
 	await _tap(p, &"left")
-	await _wait(1.0)
+	await _wait(1.4)
 	await _tap(p, &"right")
 	await _wait(0.8)
 	_check(combos.is_empty(), "a slow one-two isn't a combo")
@@ -429,7 +443,7 @@ func test_player_combos_and_mashing() -> void:
 		await _tap(p, &"left")
 	_check(p._fumble_t > 0.0 and p._history.is_empty(), "mashing fumbles the string")
 	await _wait(0.9)
-	_check(moves == [&"cross"], "mashed presses are dropped (got %s)" % [moves])
+	_check(moves == [&"hook"], "mashed presses are dropped (got %s)" % [moves])
 	Events.combo_performed.disconnect(cb)
 	# Combo counter resets when you're hit, and times out.
 	p._set_combo(3)
@@ -528,7 +542,14 @@ func test_player_input() -> void:
 	await _wait(0.05)
 	Input.action_release("punch_right")
 	await _wait(0.05)
-	_check(moves == [&"cross"], "right punch button throws a cross (got %s)" % [moves])
+	_check(moves == [&"hook"], "right punch button throws a hook (got %s)" % [moves])
+	await _until_free(p)
+	moves.clear()
+	Input.action_press("uppercut")
+	await get_tree().physics_frame
+	Input.action_release("uppercut")
+	await _wait(0.05)
+	_check(moves == [&"uppercut"], "the uppercut button throws an uppercut (got %s)" % [moves])
 
 
 func test_sparring_punter() -> void:
@@ -660,3 +681,71 @@ func test_short_drop_no_damage() -> void:
 	e.move_input = Vector3.ZERO
 	_check(e.global_position.y < 0.2, "walked off the dais")
 	_check(is_equal_approx(e.hp, e.max_hp), "short drops don't hurt")
+
+
+func test_enemy_windup_is_readable() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	await _wait(0.1)
+	e.request_attack(&"swing", p)
+	var tt := float(GameData.difficulty()["telegraph_time"])
+	_check(is_equal_approx(e.windup_remaining(), tt * Moves.ENEMY_WINDUP_SCALE),
+		"enemy tells are stretched (%.2f)" % e.windup_remaining())
+	e.request_attack(&"haymaker", p)  # ignored: already winding up
+	_check(e.current_move == &"swing", "can't restart a wind-up")
+	await _until_free(e)
+	e.request_attack(&"haymaker", p)
+	_check(e.windup_remaining() > tt * Moves.ENEMY_WINDUP_SCALE * 1.4,
+		"a haymaker is lined up for longer than a swing")
+
+
+func test_windup_pose_holds() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	var vis := FighterVisual.attach(e)
+	await _wait(0.1)
+	var rig := vis.rig
+	e.request_attack(&"swing", p)
+	await _wait(e.windup_remaining() * 0.85)
+	_check(e.state == Fighter.State.WINDUP, "still lining it up")
+	_check(rig.anim.speed_scale == 0.0, "the loaded pose holds until the punch comes")
+	var lead := rig.current
+	await _wait(e.windup_remaining() + 0.05)
+	_check(e.state == Fighter.State.ATTACK, "then it lands")
+	_check(rig.anim.speed_scale == 1.0 and rig.current == lead, "and the strike is thrown (%s)" % rig.current)
+	_check(vis.lean.lean_angle() > 0.01 or e.velocity.length() > 0.1, "the body goes into the punch")
+
+
+func test_hit_lean() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	var vis := FighterVisual.attach(e)
+	await _wait(0.1)
+	p.request_attack(&"hook", e)
+	var peak := 0.0
+	for i in 30:
+		await get_tree().physics_frame
+		await get_tree().process_frame
+		peak = maxf(peak, vis.lean.lean_angle())
+	_check(peak > 0.1, "a hook rocks the victim (%.2f rad)" % peak)
+	# The rig is pushed away from the attacker: its head goes back along -Z (towards +Z world).
+	await _wait(1.5)
+	_check(vis.lean.lean_angle() < 0.01, "and they settle back up (%.3f)" % vis.lean.lean_angle())
+	_check(vis.rig.transform.is_equal_approx(Transform3D.IDENTITY), "rig back at rest")
+
+
+func test_footwork_has_weight() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0))
+	await _wait(0.1)
+	p.move_input = Vector3(1, 0, 0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(p.velocity.length() < p.move_speed * 0.6, "you don't hit full speed at once (%.2f)" % p.velocity.length())
+	await _wait(0.6)
+	_check(is_equal_approx(p.velocity.length(), p.move_speed), "then you're up to speed")
+	p.move_input = Vector3.ZERO
+	await get_tree().physics_frame
+	_check(p.velocity.length() > 0.5, "and you slow down over a moment")
+	await _wait(0.6)
+	_check(p.velocity.length() < 0.01, "then stop")

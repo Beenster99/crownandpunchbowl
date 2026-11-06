@@ -3,7 +3,8 @@ extends Fighter
 ## Player-controlled fighter: boxing-style controls on top of Fighter.
 ##
 ## Left and right punches are separate buttons. Tap for a quick punch (left jab, right
-## cross), hold for a heavy one (left hook, right uppercut). Both together is a headbutt.
+## hook), hold for a heavy one (left cross, right uppercut). The uppercut also has its own
+## button. Both punches together is a headbutt.
 ## Punches thrown in rhythm (in the previous punch's recovery, or just after it) build a
 ## string, and known strings are combos that hit harder (see Moves.COMBOS). Hammering the
 ## buttons before a punch has finished fumbles the string and leaves you off balance, so
@@ -75,7 +76,7 @@ func _read_input(delta: float) -> void:
 	move_input = Vector3(stick.x, 0.0, stick.y)
 
 	if state == State.HELD:
-		for a in ["punch_left", "punch_right", "kick", "headbutt", "grab", "dodge"]:
+		for a in ["punch_left", "punch_right", "uppercut", "kick", "headbutt", "grab", "dodge"]:
 			if Input.is_action_just_pressed(a):
 				request_struggle()
 		return
@@ -99,6 +100,8 @@ func _read_input(delta: float) -> void:
 		press(&"kick")
 	if Input.is_action_just_pressed("headbutt"):
 		press(&"headbutt")
+	if Input.is_action_just_pressed("uppercut"):
+		press(&"uppercut")
 	for hand in [&"left", &"right"]:
 		var action := "punch_" + String(hand)
 		if Input.is_action_just_pressed(action):
@@ -222,7 +225,8 @@ func _perform(move: StringName) -> void:
 	var combo_row := Moves.match_combo(_history)
 	var bonus := float(combo_row.get("bonus", 1.0))
 	var cname := String(combo_row.get("name", ""))
-	if not combo_row.is_empty() and combo_row["seq"].size() >= 3:
+	if not combo_row.is_empty() and combo_row["seq"].size() >= 3 \
+			and not Moves.combo_continues(combo_row["seq"]):
 		_history.clear()  # a finished string starts afresh
 	_mash = 0
 	_since_attack = 0.0

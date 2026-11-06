@@ -86,6 +86,7 @@ var _windup_left := 0.0
 var _lunge_t := 0.0
 var _attack_t := 0.0
 var _impulse := Vector3.ZERO
+var _walk_vel := Vector3.ZERO  ## smoothed footwork velocity (accel/decel)
 var _dodge_dir := Vector3.ZERO
 var _dodge_cd := 0.0
 var _poise := Moves.POISE
@@ -505,7 +506,8 @@ func _resolve_move(move_id: StringName) -> Dictionary:
 	if weapon != null and weapon.has_method("modify_move"):
 		m = weapon.modify_move(m)
 	if bool(m["telegraph"]):
-		m["windup"] = float(GameData.difficulty()["telegraph_time"]) * float(m["windup_scale"])
+		m["windup"] = float(GameData.difficulty()["telegraph_time"]) * float(m["windup_scale"]) \
+			* Moves.ENEMY_WINDUP_SCALE
 	return m
 
 
@@ -709,11 +711,11 @@ func _rpc_start_move(move_id: StringName, target_path: NodePath, bonus := 1.0,
 	_bonus = bonus
 	_combo_name = combo_name
 	_combat_t = Moves.STANCE_HOLD
-	move_started.emit(move_id)
 	if combo_name != "":
 		Events.combo_performed.emit(self, combo_name)
 	if state == State.GRABBING:  # knee: no state change, resolves at once
 		_move = m
+		move_started.emit(move_id)
 		if multiplayer.is_server():
 			_server_resolve_hit()
 		return
@@ -729,6 +731,8 @@ func _rpc_start_move(move_id: StringName, target_path: NodePath, bonus := 1.0,
 	_enter(State.WINDUP, float(m["windup"]))
 	current_move = move_id
 	target = tgt
+	# Emitted once the windup is set, so the visual can pace the wind-up to windup_remaining().
+	move_started.emit(move_id)
 	if bool(m["telegraph"]):
 		Events.attack_telegraphed.emit(self, tgt, _windup_left)
 
@@ -934,6 +938,10 @@ func _tick_state(delta: float) -> void:
 			if _windup_left <= 0.0:
 				_attack_t = 0.0
 				_enter(State.ATTACK, float(_move["active"]) + float(_move["recover"]))
+				# Put your weight into it: the strike carries you a little way forward.
+				if bool(_move["lunge"]) and not bool(_move["ground"]):
+					_impulse += get_facing() * Moves.FOLLOW_THROUGH \
+						* (1.4 if bool(_move["heavy"]) else 1.0)
 				if multiplayer.is_server():
 					_server_resolve_hit()
 		State.ATTACK:
@@ -1010,6 +1018,7 @@ func _is_lunging() -> bool:
 
 func _tick_motion(delta: float) -> void:
 	var v := Vector3.ZERO
+	var walking := false
 	match state:
 		State.IDLE, State.BLOCK:
 			var scale := 1.0
@@ -1017,7 +1026,12 @@ func _tick_motion(delta: float) -> void:
 				scale = Moves.BLOCK_MOVE_SCALE
 			elif in_stance:
 				scale = Moves.STANCE_MOVE_SCALE
-			v = move_input.limit_length(1.0) * move_speed * scale
+			# Weight: footwork speeds up and slows down over a moment instead of snapping.
+			var want := move_input.limit_length(1.0) * move_speed * scale
+			var rate := Moves.ACCEL if want.length() > _walk_vel.length() else Moves.DECEL
+			_walk_vel = _walk_vel.move_toward(want, rate * delta)
+			v = _walk_vel
+			walking = true
 			if stance_target != null and is_instance_valid(stance_target):
 				# Footwork: keep squared up to the foe and move around them.
 				var to_foe := stance_target.global_position - global_position
@@ -1048,10 +1062,20 @@ func _tick_motion(delta: float) -> void:
 				_face(fwd, delta, 30.0)
 			velocity = Vector3.ZERO
 			_impulse = Vector3.ZERO
+			_walk_vel = Vector3.ZERO
 			return
+	if not walking:
+		# Carry a little of the walk into the next move, then let it bleed off.
+		_walk_vel = _walk_vel.move_toward(Vector3.ZERO, Moves.DECEL * delta)
+		if state == State.WINDUP or state == State.ATTACK:
+			v += _walk_vel * 0.5
 	v += _impulse
 	# A body sailing off a ledge keeps its momentum instead of skidding to a stop.
-	var drag := 2.0 if (_vault_t >= 0.0 or not is_on_floor()) else 14.0
+	var drag := 14.0
+	if _vault_t >= 0.0 or not is_on_floor():
+		drag = 2.0
+	elif state == State.STAGGER:
+		drag = Moves.STAGGER_DRAG  # a big hit makes you stumble back, not stop dead
 	_impulse = _impulse.move_toward(Vector3.ZERO, drag * delta)
 	velocity.x = v.x
 	velocity.z = v.z
