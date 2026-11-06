@@ -26,10 +26,14 @@ var _hints: VBoxContainer
 var _combo_tween: Tween
 var _banner_tween: Tween
 ## Shown in the controls reminder, in this order, if the action exists in Settings.ACTIONS.
-const HINTS := [["punch", "Punch"], ["punch_left", "Left hand"], ["punch_right", "Right hand"], ["uppercut", "Uppercut"],
-	["kick", "Kick"], ["headbutt", "Headbutt"], ["block", "Block / parry"], ["counter", "Counter"],
-	["grab", "Grab and hold"], ["dodge", "Dodge"], ["interact", "Pick up / order drink"],
-	["order_food", "Order food"], ["throw", "Throw"]]
+const HINTS := [["jab", "Jab"], ["hook", "Hook"], ["uppercut", "Uppercut"],
+	["guard_head", "Head guard / parry"], ["guard_body", "Body guard"], ["headbutt", "Headbutt"],
+	["dodge", "Dodge"], ["interact", "Pick up / order drink"], ["order_food", "Order food"],
+	["throw", "Throw"]]
+## Shoulder-button combinations, shown as "LB + X  Kick": [modifier, action, caption].
+const COMBO_HINTS := [["guard_body", "jab", "Body shot"], ["guard_head", "jab", "Kick"],
+	["guard_head", "uppercut", "Shoulder charge"], ["guard_head", "hook", "Clinch knee"],
+	["guard_head", "guard_body", "Hold"], ["bob_left", "", "Slip / duck (with the other directions)"]]
 
 
 func _ready() -> void:
@@ -101,6 +105,13 @@ func _ready() -> void:
 	for h in HINTS:
 		if Settings.ACTIONS.has(h[0]):
 			_hints.add_child(ButtonPrompt.make(h[0], h[1]))
+	for h in COMBO_HINTS:
+		if not Settings.ACTIONS.has(h[0]):
+			continue
+		if h[1] == "":
+			_hints.add_child(ButtonPrompt.make(h[0], h[2]))
+		elif Settings.ACTIONS.has(h[1]):
+			_hints.add_child(ButtonPrompt.make(h[1], h[2], h[0]))
 	_hints.visible = bool(Settings.get_value("gameplay", "control_hints"))
 	Settings.changed.connect(func(section, key):
 		if section == "gameplay" and key == "control_hints":

@@ -30,8 +30,12 @@ signal hit_taken(info: Dictionary)
 signal hit_dealt(info: Dictionary)
 ## Entered or left a fighting stance (guard up, facing the foe). Fires on every peer.
 signal stance_changed(in_stance: bool)
+## Slipped the head (right stick flick) towards `dir` (x: right, y: up). Fires on every peer.
+signal slipped(dir: Vector2)
 
-enum State { IDLE, ATTACK, WINDUP, STAGGER, DOWN, CRAWL, KO, HELD, GRABBING, DODGE, BLOCK }
+## DOUBLED: kicked in the groin, on all fours holding it. Appended so older values keep
+## their numbers on the wire.
+enum State { IDLE, ATTACK, WINDUP, STAGGER, DOWN, CRAWL, KO, HELD, GRABBING, DODGE, BLOCK, DOUBLED }
 enum Team { PLAYERS, PUNTERS, POLICE, STAFF }
 
 const GROUP := &"fighters"
@@ -46,8 +50,14 @@ const _RELEASE_SILENT := 1  # victim's state is set by whatever happens next (hi
 @export var move_speed := 4.2
 ## Divides incoming stagger time, poise damage and knockback. Rugby lads are tough.
 @export var toughness := 1.0
-## How long this fighter's holds last.
+## How long this fighter's holds last, and how well they keep hold of a strong man.
 @export var grip := 1.0
+## How hard this fighter is to hold: the chance (over the holder's grip) of shrugging a
+## grab off, and how much faster they wriggle free. Rugby lads are a handful.
+@export_range(0.0, 1.0) var hold_resist := 0.0
+## Chance that a guard raised at the last moment parries (players always do; most punters
+## just cover up and take it on the arms).
+@export_range(0.0, 1.0) var parry_skill := 1.0
 ## Below this fraction of max_hp, a fighter who gets knocked down only gets up to crawl.
 @export_range(0.0, 1.0) var crawl_fraction := 0.25
 ## False for anyone who must never be KO'd. (Bar staff are untouchable anyway.)
@@ -78,6 +88,10 @@ var current_move: StringName = &""
 ## relaxed idle or a guard.
 var in_stance := false
 var stance_target: Fighter = null
+## Which guard is up while state is BLOCK: Moves.GUARD_HEAD (LB) or Moves.GUARD_BODY (RB).
+var guard_zone: StringName = Moves.GUARD_HEAD
+## The last slip's direction (x right, y up), for visuals. Fades with the slip.
+var slip_dir := Vector2.ZERO
 
 var _move: Dictionary = {}
 var _state_t := 0.0
@@ -107,6 +121,9 @@ var _launch_y := 0.0
 var _vault_origin := Vector3.ZERO
 var _vault_normal := Vector3.ZERO
 var _vault_t := -1.0
+var _slip_t := 0.0       # head shots miss while > 0 (counts down from Moves.SLIP_WINDOW)
+var _slip_cd := 0.0
+var _charge_hit := false  # this shoulder charge has already hit someone
 var _saved_mask := 0
 var _airborne := false
 var _fall_peak := 0.0
@@ -143,9 +160,12 @@ func can_attack() -> bool:
 	return state == State.IDLE or state == State.BLOCK or can_chain()
 
 
-## Whether a hit from `from_pos` would hit this fighter's guard.
-func is_blocking_from(from_pos: Vector3) -> bool:
+## Whether a hit from `from_pos` to `zone` (head, body or groin) would hit this fighter's
+## guard. A head guard covers the head; a body guard covers the body and groin.
+func is_blocking_from(from_pos: Vector3, zone: StringName = Moves.GUARD_HEAD) -> bool:
 	if state != State.BLOCK:
+		return false
+	if (zone == Moves.GUARD_HEAD) != (guard_zone == Moves.GUARD_HEAD):
 		return false
 	var to := from_pos - global_position
 	to.y = 0.0
@@ -179,7 +199,8 @@ func can_be_hit() -> bool:
 
 
 func can_be_grabbed() -> bool:
-	return state in [State.IDLE, State.ATTACK, State.WINDUP, State.STAGGER, State.BLOCK] \
+	return state in [State.IDLE, State.ATTACK, State.WINDUP, State.STAGGER, State.BLOCK,
+			State.DOUBLED] \
 		and held_by == null and holding == null and team != Team.STAFF
 
 
@@ -214,12 +235,26 @@ func windup_remaining() -> float:
 	return _windup_left if state == State.WINDUP else 0.0
 
 
-## How to defend the attack being wound up: "block" (punches) or "dodge" (guard breakers:
-## kicks, haymakers, shoves, batons). "" when not winding up.
+## How to defend the attack being wound up, as the action to press: "guard_head" (punches
+## to the head: LB), "guard_body" (body shots: RB) or "dodge" (guard breakers: kicks,
+## haymakers, shoves, batons). "" when not winding up.
 func defend_hint() -> String:
 	if state != State.WINDUP:
 		return ""
-	return "dodge" if bool(_move.get("guard_break", false)) else "block"
+	if bool(_move.get("guard_break", false)):
+		return "dodge"
+	return "guard_head" if attack_zone() == Moves.GUARD_HEAD else "guard_body"
+
+
+## Where the move being wound up or thrown will land: &"head", &"body" or &"groin".
+func attack_zone() -> StringName:
+	return StringName(_move.get("zone", Moves.GUARD_HEAD)) if not _move.is_empty() \
+		else Moves.GUARD_HEAD
+
+
+## Slipping right now: head shots miss.
+func is_slipping() -> bool:
+	return _slip_t > 0.0
 
 
 ## World position of the head, for FX (blood, sounds) and UI.
@@ -252,11 +287,19 @@ func request_attack(move_id: StringName, target_fighter: Fighter = null, bonus :
 	_send(&"attack", [move_id, _path(target_fighter), bonus, combo_name])
 
 
-## Raise (true) or drop (false) the guard. Blocks punches from the front for chip damage.
-## Raising it just before a punch lands parries it, and the next punch is a counter.
-## Guard breakers (kicks, headbutts, haymakers) stagger a blocker: dodge those.
-func request_block(on: bool) -> void:
-	_send(&"block", [on])
+## Raise (true) or drop (false) a guard: Moves.GUARD_HEAD covers head shots, GUARD_BODY
+## body (and groin) shots, from the front, for chip damage. Raising the right one just
+## before a punch lands parries it, and the next punch is a counter. Guard breakers
+## (kicks, headbutts, haymakers) stagger a blocker: dodge those. Calling it again with the
+## other zone while blocking switches guards.
+func request_block(on: bool, zone: StringName = Moves.GUARD_HEAD) -> void:
+	_send(&"block", [on, zone])
+
+
+## Flick the head out of the way (right stick). `dir` is x right, y up (down ducks). For a
+## moment head shots miss; slipping one just as it lands sets up a counter.
+func request_slip(dir: Vector2) -> void:
+	_send(&"slip", [dir])
 
 
 ## Grab `victim`, or the nearest enemy in front if null.
@@ -295,9 +338,15 @@ func take_hit(info: Dictionary) -> void:
 	var attacker := info.get("attacker") as Fighter
 	var heavy := bool(info.get("heavy", false))
 	var dmg := float(info.get("damage", 0.0))
+	var zone := StringName(info.get("zone", Moves.GUARD_HEAD))
 	var from_pos: Vector3 = attacker.global_position if attacker != null \
 		else global_position - (info.get("direction", Vector3.ZERO) as Vector3)
-	if is_blocking_from(from_pos) and not bool(info.get("ground", false)):
+	if zone == Moves.GUARD_HEAD and _slip_t > 0.0 and attacker != null \
+			and not bool(info.get("ground", false)) and not bool(info.get("clinch", false)) \
+			and _can_slip():
+		_server_slipped(info, attacker)
+		return
+	if is_blocking_from(from_pos, zone) and not bool(info.get("ground", false)):
 		if _server_guard(info, attacker):
 			return
 	if state == State.HELD:
@@ -315,7 +364,10 @@ func take_hit(info: Dictionary) -> void:
 	info["direction"] = dir
 
 	var new_hp := hp - dmg
-	_poise -= float(info.get("poise", 8.0)) / maxf(toughness, 0.1)
+	var poise_hit := float(info.get("poise", 8.0)) / maxf(toughness, 0.1)
+	if state == State.STAGGER or state == State.DOUBLED:
+		poise_hit *= Moves.STAGGER_POISE_SCALE  # no stun-locking a man to the floor
+	_poise -= poise_hit
 	_poise_wait = Moves.POISE_REGEN_DELAY
 	var tough := maxf(toughness, 0.1)
 	var impulse := dir * float(info.get("knockback", 1.0)) / tough
@@ -340,6 +392,12 @@ func take_hit(info: Dictionary) -> void:
 		reaction = State.DOWN
 		dur = get_up_time
 		_poise = Moves.POISE * toughness
+	elif bool(info.get("doubles", false)) and state != State.HELD:
+		reaction = State.DOUBLED
+		dur = Moves.DOUBLED_TIME / tough
+	elif state == State.DOUBLED:
+		reaction = State.DOUBLED  # still curled up holding it
+		dur = _state_len - _state_t
 	elif state == State.HELD:
 		reaction = State.HELD  # flinch in their grip
 
@@ -351,6 +409,33 @@ func take_hit(info: Dictionary) -> void:
 	if heavy and attacker != null and reaction == State.STAGGER:
 		dur *= 1.25
 	_rpc_react.rpc(reaction, dur, new_hp, impulse, _pack(info), broke_nose)
+
+
+## Slipping can't happen while busy: only on your feet and free to move your head.
+func _can_slip() -> bool:
+	return state in [State.IDLE, State.BLOCK, State.ATTACK, State.DODGE] \
+		or (state == State.WINDUP and not bool(_move.get("telegraph", false)))
+
+
+## A head shot met a slipping head: it misses. Slipped right as it landed, it's a counter.
+func _server_slipped(info: Dictionary, attacker: Fighter) -> void:
+	info["victim"] = self
+	info["damage"] = 0.0
+	info["slipped"] = true
+	info["heavy"] = false
+	var dir: Vector3 = info.get("direction", Vector3.ZERO)
+	dir.y = 0.0
+	info["direction"] = dir.normalized()
+	if not info.has("position"):
+		info["position"] = global_position + Vector3.UP * 1.5
+	if Moves.SLIP_WINDOW - _slip_t <= Moves.SLIP_COUNTER_WINDOW:
+		# Slipped it at the last moment: they're overextended and you're set to counter.
+		info["parried"] = true
+		_counter_ready = Moves.COUNTER_WINDOW
+		attacker._rpc_react.rpc(State.STAGGER, Moves.PARRY_STAGGER * 0.6, attacker.hp,
+			attacker.get_facing() * 1.2, {}, false)
+		_rpc_parried.rpc(_path(attacker))
+	_rpc_react.rpc(state, _state_len - _state_t, hp, Vector3.ZERO, _pack(info), false)
 
 
 ## A hit met our guard. Returns true if the guard dealt with it (parried or blocked);
@@ -369,7 +454,8 @@ func _server_guard(info: Dictionary, attacker: Fighter) -> bool:
 	info["direction"] = dir
 	if not info.has("position"):
 		info["position"] = global_position + Vector3.UP * 1.4
-	if _state_t <= Moves.PARRY_WINDOW and attacker != null:
+	if _state_t <= Moves.PARRY_WINDOW and attacker != null \
+			and (parry_skill >= 1.0 or randf() < parry_skill):
 		# Parried: no damage, the attacker reels, and our next punch is a counter.
 		info["damage"] = 0.0
 		info["parried"] = true
@@ -446,12 +532,18 @@ func _rpc_action(action: StringName, args: Array) -> void:
 
 func _server_action(action: StringName, args: Array) -> void:
 	match action:
+		&"slip":
+			if args.size() > 0 and args[0] is Vector2:
+				_server_slip(args[0])
 		&"attack":
 			var bonus := clampf(float(args[2]), 0.5, 2.0) if args.size() > 2 else 1.0
 			var cname := String(args[3]) if args.size() > 3 else ""
 			_server_attack(args[0], _fighter_at(args[1]), bonus, cname)
 		&"block":
-			_server_block(bool(args[0]))
+			var zone: StringName = StringName(args[1]) if args.size() > 1 else Moves.GUARD_HEAD
+			if zone != Moves.GUARD_BODY:
+				zone = Moves.GUARD_HEAD
+			_server_block(bool(args[0]), zone)
 		&"grab":
 			_server_grab(_fighter_at(args[0]))
 		&"release":
@@ -524,7 +616,7 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 	if not can_attack():
 		return
 	var m := _resolve_move(move_id)
-	if tgt == null and bool(m["lunge"]):
+	if tgt == null and (bool(m["lunge"]) or bool(m["charge"])):
 		tgt = Targeting.pick(self, get_facing(), Moves.LUNGE_RANGE, bool(m["ground"]))
 	if _counter_ready > 0.0 and not bool(m["ground"]):
 		bonus *= Moves.COUNTER_BONUS
@@ -534,11 +626,19 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 	_rpc_start_move.rpc(move_id, _path(tgt), bonus, combo_name)
 
 
-func _server_block(on: bool) -> void:
+func _server_block(on: bool, zone: StringName) -> void:
 	if on and (state == State.IDLE or can_chain()):
-		_rpc_block.rpc(true)
+		_rpc_block.rpc(true, zone)
+	elif on and state == State.BLOCK and zone != guard_zone:
+		_rpc_block.rpc(true, zone)  # switch guards (the parry timing restarts)
 	elif not on and state == State.BLOCK:
-		_rpc_block.rpc(false)
+		_rpc_block.rpc(false, zone)
+
+
+func _server_slip(dir: Vector2) -> void:
+	if _slip_cd > 0.0 or dir.length() < 0.1 or not _can_slip():
+		return
+	_rpc_slip.rpc(dir.limit_length(1.0))
 
 
 func _server_grab(victim: Fighter) -> void:
@@ -549,6 +649,16 @@ func _server_grab(victim: Fighter) -> void:
 	if victim == null or not is_hostile_to(victim) or not victim.can_be_grabbed():
 		return
 	if victim.global_position.distance_to(global_position) > Moves.GRAB_RANGE + 0.3:
+		return
+	# Some men are harder to get hold of. Soften them up first and it's easier.
+	var resist := victim.hold_resist / maxf(grip, 0.1)
+	if victim.state == State.STAGGER or victim.state == State.DOUBLED:
+		resist *= 0.5
+	if resist > 0.0 and randf() < resist:
+		var away := global_position - victim.global_position
+		away.y = 0.0
+		_rpc_react.rpc(State.STAGGER, Moves.SHRUG_STAGGER, hp, away.normalized() * 2.5, {}, false)
+		Events.grab_shrugged.emit(self, victim)
 		return
 	_rpc_grab.rpc(_path(victim))
 
@@ -604,7 +714,8 @@ func _server_landed(height: float) -> void:
 
 
 func _server_add_escape(amount: float) -> void:
-	_escape += amount / maxf(grip, 0.1)
+	var resist := holding.hold_resist if holding != null else 0.0
+	_escape += amount * (1.0 + resist * 2.0) / maxf(grip, 0.1)
 	if _escape >= 1.0:
 		_server_release(_RELEASE_PLAIN)
 
@@ -616,12 +727,23 @@ func _server_resolve_hit() -> void:
 		var to := v.global_position - global_position
 		to.y = 0.0
 		var dir := to.normalized() if to.length() > 0.01 else get_facing()
+		var side := float(m.get("side", 0.0))
+		if side != 0.0:
+			# A hook comes round from the side: it knocks the head (and the body) sideways.
+			var right := get_facing().cross(Vector3.UP)
+			dir = (dir - right * side * 0.9).normalized()
+		var zone := StringName(m.get("zone", Moves.GUARD_HEAD))
 		var dmg := float(m["damage"]) * power * _bonus
 		if team != Team.PLAYERS and v.team == Team.PLAYERS:
 			dmg *= float(GameData.difficulty()["enemy_damage"])
+		var height := 1.45 if bool(m["to_face"]) else 1.1
+		if zone == &"groin":
+			height = 0.85
 		var info := {
 			"attacker": self, "victim": v, "move": String(m["id"]), "damage": dmg,
-			"position": v.global_position + Vector3.UP * (1.45 if bool(m["to_face"]) else 1.1),
+			"zone": zone, "side": side, "clinch": bool(m["clinch"]), "doubles": bool(m["doubles"]),
+			"charge": bool(m["charge"]),
+			"position": v.global_position + Vector3.UP * height,
 			"direction": dir, "heavy": bool(m["heavy"]), "to_face": bool(m["to_face"]),
 			"knockdown": bool(m["knockdown"]), "ground": bool(m["ground"]),
 			"stagger": float(m["stagger"]), "poise": float(m["poise"]),
@@ -651,6 +773,8 @@ func _find_victims() -> Array[Fighter]:
 	if float(m["damage"]) <= 0.0:
 		return out
 	var reach := float(m["reach"])
+	if bool(m.get("charge", false)):
+		reach = Moves.CHARGE_HIT_RANGE
 	if state == State.GRABBING:
 		if holding != null:
 			out.append(holding)
@@ -725,6 +849,7 @@ func _rpc_start_move(move_id: StringName, target_path: NodePath, bonus := 1.0,
 	_windup_left = float(m["windup"])
 	_lunge_t = 0.0
 	_attack_t = 0.0
+	_charge_hit = false
 	# Only step in when the target is a short step out of reach; never chase across the room.
 	_lunge_ok = tgt != null and bool(m["lunge"]) \
 		and _flat_dist(tgt) - float(m["reach"]) * 0.8 <= Moves.MAX_LUNGE_STEP
@@ -758,7 +883,8 @@ func _rpc_react(new_state: State, duration: float, new_hp: float, impulse: Vecto
 	var was := state
 	if not packed.is_empty():
 		_combat_t = Moves.STANCE_HOLD
-	if new_state == was and (was == State.HELD or was == State.CRAWL or was == State.BLOCK):
+	if new_state == was and (was == State.HELD or was == State.CRAWL or was == State.BLOCK \
+			or was == State.DOUBLED or was == State.IDLE or was == State.DODGE):
 		return
 	if new_state == State.DOWN and was == State.DOWN:
 		_state_len = _state_t + duration
@@ -769,11 +895,26 @@ func _rpc_react(new_state: State, duration: float, new_hp: float, impulse: Vecto
 
 
 @rpc("any_peer", "call_local", "reliable")
-func _rpc_block(on: bool) -> void:
+func _rpc_block(on: bool, zone: StringName = Moves.GUARD_HEAD) -> void:
 	if not _sender_is_host():
 		return
 	_combat_t = maxf(_combat_t, 1.0)
+	guard_zone = zone
+	if on and state == State.BLOCK:
+		_state_t = 0.0  # a switched guard is a freshly raised one
+		return
 	_enter(State.BLOCK if on else State.IDLE, 0.0)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_slip(dir: Vector2) -> void:
+	if not _sender_is_host():
+		return
+	_slip_t = Moves.SLIP_WINDOW
+	_slip_cd = Moves.SLIP_WINDOW + Moves.SLIP_COOLDOWN
+	slip_dir = dir
+	_combat_t = maxf(_combat_t, 1.0)
+	slipped.emit(dir)
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -925,6 +1066,10 @@ func _tick_state(delta: float) -> void:
 	_knee_cd = maxf(_knee_cd - delta, 0.0)
 	_flash = maxf(_flash - delta * 4.0, 0.0)
 	_counter_ready = maxf(_counter_ready - delta, 0.0)
+	_slip_t = maxf(_slip_t - delta, 0.0)
+	_slip_cd = maxf(_slip_cd - delta, 0.0)
+	if _slip_t <= 0.0:
+		slip_dir = slip_dir.move_toward(Vector2.ZERO, delta * 4.0)
 	_combat_t = maxf(_combat_t - delta, 0.0)
 	_update_stance()
 	_poise_wait -= delta
@@ -942,16 +1087,22 @@ func _tick_state(delta: float) -> void:
 				if bool(_move["lunge"]) and not bool(_move["ground"]):
 					_impulse += get_facing() * Moves.FOLLOW_THROUGH \
 						* (1.4 if bool(_move["heavy"]) else 1.0)
-				if multiplayer.is_server():
+				# A shoulder charge hits whoever it runs into on the way, not here.
+				if multiplayer.is_server() and not bool(_move["charge"]):
 					_server_resolve_hit()
 		State.ATTACK:
 			_attack_t += delta
+			if bool(_move.get("charge", false)) and not _charge_hit and multiplayer.is_server() \
+					and _attack_t <= float(_move["active"]) + 0.05:
+				if not _find_victims().is_empty():
+					_charge_hit = true
+					_server_resolve_hit()
 			if _state_t >= _state_len:
 				_enter(State.IDLE, 0.0)
 		State.STAGGER, State.DODGE:
 			if _state_t >= _state_len:
 				_enter(State.IDLE, 0.0)
-		State.DOWN:
+		State.DOWN, State.DOUBLED:
 			if _state_t >= _state_len:
 				_get_up()
 		State.GRABBING:
@@ -1053,6 +1204,10 @@ func _tick_motion(delta: float) -> void:
 				if state == State.WINDUP and _is_lunging():
 					var gap := to.length() - float(_move["reach"]) * 0.75
 					v = to.normalized() * minf(Moves.LUNGE_SPEED, gap / maxf(delta, 0.001))
+			if state == State.ATTACK and bool(_move.get("charge", false)) \
+					and _attack_t <= float(_move["active"]) and not _charge_hit:
+				# Shoulder down, driving through: full speed until we hit someone.
+				v = get_facing() * Moves.CHARGE_SPEED
 		State.DODGE:
 			v = _dodge_dir * Moves.DODGE_SPEED * (1.0 - 0.6 * _state_t / maxf(_state_len, 0.01))
 		State.HELD:

@@ -25,8 +25,14 @@ func run() -> void:
 		"test_sparring_punter", "test_sandbox_loads", "test_throw_over_railing",
 		"test_throw_off_open_edge", "test_throw_away_from_edge", "test_short_drop_no_damage",
 		"test_enemy_windup_is_readable", "test_windup_pose_holds", "test_hit_lean",
-		"test_footwork_has_weight",
+		"test_footwork_has_weight", "test_head_and_body_guards", "test_slip",
+		"test_groin_kick_combo", "test_shoulder_charge", "test_clinch_knee", "test_hold_resistance",
+		"test_hook_knocks_head_sideways", "test_one_punch_doesnt_drop_a_fresh_man",
 	]
+	# COMBAT_ONLY=test_a,test_b runs just those.
+	var only := OS.get_environment("COMBAT_ONLY")
+	if only != "":
+		tests = tests.filter(func(t): return t in only.split(","))
 	for t in tests:
 		print("  ", t)
 		_arena = Node3D.new()
@@ -96,7 +102,7 @@ func test_jab_hits_and_lunges() -> void:
 	_check(p.target == e, "soft lock picks the enemy in front")
 	await _wait(0.6)
 	_check(hits.size() == 1, "jab steps in a little and lands (got %d)" % hits.size())
-	_check(is_equal_approx(e.hp, e.max_hp - 6.0), "jab did 6 damage (hp %.1f)" % e.hp)
+	_check(is_equal_approx(e.hp, e.max_hp - 5.0), "jab did 5 damage (hp %.1f)" % e.hp)
 
 
 func test_no_snapping_to_far_enemies() -> void:
@@ -148,7 +154,7 @@ func test_counter() -> void:
 	_check(p.state == Fighter.State.BLOCK, "block raises the guard")
 	e.request_attack(&"swing", p)
 	_check(telegraphs.size() == 1, "enemy swing is telegraphed")
-	_check(e.defend_hint() == "block", "a swing is prompted as block")
+	_check(e.defend_hint() == "guard_head", "a swing is prompted as a head guard")
 	await _until_free(e)
 	_check(is_equal_approx(p.hp, p.max_hp - 8.0 * Moves.BLOCK_CHIP), "blocked for chip damage (hp %.2f)" % p.hp)
 	_check(p.state == Fighter.State.BLOCK, "the guard holds")
@@ -345,7 +351,7 @@ func test_weapon_hooks() -> void:
 	p.request_attack(&"jab")
 	await _wait(0.5)
 	_check(chair.hits == 2, "sweeping weapon hits both (got %d)" % chair.hits)
-	_check(is_equal_approx(a.hp, a.max_hp - 18.0), "weapon modifies damage (hp %.1f)" % a.hp)
+	_check(is_equal_approx(a.hp, a.max_hp - 15.0), "weapon modifies damage (hp %.1f)" % a.hp)
 	_check(p.unequip() == chair and p.weapon == null, "unequip returns the item")
 
 
@@ -353,16 +359,9 @@ func _player(pos: Vector3, face_toward := Vector3.INF) -> PlayerFighter:
 	return _fighter(Fighter.Team.PLAYERS, pos, face_toward, PlayerFighter) as PlayerFighter
 
 
-func _tap(p: PlayerFighter, hand: StringName) -> void:
-	p.hand_down(hand)
+func _tap(p: PlayerFighter, b: StringName, lb := false, rb := false) -> void:
+	p.button(b, lb, rb)
 	await get_tree().physics_frame
-	p.tick_hands(1.0 / 60.0)
-	p.hand_up(hand)
-
-
-func _hold(p: PlayerFighter, hand: StringName) -> void:
-	p.hand_down(hand)
-	p.tick_hands(Moves.PUNCH_HOLD_TIME + 0.01)
 
 
 ## Waits until `f` is free to act again (its attack or stagger is over).
@@ -387,20 +386,34 @@ func test_player_punch_chain() -> void:
 	await _wait(0.1)
 	var moves := []
 	p.move_started.connect(func(m): moves.append(m))
-	await _tap(p, &"left")
+	await _tap(p, &"jab")
 	await _wait(0.8)
-	await _tap(p, &"right")
+	await _tap(p, &"hook")
 	await _wait(0.8)
-	_hold(p, &"left")
+	await _tap(p, &"uppercut")
 	await _wait(0.8)
-	_hold(p, &"right")
+	await _tap(p, &"jab", false, true)
 	await _wait(0.8)
-	p.hand_down(&"left")
-	p.hand_down(&"right")
+	await _tap(p, &"hook", false, true)
 	await _wait(0.8)
-	_check(moves == [&"jab", &"hook", &"cross", &"uppercut", &"headbutt"],
-		"tap/hold left and right, and both together (got %s)" % [moves])
-	_check(p.combo == 5, "combo counts hits (got %d)" % p.combo)
+	p.press(&"headbutt")
+	await _wait(0.8)
+	_check(moves == [&"jab", &"hook", &"uppercut", &"body_jab", &"body_hook", &"headbutt"],
+		"X/B/Y punch, RB sends them to the body, R3 headbutts (got %s)" % [moves])
+	_check(p.combo == 6, "combo counts hits (got %d)" % p.combo)
+	moves.clear()
+	p.button(&"jab", false, false, true)
+	await _wait(0.8)
+	_check(moves == [&"body_jab"], "ducking (right stick down) and punching goes to the body (%s)" % [moves])
+	moves.clear()
+	await _tap(p, &"jab", true)
+	await _wait(1.0)
+	await _tap(p, &"hook", true)
+	await _wait(1.0)
+	await _tap(p, &"uppercut", true)
+	await _wait(1.2)
+	_check(moves == [&"kick", &"clinch_knee", &"shoulder_charge"],
+		"LB + X/B/Y: kick, clinch knee, shoulder charge (got %s)" % [moves])
 
 
 func test_player_combos_and_mashing() -> void:
@@ -413,34 +426,34 @@ func test_player_combos_and_mashing() -> void:
 	var combos := []
 	var cb := func(_f, n): combos.append(n)
 	Events.combo_performed.connect(cb)
-	# In rhythm: jab, cross, hook, uppercut.
-	await _tap(p, &"left")
+	# In rhythm: jab, jab, hook, uppercut.
+	await _tap(p, &"jab")
 	await _until_chain(p)
-	_hold(p, &"left")
+	await _tap(p, &"jab")
 	await _until_chain(p)
-	await _tap(p, &"right")
+	await _tap(p, &"hook")
 	await _until_chain(p)
-	_hold(p, &"right")
+	await _tap(p, &"uppercut")
 	await _wait(0.9)
-	_check(combos == ["One-two", "One-two-hook", "The Full English"],
+	_check(combos == ["Double jab, hook", "The Full English"],
 		"rhythm strings are combos (got %s)" % [combos])
-	var expected := 500.0 - 6.0 - 9.0 * 1.15 - 11.0 * 1.35 - 15.0 * 1.7
+	var expected := 500.0 - 5.0 - 5.0 - 11.0 * 1.3 - 14.0 * 1.7
 	_check(absf(e.hp - expected) < 0.01, "combos hit harder (hp %.2f, want %.2f)" % [e.hp, expected])
 	# Out of rhythm: no combo.
 	combos.clear()
-	await _wait(1.0)
-	await _tap(p, &"left")
+	await _wait(2.5)
+	await _tap(p, &"jab")
 	await _wait(1.4)
-	await _tap(p, &"right")
+	await _tap(p, &"hook")
 	await _wait(0.8)
-	_check(combos.is_empty(), "a slow one-two isn't a combo")
+	_check(combos.is_empty(), "a slow jab, hook isn't a combo")
 	# Mashing during a punch fumbles: the extra presses are lost.
 	var moves := []
 	p.move_started.connect(func(m): moves.append(m))
 	await _wait(1.0)
-	await _tap(p, &"right")
+	await _tap(p, &"hook")
 	for i in 4:
-		await _tap(p, &"left")
+		await _tap(p, &"jab")
 	_check(p._fumble_t > 0.0 and p._history.is_empty(), "mashing fumbles the string")
 	await _wait(0.9)
 	_check(moves == [&"hook"], "mashed presses are dropped (got %s)" % [moves])
@@ -483,8 +496,10 @@ func test_defend_prompt_text() -> void:
 	p.add_child(prompts)
 	await _wait(0.1)
 	prompts.device = "kb"
-	var kb: String = prompts.prompt_text("block")
-	_check(kb.ends_with("BLOCK") and kb.contains(Settings.action_label("block", "kb")), "kb block prompt: " + kb)
+	var kb: String = prompts.prompt_text("guard_head")
+	_check(kb.ends_with("BLOCK HIGH") and kb.contains(Settings.action_label("guard_head", "kb")),
+		"kb head guard prompt: " + kb)
+	_check(prompts.prompt_text("guard_body").ends_with("BLOCK LOW"), "body guard prompt")
 	if not Settings.has_method("prompt"):
 		prompts.device = "pad"
 		_check(prompts.prompt_text("dodge") == "%s  DODGE" % Settings.action_label("dodge", "pad"),
@@ -510,15 +525,17 @@ func test_player_input() -> void:
 	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
 	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
 	await _wait(0.1)
-	Input.action_press("grab")
+	Input.action_press("guard_head")
+	Input.action_press("guard_body")
 	await get_tree().physics_frame
-	Input.action_release("grab")
+	Input.action_release("guard_head")
+	Input.action_release("guard_body")
 	await _wait(0.05)
 	_check(p.state == Fighter.State.GRABBING and e.state == Fighter.State.HELD,
-		"grab button holds (state %d)" % p.state)
-	Input.action_press("punch_left")
+		"LB + RB holds (state %d)" % p.state)
+	Input.action_press("jab")
 	await get_tree().physics_frame
-	Input.action_release("punch_left")
+	Input.action_release("jab")
 	await _wait(0.05)
 	_check(e.hp < e.max_hp, "punch while holding knees")
 	Input.action_press("throw")
@@ -530,19 +547,26 @@ func test_player_input() -> void:
 	await _wait(0.3)
 	Input.action_release("move_right")
 	_check(p.global_position.x > 0.5, "stick moves the player")
-	Input.action_press("block")
+	Input.action_press("guard_head")
 	await _wait(0.05)
-	_check(p.state == Fighter.State.BLOCK, "holding block raises the guard")
-	Input.action_release("block")
+	_check(p.state == Fighter.State.BLOCK and p.guard_zone == Moves.GUARD_HEAD,
+		"holding LB raises the head guard")
+	Input.action_release("guard_head")
 	await _wait(0.05)
 	_check(p.state == Fighter.State.IDLE, "letting go drops it")
+	Input.action_press("guard_body")
+	await _wait(0.05)
+	_check(p.state == Fighter.State.BLOCK and p.guard_zone == Moves.GUARD_BODY,
+		"holding RB raises the body guard")
+	Input.action_release("guard_body")
+	await _wait(0.05)
 	var moves := []
 	p.move_started.connect(func(m): moves.append(m))
-	Input.action_press("punch_right")
+	Input.action_press("hook")
 	await _wait(0.05)
-	Input.action_release("punch_right")
+	Input.action_release("hook")
 	await _wait(0.05)
-	_check(moves == [&"hook"], "right punch button throws a hook (got %s)" % [moves])
+	_check(moves == [&"hook"], "B throws a hook (got %s)" % [moves])
 	await _until_free(p)
 	moves.clear()
 	Input.action_press("uppercut")
@@ -749,3 +773,219 @@ func test_footwork_has_weight() -> void:
 	_check(p.velocity.length() > 0.5, "and you slow down over a moment")
 	await _wait(0.6)
 	_check(p.velocity.length() < 0.01, "then stop")
+
+
+# --- Head and body, slips, the shoulder-button moves -----------------------------------
+
+func test_head_and_body_guards() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	await _wait(0.1)
+	# A body guard doesn't cover the head.
+	e.request_block(true, Moves.GUARD_BODY)
+	await _wait(0.4)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	p.request_attack(&"jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and not bool(hits[0].get("blocked", false)) \
+		and hits[0]["zone"] == &"head", "a jab gets over a body guard")
+	# But it does stop a body shot. (The jab knocked the guard down: put it back up.)
+	await _until_free(e)
+	e.request_block(true, Moves.GUARD_BODY)
+	await _wait(0.4)
+	hits.clear()
+	p.request_attack(&"body_hook", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("blocked", false)), "a body guard stops a body hook")
+	# Switch to the head guard: now body shots get in under it.
+	e.request_block(true, Moves.GUARD_HEAD)
+	_check(e.state == Fighter.State.BLOCK and e.guard_zone == Moves.GUARD_HEAD, "guards switch")
+	await _wait(0.4)
+	hits.clear()
+	p.request_attack(&"body_jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and not bool(hits[0].get("blocked", false)) \
+		and hits[0]["zone"] == &"body", "a body jab gets under a head guard")
+	await _until_free(e)
+	e.request_block(true, Moves.GUARD_HEAD)
+	await _wait(0.4)
+	hits.clear()
+	p.request_attack(&"jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("blocked", false)), "a head guard stops a jab")
+	# Enemy body shots ask for the body guard.
+	e.request_block(false)
+	await _wait(0.1)
+	e.request_attack(&"body_swing", p)
+	_check(e.defend_hint() == "guard_body", "a punter's body shot is prompted as a low block")
+
+
+func test_slip() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	await _wait(0.1)
+	var counters := []
+	var cb := func(d, _a): counters.append(d)
+	Events.attack_countered.connect(cb)
+	# Slip early: it misses, but there's no counter.
+	e.request_attack(&"swing", p)
+	await _wait(e.windup_remaining() - Moves.SLIP_WINDOW + 0.08)
+	p.request_slip(Vector2(1, 0))
+	_check(p.is_slipping(), "a flick of the right stick slips")
+	await _until_free(e)
+	_check(is_equal_approx(p.hp, p.max_hp), "a slipped swing misses (hp %.1f)" % p.hp)
+	_check(counters.is_empty(), "an early slip isn't a counter")
+	# Slip right as it lands: a counter.
+	await _wait(0.6)
+	e.request_attack(&"swing", p)
+	await _wait(e.windup_remaining() - 0.1)
+	p.request_slip(Vector2(-1, 0))
+	await _wait(0.2)
+	_check(is_equal_approx(p.hp, p.max_hp), "a late slip misses too")
+	_check(counters.size() == 1 and p.has_counter_ready(), "slipping it late sets up a counter")
+	Events.attack_countered.disconnect(cb)
+	# Body shots can't be slipped.
+	await _until_free(e)
+	await _wait(0.6)
+	e.request_attack(&"body_swing", p)
+	await _wait(e.windup_remaining() - 0.1)
+	p.request_slip(Vector2(0, 1))
+	await _wait(0.2)
+	_check(p.hp < p.max_hp, "a body shot still lands on a slipping man")
+
+
+func test_groin_kick_combo() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2))
+	await _wait(0.1)
+	var combos := []
+	var cb := func(_f, n): combos.append(n)
+	Events.combo_performed.connect(cb)
+	var moves := []
+	p.move_started.connect(func(m): moves.append(m))
+	await _tap(p, &"jab")
+	await _until_chain(p)
+	await _tap(p, &"jab", false, true)
+	await _until_chain(p)
+	await _tap(p, &"jab", true)
+	await _wait(0.5)
+	Events.combo_performed.disconnect(cb)
+	_check(moves == [&"jab", &"body_jab", &"groin_kick"], "jab, body jab, kick goes low (got %s)" % [moves])
+	_check(combos.has("Below the belt"), "and it's a combo (got %s)" % [combos])
+	_check(e.state == Fighter.State.DOUBLED, "they go down on all fours holding it (state %d)" % e.state)
+	_check(not e.is_down() and e.can_be_grabbed(), "doubled over, they can still be hit and held")
+	await _wait(Moves.DOUBLED_TIME + 0.3)
+	_check(e.state == Fighter.State.IDLE, "and get back up after a while (state %d)" % e.state)
+
+
+func test_shoulder_charge() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -2.6))
+	await _wait(0.1)
+	var start_e := e.global_position
+	p.request_block(false)
+	e.request_block(true)
+	await _wait(0.1)
+	p.request_attack(&"shoulder_charge", e)
+	await _wait(0.9)
+	_check(e.state == Fighter.State.DOWN, "a shoulder charge runs them over, guard or not (state %d)" % e.state)
+	_check(e.global_position.distance_to(start_e) > 1.0,
+		"and sends them flying (%.2f m)" % e.global_position.distance_to(start_e))
+	_check(p.global_position.z < -0.8, "the charger drives forward (z %.2f)" % p.global_position.z)
+
+
+func test_clinch_knee() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0), Vector3(0, 0, 0))
+	await _wait(0.1)
+	e.request_block(true)
+	await _wait(0.4)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	p.request_attack(&"clinch_knee", e)
+	await _wait(0.5)
+	_check(hits.size() == 1 and bool(hits[0]["clinch"]) and not bool(hits[0].get("blocked", false)),
+		"the clinch knee drags the guard down and lands")
+	_check(e.hp < e.max_hp - 10.0, "and it hurts (hp %.1f)" % e.hp)
+
+
+func test_hold_resistance() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var easy := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
+	await _wait(0.1)
+	p.request_grab(easy)
+	_check(easy.state == Fighter.State.HELD, "a soft lad is easy to hold")
+	p.request_release()
+	await _wait(0.8)
+	easy.global_position = Vector3(20, 0, 0)
+	var hard := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.0))
+	hard.hold_resist = 1.0
+	await _wait(0.1)
+	var shrugs := []
+	var cb := func(_h, v): shrugs.append(v)
+	Events.grab_shrugged.connect(cb)
+	p.request_grab(hard)
+	Events.grab_shrugged.disconnect(cb)
+	_check(hard.state != Fighter.State.HELD and shrugs.size() == 1, "a strong man shrugs the grab off")
+	_check(p.state == Fighter.State.STAGGER, "and the would-be holder stumbles")
+	# A resisting man also wriggles free faster.
+	var a := _fighter(Fighter.Team.PLAYERS, Vector3(5, 0, 0), Vector3(5, 0, -1))
+	var b := _fighter(Fighter.Team.PUNTERS, Vector3(5, 0, -1.0))
+	await _wait(0.1)
+	a.request_grab(b)
+	b.hold_resist = 0.5
+	var n := 0
+	while b.state == Fighter.State.HELD and n < 50:
+		b.request_struggle()
+		n += 1
+	_check(n < int(1.0 / Moves.ESCAPE_PER_STRUGGLE), "resist speeds up the escape (%d struggles)" % n)
+
+
+func test_hook_knocks_head_sideways() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	var vis := FighterVisual.attach(e)
+	await _wait(0.1)
+	var hits := []
+	e.hit_taken.connect(func(info): hits.append(info))
+	p.request_attack(&"jab", e)
+	await _until_free(p)
+	var jab_dir: Vector3 = hits[0]["direction"]
+	_check(absf(jab_dir.x) < 0.1, "a jab pushes straight back (%s)" % jab_dir)
+	p.request_attack(&"hook", e)
+	var peak := 0.0
+	for i in 30:
+		await get_tree().physics_frame
+		await get_tree().process_frame
+		if vis.snap != null:
+			peak = maxf(peak, vis.snap.snap_angle())
+	var hook_dir: Vector3 = hits[1]["direction"]
+	# The player faces -Z, so their right is +X; a right hook knocks the head to -X.
+	_check(hook_dir.x < -0.4, "a right hook knocks the head sideways (%s)" % hook_dir)
+	_check(vis.snap != null and peak > 0.15, "the head snaps on the hit (%.2f rad)" % peak)
+	await _wait(1.5)
+	_check(vis.snap.snap_angle() < 0.02, "then settles (%.3f)" % vis.snap.snap_angle())
+
+
+func test_one_punch_doesnt_drop_a_fresh_man() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.1), Vector3(0, 0, 0))
+	await _wait(0.1)
+	p.request_attack(&"uppercut", e)
+	await _until_free(p)
+	_check(e.state != Fighter.State.DOWN, "a fresh man stays up after an uppercut (state %d)" % e.state)
+	p.request_attack(&"headbutt", e)
+	await _until_free(p)
+	_check(e.state != Fighter.State.DOWN, "and after a headbutt")
+	# A sustained beating does put him down.
+	var downed := false
+	for i in 8:
+		p.request_attack(&"hook", e)
+		await _until_free(p)
+		if e.state == Fighter.State.DOWN:
+			downed = true
+			break
+	_check(downed, "a good beating still drops him")

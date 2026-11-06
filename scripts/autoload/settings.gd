@@ -109,21 +109,31 @@ const ACTIONS := {
 	"move_down": ["Move down", {"key": KEY_S}, {"axis": JOY_AXIS_LEFT_Y, "dir": 1}],
 	"move_left": ["Move left", {"key": KEY_A}, {"axis": JOY_AXIS_LEFT_X, "dir": -1}],
 	"move_right": ["Move right", {"key": KEY_D}, {"axis": JOY_AXIS_LEFT_X, "dir": 1}],
-	"punch_left": ["Left punch (tap: jab, hold: cross)", {"mouse": MOUSE_BUTTON_LEFT}, {"joy": JOY_BUTTON_X}],
-	"punch_right": ["Right punch (tap: hook, hold: uppercut)", {"mouse": MOUSE_BUTTON_RIGHT}, {"joy": JOY_BUTTON_Y}],
-	"uppercut": ["Uppercut", {"key": KEY_Z}, {"joy": JOY_BUTTON_LEFT_STICK}],
-	"block": ["Block (hold; time it to parry)", {"key": KEY_SHIFT}, {"joy": JOY_BUTTON_LEFT_SHOULDER}],
-	"kick": ["Kick (breaks guards)", {"key": KEY_F}, {"joy": JOY_BUTTON_B}],
-	"headbutt": ["Headbutt (or both punches)", {"key": KEY_Q}, {"joy": JOY_BUTTON_RIGHT_STICK}],
-	"grab": ["Grab / hold", {"key": KEY_R}, {"joy": JOY_BUTTON_RIGHT_SHOULDER}],
-	"dodge": ["Dodge", {"key": KEY_SPACE}, {"joy": JOY_BUTTON_A}],
+	# Fighting. On a pad the shoulders are guards and modifiers: LB + X/Y/B are kick, shoulder
+	# charge and clinch knee, RB + a punch goes to the body, and LB + RB is a hold.
+	"jab": ["Jab (head guard held: kick; body guard held: to the body)", {"mouse": MOUSE_BUTTON_LEFT}, {"joy": JOY_BUTTON_X}],
+	"hook": ["Hook (head guard held: clinch knee; body guard held: to the body)", {"mouse": MOUSE_BUTTON_RIGHT}, {"joy": JOY_BUTTON_B}],
+	"uppercut": ["Uppercut (head guard held: shoulder charge; body guard held: to the body)", {"key": KEY_F}, {"joy": JOY_BUTTON_Y}],
+	"guard_head": ["Head guard (hold; time it to parry)", {"key": KEY_SHIFT}, {"joy": JOY_BUTTON_LEFT_SHOULDER}],
+	"guard_body": ["Body guard (hold; both guards together: hold them)", {"key": KEY_CTRL}, {"joy": JOY_BUTTON_RIGHT_SHOULDER}],
+	"headbutt": ["Headbutt", {"key": KEY_Q}, {"joy": JOY_BUTTON_RIGHT_STICK}],
+	"dodge": ["Dodge (the way you're moving)", {"key": KEY_SPACE}, {"joy": JOY_BUTTON_A}],
+	"bob_up": ["Lean back (head movement)", {"key": KEY_UP}, {"axis": JOY_AXIS_RIGHT_Y, "dir": -1}],
+	"bob_down": ["Duck (head movement)", {"key": KEY_DOWN}, {"axis": JOY_AXIS_RIGHT_Y, "dir": 1}],
+	"bob_left": ["Slip left (head movement)", {"key": KEY_LEFT}, {"axis": JOY_AXIS_RIGHT_X, "dir": -1}],
+	"bob_right": ["Slip right (head movement)", {"key": KEY_RIGHT}, {"axis": JOY_AXIS_RIGHT_X, "dir": 1}],
 	"interact": ["Pick up / order drink", {"key": KEY_E}, {"axis": JOY_AXIS_TRIGGER_RIGHT, "dir": 1}],
 	"order_food": ["Order food", {"key": KEY_C}, {"axis": JOY_AXIS_TRIGGER_LEFT, "dir": 1}],
-	"throw": ["Throw held item", {"key": KEY_T}, {"joy": JOY_BUTTON_DPAD_LEFT}],
+	"throw": ["Throw (a held item, or the man you're holding)", {"key": KEY_T}, {"joy": JOY_BUTTON_DPAD_LEFT}],
 	"pause": ["Pause", {"key": KEY_ESCAPE}, {"joy": JOY_BUTTON_START}],
 	"zoom_in": ["Zoom in", {"mouse": MOUSE_BUTTON_WHEEL_UP}, {"joy": JOY_BUTTON_DPAD_UP}],
 	"zoom_out": ["Zoom out", {"mouse": MOUSE_BUTTON_WHEEL_DOWN}, {"joy": JOY_BUTTON_DPAD_DOWN}],
 }
+
+## Bumped when the default controls change so much that old saved bindings would fight the
+## new layout (layout 2: the boxing pad layout with guards on LB/RB). Saved bindings from an
+## older layout are dropped and everyone starts on the new defaults.
+const KEYBIND_LAYOUT := 2
 
 var values := {}
 ## action -> {"kb": binding, "pad": binding}
@@ -330,6 +340,8 @@ func load_settings() -> void:
 	for section in values:
 		for key in values[section]:
 			values[section][key] = cfg.get_value(section, key, values[section][key])
+	if int(cfg.get_value("keybinds", "layout", 1)) < KEYBIND_LAYOUT:
+		return
 	for action in binds:
 		for device in ["kb", "pad"]:
 			var k := "%s.%s" % [action, device]
@@ -374,6 +386,7 @@ func save_settings() -> void:
 	for section in values:
 		for key in values[section]:
 			cfg.set_value(section, key, values[section][key])
+	cfg.set_value("keybinds", "layout", KEYBIND_LAYOUT)
 	for action in binds:
 		for device in binds[action]:
 			cfg.set_value("keybinds", "%s.%s" % [action, device], binds[action][device])

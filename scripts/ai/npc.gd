@@ -9,7 +9,11 @@ extends Fighter
 ##   ALERT    a fight is on. Faces the action and keeps its distance. May join in as the
 ##            heat rises (bravery x heat).
 ##   ENGAGED  has a grudge against `foe`. Circles at a distance and only steps in to attack
-##            when the Director grants it an attack token (or during a gang-up rush).
+##            when the Director grants it an attack token (or during a gang-up rush). After
+##            an exchange (throwing a punch, or eating one) it backs off to get its breath
+##            and its guard back before coming again, and it reads punches being lined up
+##            at it: covering up high or low (not always the right one), or stepping back
+##            out of a kick. Fights go in waves, like a real scrap, not toe to toe.
 ## A punter only gets ENGAGED when it is hit, a mate nearby is hit (bravery roll), a rush
 ## pulls it in, or it walks in on a hot fight. With no blows traded for a while and the heat
 ## low, it cools back down to ALERT and then CALM, so the players set the pace.
@@ -47,6 +51,9 @@ var _wander_t := 0.0
 var _wander_to := Vector3.INF
 var _engage_roll_t := 0.0
 var _look_at: Vector3 = Vector3.INF
+var _recover_t := 0.0     # backing off after an exchange
+var _guard_t := 0.0       # seconds left covering up
+var _read_windup := false # already reacted to the foe's current wind-up
 
 
 func _ready() -> void:
@@ -69,6 +76,8 @@ func _ready() -> void:
 	toughness = float(_type["toughness"])
 	grip = float(_type["grip"])
 	crawl_fraction = float(_type["crawl_fraction"])
+	hold_resist = float(_type.get("hold_resist", 0.0))
+	parry_skill = float(_type.get("parry", 0.0))
 	_rng.seed = hash(String(name)) ^ hash(kind)
 	_strafe = 1.0 if _rng.randf() < 0.5 else -1.0
 	_attack_cd = _rng.randf_range(0.3, 1.0)
@@ -155,6 +164,11 @@ func _on_hit_taken(info: Dictionary) -> void:
 	if not multiplayer.is_server():
 		return
 	_quiet_t = 0.0
+	if float(info.get("damage", 0.0)) > 0.0 and not bool(info.get("blocked", false)) \
+			and mood == Mood.ENGAGED and _rng.randf() < 0.6:
+		# Rocked: back off and get the guard up before coming again.
+		_recover_t = maxf(_recover_t, _rng.randf_range(0.7, 1.5))
+		_drop_token()
 	var attacker := info.get("attacker") as Fighter
 	if attacker != null and is_hostile_to(attacker):
 		# Whoever hit you is now your problem, unless you're busy with someone else.
@@ -177,6 +191,7 @@ func _physics_process(delta: float) -> void:
 func _think(delta: float) -> void:
 	_attack_cd -= delta
 	_quiet_t += delta
+	_recover_t = maxf(_recover_t - delta, 0.0)
 	rushing = maxf(rushing - delta, 0.0)
 	if rushing <= 0.0:
 		rush_grab = false
@@ -202,6 +217,15 @@ func _think(delta: float) -> void:
 			return
 		State.IDLE:
 			pass
+		State.BLOCK:
+			_guard_t -= delta
+			if _guard_t <= 0.0 or mood != Mood.ENGAGED or team == Team.STAFF:
+				request_block(false)
+				return
+			if foe != null and is_instance_valid(foe):
+				_look_at = foe.global_position
+				_back_off(foe, 0.5)  # covered up, shuffling back
+			return
 		_:
 			return
 	if team == Team.STAFF:
@@ -290,10 +314,15 @@ func _think_engaged(delta: float) -> void:
 		foe = null
 		return
 	_look_at = foe.global_position
+	if _read_foe():
+		return
 	var to := foe.global_position - global_position
 	to.y = 0.0
 	var d := to.length()
 	var dir := to / d if d > 0.01 else get_facing()
+	if _recover_t > 0.0 and rushing <= 0.0:
+		_back_off(foe, 0.7)
+		return
 	var wants_in := _attack_cd <= 0.0 and not foe.is_down()
 	if wants_in and not _has_token:
 		_has_token = _request_token()
@@ -318,6 +347,8 @@ func _think_engaged(delta: float) -> void:
 			_drop_token()
 		var aggression := maxf(float(_type["aggression"]), 0.1)
 		_attack_cd = _rng.randf_range(1.8, 3.2) / aggression
+		# Then step back out (once the swing's done) rather than stand there trading.
+		_recover_t = _rng.randf_range(1.2, 2.0) / sqrt(aggression)
 		if rushing > 0.0:
 			_attack_cd *= 0.6
 		return
@@ -335,6 +366,43 @@ func _think_engaged(delta: float) -> void:
 	var radial := clampf(d - ring, -1.0, 1.0)
 	var tangent := Vector3(-dir.z, 0.0, dir.x) * _strafe
 	move_input = (dir * radial * 0.6 + tangent * 0.25 + _separation()).limit_length(0.5)
+
+
+## The foe is lining something up at us. Once per wind-up, maybe read it: cover the right
+## spot (or the wrong one), or step back out of a guard breaker. True if we reacted.
+func _read_foe() -> bool:
+	if foe.state != State.WINDUP or foe.target != self:
+		_read_windup = false
+		return false
+	if _read_windup:
+		return false
+	_read_windup = true
+	if _rng.randf() >= float(_type.get("defence", 0.0)):
+		return false  # didn't see it coming
+	_drop_token()
+	var away := global_position - foe.global_position
+	away.y = 0.0
+	if foe.defend_hint() == "dodge" or _rng.randf() < 0.2:
+		request_dodge(away.normalized())
+		return true
+	var zone := Moves.GUARD_BODY if foe.attack_zone() != Moves.GUARD_HEAD else Moves.GUARD_HEAD
+	if _rng.randf() >= float(_type.get("guard_skill", 0.5)):
+		zone = Moves.GUARD_HEAD if zone == Moves.GUARD_BODY else Moves.GUARD_BODY  # guessed wrong
+	request_block(true, zone)
+	_guard_t = foe.windup_remaining() + _rng.randf_range(0.5, 1.1)
+	return true
+
+
+## Back away from `who` out past the circling ring, drifting sideways, at `speed` (0..1).
+func _back_off(who: Fighter, speed: float) -> void:
+	var to := who.global_position - global_position
+	to.y = 0.0
+	var d := to.length()
+	var dir := to / d if d > 0.01 else get_facing()
+	var ring := float(_type["circle_distance"]) + 0.6
+	var radial := clampf(d - ring, -1.0, 0.0)
+	var tangent := Vector3(-dir.z, 0.0, dir.x) * _strafe
+	move_input = (dir * radial + tangent * 0.3 + _separation()).limit_length(speed)
 
 
 ## Holding a player for mates: stand still and knee them now and then.
