@@ -28,9 +28,9 @@ enum VoiceMode { MURMUR, TTS, SILENT }
 @export var max_conversations := 2
 @export var talk_distance := 3.0
 ## Seconds between attempts to start a conversation.
-@export var start_every := Vector2(2.0, 5.0)
+@export var start_every := Vector2(6.0, 14.0)
 ## A talker rests this long after a conversation before starting another.
-@export var talker_rest := Vector2(8.0, 18.0)
+@export var talker_rest := Vector2(25.0, 50.0)
 ## Rounds of back-and-forth after the opening exchange.
 @export var rounds := Vector2i(1, 3)
 @export var change_topic_chance := 0.35
@@ -43,6 +43,10 @@ enum VoiceMode { MURMUR, TTS, SILENT }
 @export var voice_mode := VoiceMode.MURMUR
 @export var voice_db := -9.0
 @export var voice_range := 14.0
+## Only some lines are spoken aloud (the rest are just bubbles), and never two within
+## `voice_gap` seconds of each other anywhere in the pub.
+@export var voice_chance := 0.35
+@export var voice_gap := 10.0
 ## Bubbles follow Settings gameplay/subtitles. Turn this off to hide them regardless.
 @export var show_bubbles := true
 
@@ -56,6 +60,7 @@ var _recent: Array[String] = []
 var _start_t := 1.0
 var _quiet_t := 999.0     # seconds since the last hit
 var _tts_voice := ""
+var _voice_next := 0.0   # real seconds; no chatter voice before this
 
 
 func _ready() -> void:
@@ -329,6 +334,10 @@ func _bubble(who: Node3D) -> ChatterBubble:
 func _voice(who: Node3D, line_key: String, text: String) -> void:
 	if voice_mode == VoiceMode.SILENT or DisplayServer.get_name() == "headless":
 		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _voice_next or _rng.randf() >= voice_chance:
+		return
+	_voice_next = now + voice_gap
 	var stream: AudioStream = null
 	# Recorded voices (see VoiceCast), then a single-file recording, then TTS or the murmur.
 	var path := VoiceCast.chatter_path(line_key, who)
