@@ -116,8 +116,16 @@ func start() -> void:
 	_started = true
 	_read_markers()
 	reserve = roundi(reserve_punters * float(GameData.difficulty()["reinforcements"]))
+	# Building a character can take a few tenths of a second, so online the crowd comes in
+	# one per frame: a whole crowd in one frame froze the host for 5+ s and guests lagged
+	# or dropped. Solo (and the tests) still get everyone at once.
+	var pace := not multiplayer.get_peers().is_empty()
 	for i in staff_spots.size():
 		spawn(&"staff", staff_spots[i])
+		if pace:
+			await get_tree().process_frame
+			if not is_inside_tree():
+				return
 	for i in initial_punters:
 		var spot := punter_spots[i % punter_spots.size()] if not punter_spots.is_empty() \
 			else Vector3.ZERO
@@ -125,6 +133,10 @@ func start() -> void:
 		if spot.y > 0.1:
 			jitter = Vector3.ZERO  # raised galleries: don't nudge anyone off the edge
 		spawn(NpcTypes.pick_weighted(punter_mix, _rng), spot + jitter)
+		if pace:
+			await get_tree().process_frame
+			if not is_inside_tree():
+				return
 
 
 ## Spawn one NPC of `kind` at `pos` (host only). Returns it.

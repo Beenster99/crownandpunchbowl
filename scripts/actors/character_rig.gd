@@ -206,6 +206,7 @@ var _guard_zone := &""  # "", "head" (LB) or "body" (RB)
 var _move_local := Vector2.ZERO  # x right, y forward, m/s
 
 static var _lib_cache := {}
+const LIE_STEP := 0.01
 
 
 func _ready() -> void:
@@ -820,6 +821,10 @@ func rebuild() -> void:
 	_scale = look.model_height
 	var hips_rest: Vector3 = (_rest_global[_bone[&"Hips"]] as Transform3D).origin
 	_lie = ((0.15 * look.girth + 0.04 * look.belly) * look.model_height - hips_rest.y) / _scale
+	# Every punter's girth is jittered, so an exact _lie would make each one bake its own
+	# animation library (a third of a second each, see _build_animations). Snapping it to
+	# LIE_STEP (moves the hips under 1 cm lying down) lets a crowd share a few libraries.
+	_lie = snappedf(_lie, LIE_STEP)
 	# Kneeling: the hips come down by the height of the knee, less a little for the kneecap.
 	var knee_y: float = (_rest_global[_bone[&"KneeL"]] as Transform3D).origin.y
 	_kneel = -(knee_y - 0.035 * _scale) / _scale
