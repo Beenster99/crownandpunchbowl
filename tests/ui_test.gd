@@ -149,6 +149,20 @@ func _initialize() -> void:
 		_check(paused, "solo pause freezes the tree")
 		ui[0].pause_menu.resume()
 		_check(not paused, "resume unfreezes")
+		# Restart this pub: a fresh pub with the player spawned again, not an empty room.
+		var old_scene := current_scene
+		ui[0].pause_menu.open()
+		_check(not ui[0].pause_menu._restart.disabled, "solo player can restart")
+		ui[0].pause_menu._on_restart()
+		var restarted := false
+		for i in 600:
+			await process_frame
+			if current_scene != null and current_scene != old_scene \
+					and current_scene.find_children("*", "PlayerFighter", true, false).size() == 1:
+				restarted = true
+				break
+		_check(restarted, "restart reloads the pub with the player in it")
+		_check(not paused, "restart leaves the game unpaused")
 
 	if _failed:
 		quit(1)

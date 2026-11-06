@@ -490,7 +490,7 @@ func _on_fell(fighter: Node, height: float) -> void:
 	play("body_fall", feet, clampf(h * 1.5, 2.0, 8.0))
 	play("kick", feet, -2.0)  # extra low-end thump under the fall
 	play("blood_splat", feet)
-	_later(0.25, say.bind(fighter, "groan", 2))
+	_later(0.25, say.bind(fighter, "groan", 2), fighter)
 	var head := head_position(fighter)
 	var amount := clampf(h * fall_blood_per_metre, 0.4, 2.0)
 	blood.spray(feet + Vector3.UP * 0.3, Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)), amount)
