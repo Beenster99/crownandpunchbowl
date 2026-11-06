@@ -3,10 +3,14 @@ extends CanvasLayer
 ## scoreboard and the game options. DartsBoard opens it while you're chalked up and closes
 ## it when you step away. It only sends requests through the board.
 
-const AIM_SPEED := 190.0        ## mm per second at full stick
+const AIM_SPEED := 210.0        ## mm per second at full stick
+const AIM_GRIP := 5.0           ## how quickly the aim follows the stick (lower = more drift)
+const STICK_DEADZONE := 0.18
+## The power meter fills in this many seconds, then falls back (and so on while held).
+const POWER_TIME := 0.75
 const THROW_COOLDOWN := 0.4
-const WOBBLE := 5.0             ## mm, sober
-const TIPSY_WOBBLE := 24.0      ## mm extra when fully tipsy
+const WOBBLE := 9.0             ## mm, sober
+const TIPSY_WOBBLE := 32.0      ## mm extra when fully tipsy
 const BLACK := Color("161412")
 const CREAM := Color("ead9b0")
 const RED := Color("b3261e")
@@ -22,6 +26,13 @@ var _cooldown := 0.0
 var _was_turn := false
 var _sent_for := -1
 var _sent_t := 0.0
+var _aim_vel := Vector2.ZERO
+## Holding A: the power meter is running.
+var drawing := false
+var power := 0.0
+var _draw_t := 0.0
+## The pad that last pressed a button, for the stick.
+var _pad := 0
 
 var _view: Control
 var _title: Label
@@ -62,7 +73,7 @@ func _ready() -> void:
 
 	_view = BoardView.new()
 	_view.panel = self
-	_view.custom_minimum_size = Vector2(540, 540)
+	_view.custom_minimum_size = Vector2(600, 540)
 	row.add_child(_view)
 
 	var side := VBoxContainer.new()
@@ -202,11 +213,12 @@ func refresh() -> void:
 	_legs_btn.text = "1 leg" if g.legs_to_win == 1 else "First to %d" % g.legs_to_win
 	_finish_btn.text = "Double out" if g.double_out else "Straight out"
 	_start_btn.text = "Start game" if g.players.size() > 1 else "Start (practice on your own)"
-	_hint.text = "Aim: move or mouse.  Throw: %s, left click, %s or %s.  Step away: %s." % [
-		_key("throw"), _key(_pad_throw_action()) if Settings.device == "pad" else "Space", "Enter", _key("interact")]
+	_hint.text = "Left stick: aim.  Hold A to draw back, let go in the gold band: early drops low, late flies high.  %s: step away." % \
+		(Settings.action_label("interact", "pad") if Settings.has_method("action_label") else "RT")
 
 	if my_turn and not _was_turn:
-		aim = DartsRules.target_point(20, 3)
+		aim = Vector2.ZERO  # each turn starts on the bull: steer to where you want
+		_aim_vel = Vector2.ZERO
 	_was_turn = my_turn
 	var vp := get_viewport()
 	if my_turn:
@@ -237,27 +249,44 @@ func _process(delta: float) -> void:
 	var f := board._fighter_of(multiplayer.get_unique_id())
 	if f != null:
 		tipsy = clampf(f.tipsy, 0.0, 1.0)
-	var amp := WOBBLE + TIPSY_WOBBLE * tipsy
-	wobble = Vector2(sin(_t * 1.3) + 0.5 * sin(_t * 3.1 + 1.0), cos(_t * 1.1) + 0.5 * sin(_t * 2.7)) * amp
+	# Drawing back makes the hand shake more.
+	var amp := (WOBBLE + TIPSY_WOBBLE * tipsy) * (1.35 if drawing else 1.0)
+	wobble = Vector2(sin(_t * 1.7) + 0.6 * sin(_t * 3.9 + 1.0), cos(_t * 1.4) + 0.6 * sin(_t * 3.3)) * amp
 	if board.is_local_turn():
-		var stick := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-		aim += stick * AIM_SPEED * delta
-		aim = aim.limit_length(DartsRules.R_BOARD)
-		var pressed := Input.is_action_just_pressed("throw") \
-			or (Settings.device == "pad" and Input.is_action_just_pressed(_pad_throw_action())) \
-			or (Input.is_action_just_pressed("ui_accept") and get_viewport().gui_get_focus_owner() == null)
-		if pressed:
-			throw()
+		var stick := Vector2(Input.get_joy_axis(_pad, JOY_AXIS_LEFT_X), Input.get_joy_axis(_pad, JOY_AXIS_LEFT_Y))
+		if stick.length() < STICK_DEADZONE:
+			stick = Vector2.ZERO
+		_aim_vel = _aim_vel.lerp(stick * AIM_SPEED, clampf(AIM_GRIP * delta, 0.0, 1.0))
+		aim = (aim + _aim_vel * delta).limit_length(DartsRules.R_BOARD)
+		if drawing:
+			_draw_t += delta
+			power = pingpong(_draw_t / POWER_TIME, 1.0)
+	else:
+		drawing = false
 	_view.queue_redraw()
 
 
-## The pad's jab button (X) throws too. Named "jab" since the controls rework, "punch_left" before.
-func _pad_throw_action() -> String:
-	return "jab" if InputMap.has_action("jab") else "punch_left"
+## Controller only: A starts the power meter, letting go throws.
+func _input(event: InputEvent) -> void:
+	var jb := event as InputEventJoypadButton
+	if jb == null:
+		return
+	_pad = jb.device
+	if jb.button_index != JOY_BUTTON_A or not board.is_local_turn():
+		return
+	if jb.pressed and not drawing and _cooldown <= 0.0:
+		drawing = true
+		_draw_t = 0.0
+		power = 0.0
+		get_viewport().set_input_as_handled()
+	elif not jb.pressed and drawing:
+		drawing = false
+		throw(power)
+		get_viewport().set_input_as_handled()
 
 
-## Throws at where the reticle is now (aim plus wobble).
-func throw() -> void:
+## Throws at where the reticle is now (aim plus wobble) with `with_power` from the meter.
+func throw(with_power := DartsBoard.SWEET_SPOT) -> void:
 	var g := board.game
 	if _cooldown > 0.0 or not board.is_local_turn():
 		return
@@ -267,7 +296,7 @@ func throw() -> void:
 	_sent_for = key
 	_sent_t = _t
 	_cooldown = THROW_COOLDOWN
-	board.request_throw(aim + wobble)
+	board.request_throw(aim + wobble, with_power)
 
 
 ## Where the darts are going right now, for the board view.
@@ -278,27 +307,19 @@ func reticle() -> Vector2:
 class BoardView extends Control:
 	var panel
 
-	func _gui_input(event: InputEvent) -> void:
-		if not panel.board.is_local_turn():
-			return
-		if event is InputEventMouseMotion:
-			panel.aim = to_board(event.position).limit_length(DartsRules.R_BOARD)
-		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			panel.aim = to_board(event.position).limit_length(DartsRules.R_BOARD)
-			panel.throw()
-			accept_event()
+	const METER_W := 64.0  ## room on the right for the power meter
+
+	func _centre() -> Vector2:
+		return Vector2((size.x - METER_W) * 0.5, size.y * 0.5)
 
 	func _scale() -> float:
-		return (minf(size.x, size.y) * 0.5 - 4.0) / DartsRules.R_BOARD
-
-	func to_board(p: Vector2) -> Vector2:
-		return (p - size * 0.5) / _scale()
+		return (minf(size.x - METER_W, size.y) * 0.5 - 4.0) / DartsRules.R_BOARD
 
 	func to_view(p: Vector2) -> Vector2:
-		return size * 0.5 + p * _scale()
+		return _centre() + p * _scale()
 
 	func _draw() -> void:
-		var c := size * 0.5
+		var c := _centre()
 		var s := _scale()
 		draw_circle(c, DartsRules.R_BOARD * s, Color("0d0c0b"))
 		var bands := [[DartsRules.R_OUTER_BULL, DartsRules.R_TREBLE_IN, false],
@@ -350,6 +371,23 @@ class BoardView extends Control:
 			draw_line(p + Vector2(0, 5), p + Vector2(0, 15), col, 2.0)
 			var over := String(DartsRules.score_at(r)["label"])
 			draw_string(font, Vector2(10, size.y - 12), "Aiming at " + over, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, UiTheme.CREAM)
+			_draw_power(font)
+
+	## Power meter down the right edge: gold band = flat throw.
+	func _draw_power(font: Font) -> void:
+		var h := size.y * 0.7
+		var rect := Rect2(size.x - 40, (size.y - h) * 0.5, 26, h)
+		draw_rect(rect, Color(0, 0, 0, 0.7))
+		var band := 0.04
+		var sweet := DartsBoard.SWEET_SPOT
+		var y0 := rect.end.y - (sweet + band) * h
+		draw_rect(Rect2(rect.position.x, y0, rect.size.x, band * 2.0 * h), UiTheme.BRASS)
+		if panel.drawing:
+			var fill: float = panel.power
+			var col := UiTheme.ALE if absf(fill - sweet) <= band else UiTheme.BLOOD
+			draw_rect(Rect2(rect.position.x + 3, rect.end.y - fill * h, rect.size.x - 6, fill * h), Color(col, 0.85))
+		draw_rect(rect, UiTheme.MUTED, false, 1.0)
+		draw_string(font, Vector2(rect.position.x + 5, rect.position.y - 10), "A", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, UiTheme.CREAM)
 
 	func _sector(c: Vector2, r0: float, r1: float, a0: float, a1: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()

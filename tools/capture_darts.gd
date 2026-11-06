@@ -18,6 +18,7 @@ func _initialize() -> void:
 	var player = get_nodes_in_group("players")[0]
 	player.global_position = board.oche_point() + board.facing * 0.3
 	await physics_frame
+	board.require_pad = false
 	board.handle_local_interact(player)
 	board.game.add_player(2, "Dave")
 	board.game.add_player(3, "Big Sue")
@@ -31,6 +32,10 @@ func _initialize() -> void:
 	board._broadcast()
 	board.request_throw(load("res://scripts/darts/darts_rules.gd").target_point(20, 3))
 	board.request_throw(load("res://scripts/darts/darts_rules.gd").target_point(20, 1))
+	if board._panel != null:  # show the power meter mid-draw
+		board._panel.aim = load("res://scripts/darts/darts_rules.gd").target_point(20, 3)
+		board._panel.drawing = true
+		board._panel._draw_t = 0.55
 	for _f in 30:
 		await process_frame
 	await RenderingServer.frame_post_draw

@@ -14,6 +14,7 @@ func _initialize() -> void:
 	net = root.get_node("Net")
 	gd = root.get_node("GameData")
 	load("res://scripts/level/pub_level.gd").crowd_enabled = false
+	load("res://scripts/darts/darts_board.gd").require_pad = false  # no controllers headless
 	var role := "host" if "host" in OS.get_cmdline_user_args() else "client"
 	var ok: bool
 	if role == "host":
