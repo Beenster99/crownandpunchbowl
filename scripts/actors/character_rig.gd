@@ -554,16 +554,24 @@ func head_height() -> float:
 
 
 ## Goes limp and hands the body to physics. impulse is in world space, applied to the chest.
+## `velocity` starts every bone moving with the body (a fighter sent flying keeps going).
 ## The ragdoll is cosmetic: every peer runs its own, gameplay keeps using the fighter's body.
-func start_ragdoll(impulse := Vector3.ZERO) -> void:
+## RagdollDriver (scripts/actors/ragdoll_driver.gd) decides when, and tethers it to the fighter.
+func start_ragdoll(impulse := Vector3.ZERO, velocity := Vector3.ZERO) -> void:
 	if _sim == null:
 		return
+	if _ragdoll_fade != null:
+		_ragdoll_fade.kill()
+		_ragdoll_fade = null
 	anim.pause()
 	ragdolling = true
 	current = &"ko"
 	_sim.active = true
 	_sim.influence = 1.0
 	_sim.physical_bones_start_simulation()
+	if velocity != Vector3.ZERO:
+		for pb in _physical.values():
+			(pb as PhysicalBone3D).linear_velocity = velocity
 	if impulse != Vector3.ZERO:
 		var chest: PhysicalBone3D = _physical.get(&"Chest")
 		var head: PhysicalBone3D = _physical.get(&"Head")
@@ -574,13 +582,51 @@ func start_ragdoll(impulse := Vector3.ZERO) -> void:
 
 
 ## Ends the ragdoll and goes back to animation (call play() or play_state() next).
-func stop_ragdoll() -> void:
-	if _sim == null or not ragdolling:
+## With `blend` > 0 the body keeps simulating while the animation fades back in over that
+## many seconds, so getting up flows out of however they landed. A hard stop called while
+## a blend is running lets the blend finish.
+func stop_ragdoll(blend := 0.0) -> void:
+	if _sim == null:
+		return
+	if not ragdolling:
+		return
+	ragdolling = false
+	if blend > 0.0 and is_inside_tree():
+		_ragdoll_fade = create_tween()
+		_ragdoll_fade.tween_property(_sim, "influence", 0.0, blend).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_ragdoll_fade.tween_callback(_end_ragdoll)
+		return
+	_end_ragdoll()
+
+
+func _end_ragdoll() -> void:
+	_ragdoll_fade = null
+	if _sim == null or ragdolling:
 		return
 	_sim.physical_bones_stop_simulation()
 	_sim.active = false
-	ragdolling = false
+	_sim.influence = 1.0
 	skeleton.reset_bone_poses()
+
+
+## The ragdoll's bodies (empty before the rig is built).
+func ragdoll_bones() -> Array[PhysicalBone3D]:
+	var out: Array[PhysicalBone3D] = []
+	for pb in _physical.values():
+		out.append(pb)
+	return out
+
+
+func ragdoll_bone(bone: StringName) -> PhysicalBone3D:
+	return _physical.get(bone) as PhysicalBone3D
+
+
+## Total mass of the ragdoll (kg).
+func ragdoll_mass() -> float:
+	var m := 0.0
+	for pb in _physical.values():
+		m += (pb as PhysicalBone3D).mass
+	return maxf(m, 1.0)
 
 
 ## A bone's current position in world space (up to date even before sockets refresh).
@@ -859,7 +905,11 @@ func _build_sockets() -> void:
 
 # --- Ragdoll ---------------------------------------------------------------
 
+var _ragdoll_fade: Tween
+
+
 func _build_ragdoll() -> void:
+	_ragdoll_fade = null
 	_sim = PhysicalBoneSimulator3D.new()
 	_sim.name = "Ragdoll"
 	_sim.active = false
@@ -885,7 +935,9 @@ func _build_ragdoll() -> void:
 		pb.name = "PB_" + String(bone_name)
 		pb.bone_name = bone_name
 		pb.collision_layer = RAGDOLL_LAYER
-		pb.collision_mask = RAGDOLL_MASK
+		# The room, plus loose items and props (PubPhysics layers 4 and 8): a falling body
+		# knocks glasses flying and lands among the chairs.
+		pb.collision_mask = RAGDOLL_MASK | 8 | 128
 		pb.mass = spec[bone_name][3]
 		pb.friction = 0.8
 		pb.linear_damp = 0.4

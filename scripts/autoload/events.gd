@@ -36,6 +36,10 @@ signal combo_changed(player: Node, combo: int)
 # --- Items & bar ----------------------------------------------------------
 signal item_picked_up(fighter: Node, item: Node)
 signal item_broken(item: Node)
+## A pub prop (glass, plate, shelf bottle...) smashed. Fires on every peer, just before it's freed.
+signal prop_smashed(prop: Node)
+## A fighter knocked flying went over an obstacle (the bar, a table). Fires on every peer.
+signal fighter_flipped_over(fighter: Node, obstacle: Node)
 signal drink_ordered(player: Node)
 signal food_ordered(player: Node)
 signal player_healed(player: Node, amount: float)

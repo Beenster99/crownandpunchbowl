@@ -40,6 +40,11 @@ var _break_pending := false
 var _mesh: MeshInstance3D
 var _outline: StandardMaterial3D
 var _highlight := 0
+## Physics body that carries the item while it's loose (PubPhysics). Top-level, so the
+## item follows it rather than the other way round; frozen with no collision while the
+## item is held, flying or gone.
+var body: RigidBody3D
+var _body_mode := -1
 
 
 func _ready() -> void:
@@ -50,6 +55,7 @@ func _ready() -> void:
 	if ammo < 0:
 		ammo = int(k.get("ammo", 1))
 	_build_mesh(k)
+	_build_body()
 
 
 # --- Queries --------------------------------------------------------------------------
@@ -271,6 +277,8 @@ func _rpc_ammo(n: int) -> void:
 # --- Simulation -----------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
+	if mode == Mode.LOOSE and body != null:
+		_follow_body()
 	if mode == Mode.HELD:
 		_follow_holder()
 	elif _highlight == 2:
@@ -278,10 +286,17 @@ func _process(_delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if body != null and int(mode) != _body_mode:
+		_apply_body_mode()
 	if mode == Mode.HELD:
 		_follow_holder()
 	elif mode == Mode.FLYING:
 		_fly(delta)
+	if body != null:
+		if mode == Mode.LOOSE:
+			_follow_body()
+		else:
+			body.global_transform = global_transform
 
 
 ## Flight runs on every peer from the same start; only the host decides what it hits.
@@ -374,7 +389,13 @@ func _land_from_flight() -> void:
 	if bool(data().get("fragile", false)):
 		server_break()
 		return
+	var carry := _velocity
 	_rpc_land.rpc(Vector3(global_position.x, _ground_y, global_position.z))
+	# Keep some of the throw: it skids and tumbles on instead of stopping dead.
+	if body != null and multiplayer.is_server():
+		_apply_body_mode()
+		body.linear_velocity = Vector3(carry.x, 0.0, carry.z) * 0.35
+		body.angular_velocity = Vector3(randf_range(-6, 6), randf_range(-3, 3), randf_range(-6, 6))
 
 
 # --- Placement and looks --------------------------------------------------------------
@@ -395,8 +416,17 @@ func _lie_at(pos: Vector3) -> void:
 		basis = Basis()
 	else:
 		basis = Basis(Vector3.FORWARD, PI * 0.5)  # long things lie on their side
+		if body != null:
+			var bs := (body.get_node("Shape") as CollisionShape3D).shape as BoxShape3D
+			global_position.y += minf(bs.size.x, bs.size.z) * 0.5  # on the floor, not in it
 	if _mesh != null:
 		_mesh.rotation = Vector3.ZERO
+	if body != null:
+		body.global_transform = global_transform
+		body.linear_velocity = Vector3.ZERO
+		body.angular_velocity = Vector3.ZERO
+		if multiplayer.is_server() and not body.freeze:
+			body.sleeping = false  # settle onto whatever is underneath
 
 
 func _follow_holder() -> void:
@@ -479,3 +509,72 @@ func _build_mesh(k: Dictionary) -> void:
 	pivot.position.y = height * 0.5
 	add_child(pivot)
 	pivot.add_child(_mesh)
+
+
+# --- Physics ---------------------------------------------------------------------------
+
+func _build_body() -> void:
+	body = RigidBody3D.new()
+	body.name = "Body"
+	body.top_level = true
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	var box := _visual_bounds()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(maxf(box.size.x, 0.04), maxf(box.size.y, 0.04), maxf(box.size.z, 0.04))
+	col.shape = bs
+	col.position = box.get_center()
+	body.add_child(col)
+	PubPhysics.setup_prop(body, float(PubPhysics.ITEM_MASS.get(kind, 1.0)))
+	add_child(body)
+	body.global_transform = global_transform
+	_apply_body_mode()
+
+
+## The item's visuals in its own space (the mesh may be a model from the props library).
+func _visual_bounds() -> AABB:
+	var out := AABB()
+	var first := true
+	var inv := global_transform.affine_inverse() if is_inside_tree() else Transform3D.IDENTITY
+	for n in find_children("*", "VisualInstance3D", true, false):
+		var vi := n as VisualInstance3D
+		if vi == null or vi.is_in_group(&"no_bounds"):
+			continue
+		var xf: Transform3D = inv * vi.global_transform if is_inside_tree() else vi.transform
+		var b: AABB = xf * vi.get_aabb()
+		out = b if first else out.merge(b)
+		first = false
+	if first:
+		out = AABB(Vector3(-0.05, 0.0, -0.05), Vector3(0.1, 0.1, 0.1))
+	return out
+
+
+## Loose: the host simulates the body and the item rides on it (clients follow the host's
+## poses through PubPhysics). Held, flying or gone: the body is parked inside the item with
+## its collision off.
+func _apply_body_mode() -> void:
+	if body == null:
+		return
+	_body_mode = int(mode)
+	if mode == Mode.LOOSE:
+		body.collision_layer = PubPhysics.LAYER_PROPS
+		body.collision_mask = PubPhysics.PROP_MASK
+		if multiplayer.is_server():
+			body.freeze = false
+		else:
+			body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+			body.freeze = true
+	else:
+		body.collision_layer = 0
+		body.collision_mask = 0
+		body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		body.freeze = true
+		body.global_transform = global_transform
+
+
+func _follow_body() -> void:
+	if body == null or not body.is_inside_tree():
+		return
+	var t := body.global_transform
+	if not t.is_equal_approx(global_transform):
+		global_transform = t
