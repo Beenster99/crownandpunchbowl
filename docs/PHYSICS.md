@@ -4,9 +4,10 @@ Everything loose in a pub is a physics body, and anyone knocked down goes ragdol
 should leave the room wrecked: chairs scattered, tables on their sides, glass everywhere,
 bottles off the back bar, and bodies draped over the bar.
 
-It runs on Godot Physics. Jolt also passes every test and handles big piles of bodies better,
-but it logs an error for each ragdoll bone because the character models are scaled
-non-uniformly (girth), so it stays off until the rig scales uniformly.
+It runs on **Jolt Physics** (`project.godot`, `physics/3d/physics_engine`). With the MakeHuman
+character models, Godot Physics ragdolls blew apart on a hard KO (limbs at 100+ m/s, bodies
+through the floor); Jolt keeps them together. Jolt can't scale a capsule non-uniformly, so rigs
+scaled wider than tall get convex-hull capsules for their ragdoll bodies.
 
 Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/physics_test.gd`
 
@@ -89,6 +90,11 @@ otherwise, bigger for heavy hits and big knockback. Ground hits shove the limp b
 Each peer runs its own ragdoll, so the hips are tethered to the fighter's capsule with a soft spring
 (0.3 m of slack): the body lies however it fell but always ends up where gameplay thinks it is.
 If it gets more than 3.5 m away it's reset onto the capsule.
+
+Every bone's speed is capped (`MAX_SPEED` 9 m/s, `MAX_SPIN` 14 rad/s) and the bodies are well
+damped, so a KO drops the body rather than flinging it. Once a knocked-out body has been still for
+0.4 s (or after 3 s at most) it's pinned where it lies (`CharacterRig.freeze_ragdoll`). A knocked-out
+punter then waits 2.5 s and fades out over 2.5 s; players stay put to be revived. A revive undoes both.
 
 Getting up blends out of the ragdoll over 0.45 s into the `get_up` animation
 (`CharacterRig.stop_ragdoll(blend)`), so they rise from however they landed.

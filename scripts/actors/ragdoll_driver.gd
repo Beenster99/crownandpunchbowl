@@ -11,6 +11,11 @@ extends Node
 ## - Hits taken on the floor shove the limp body about.
 ## - Getting up blends from the ragdoll back into the get-up animation instead of popping.
 ##
+## - Knocked out: once the body has come to rest it's pinned where it lies (it never
+##   twitches or flies off again), and a punter then slowly fades away. Players stay put
+##   for a revive.
+## - Every bone's speed is capped, so a bad contact can't fling limbs across the room.
+##
 ## Purely cosmetic and local to each peer, like the rest of the visual.
 
 const NODE_NAME := "RagdollDriver"
@@ -26,11 +31,27 @@ const TETHER_C := 11.0
 const TETHER_SLACK := 0.3
 ## Further than this from the capsule and the ragdoll is reset onto it.
 const TETHER_SNAP := 3.5
+## Caps on any bone's speed while limp (m/s and rad/s).
+const MAX_SPEED := 9.0
+const MAX_SPIN := 14.0
+## A KO'd body moving slower than this (m/s, fastest bone) for SETTLE_TIME is at rest.
+const SETTLE_SPEED := 0.35
+const SETTLE_TIME := 0.4
+## KO'd bodies are pinned after this long even if something keeps nudging them.
+const SETTLE_MAX := 3.0
+## A KO'd punter waits this long after settling, then fades out over FADE_TIME.
+const FADE_DELAY := 2.5
+const FADE_TIME := 2.5
 
 var fighter: Fighter
 var rig: CharacterRig
 var _blow := Vector3.ZERO
 var _blow_at_head := false
+var _ko_t := -1.0       # seconds knocked out (and limp), or -1
+var _still_t := 0.0
+var _settled := false
+var _fade: Tween
+var _faded := false
 
 
 func setup(f: Fighter, r: CharacterRig) -> void:
@@ -48,7 +69,14 @@ func _ready() -> void:
 func on_state(key: String) -> bool:
 	if rig == null or rig.skeleton == null:
 		return false
-	if key == "down" or key == "ko":
+	if key == "ko":
+		if not rig.ragdolling:
+			_go_limp()
+		if _ko_t < 0.0:
+			_ko_t = 0.0
+		return true
+	_end_ko()  # revived, or anything else: back to normal
+	if key == "down":
 		if not rig.ragdolling:
 			_go_limp()
 		return true
@@ -112,6 +140,15 @@ func _go_limp() -> void:
 func _physics_process(delta: float) -> void:
 	if rig == null or not rig.ragdolling or fighter == null:
 		return
+	if _settled:
+		return
+	var fastest := _cap_speeds()
+	if _ko_t >= 0.0:
+		_ko_t += delta
+		_still_t = _still_t + delta if fastest < SETTLE_SPEED else 0.0
+		if _still_t >= SETTLE_TIME or _ko_t >= SETTLE_MAX:
+			_settle()
+			return
 	var hips := rig.ragdoll_bone(&"Hips")
 	if hips == null:
 		return
@@ -136,3 +173,62 @@ func _physics_process(delta: float) -> void:
 	var accel := (err * TETHER_K - rel * TETHER_C).limit_length(60.0)
 	var mass := rig.ragdoll_mass()
 	hips.apply_central_impulse(accel * mass * delta)
+
+
+## Caps every bone's speed. Returns the fastest bone's speed (m/s) after the cap.
+func _cap_speeds() -> float:
+	var fastest := 0.0
+	for pb in rig.ragdoll_bones():
+		var v := pb.linear_velocity
+		if v.length() > MAX_SPEED:
+			pb.linear_velocity = v.limit_length(MAX_SPEED)
+		if pb.angular_velocity.length() > MAX_SPIN:
+			pb.angular_velocity = pb.angular_velocity.limit_length(MAX_SPIN)
+		fastest = maxf(fastest, pb.linear_velocity.length())
+	return fastest
+
+
+## Out cold and at rest: pin the body where it lies, then fade a punter away.
+func _settle() -> void:
+	_settled = true
+	rig.freeze_ragdoll(true)
+	if fighter.team == Fighter.Team.PLAYERS or _fade != null:
+		return  # players wait there to be revived
+	_fade = create_tween()
+	_fade.tween_interval(FADE_DELAY)
+	_fade.tween_method(_set_fade, 0.0, 1.0, FADE_TIME)
+	_fade.tween_callback(_faded_out)
+
+
+func _set_fade(amount: float) -> void:
+	for m in rig.find_children("*", "GeometryInstance3D", true, false):
+		(m as GeometryInstance3D).transparency = amount
+
+
+func _faded_out() -> void:
+	_faded = true
+	rig.visible = false
+	rig.stop_ragdoll()  # nothing left to see; stop simulating it
+
+
+## Leaving KO (a revive): undo the pin and the fade.
+func _end_ko() -> void:
+	if _ko_t < 0.0 and not _settled and _fade == null and not _faded:
+		return
+	_ko_t = -1.0
+	_still_t = 0.0
+	if _fade != null:
+		_fade.kill()
+		_fade = null
+	if _settled:
+		rig.freeze_ragdoll(false)
+	_settled = false
+	if _faded or rig.visible == false:
+		rig.visible = true
+	_faded = false
+	_set_fade(0.0)
+
+
+## True once a knocked-out punter has faded away completely.
+func is_faded() -> bool:
+	return _faded
