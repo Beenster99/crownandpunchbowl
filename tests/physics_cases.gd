@@ -32,6 +32,7 @@ func run() -> void:
 	await _test_over_the_bar()
 	await _test_slam_shakes_shelves()
 	await _test_ragdoll_down_and_up()
+	await _test_ko_settles_and_fades()
 
 	if _failures == 0:
 		print("PHYSICS OK")
@@ -149,6 +150,38 @@ func _test_ragdoll_down_and_up() -> void:
 	await _frames(45)
 	_check(not visual.rig.ragdolling, "back on their feet: the ragdoll has ended")
 	_check(_player.state == Fighter.State.IDLE, "got up")
+
+
+func _test_ko_settles_and_fades() -> void:
+	var punter := (load("res://scenes/actors/sparring_punter.tscn") as PackedScene).instantiate() as Fighter
+	punter.name = "N900"
+	get_tree().current_scene.get_node("Actors").add_child(punter)
+	punter.global_position = Vector3(-3.0, 0, 4.0)
+	await _frames(20)
+	var visual := punter.get_node(FighterVisual.NODE_NAME) as FighterVisual
+	punter.take_hit({
+		"attacker": null, "move": "test", "damage": 9999.0, "direction": Vector3(1, 0, 0), "heavy": true,
+		"to_face": true, "knockdown": true, "knockback": 12.0 * maxf(punter.toughness, 0.1), "poise": 0.0,
+	})
+	var peak := 0.0
+	for _f in 240:
+		await get_tree().physics_frame
+		for pb in visual.rig.ragdoll_bones():
+			peak = maxf(peak, pb.linear_velocity.length())
+	_check(punter.state == Fighter.State.KO, "knocked out")
+	_check(peak <= RagdollDriver.MAX_SPEED + 3.0, "a KO'd body never flails about (fastest bone %.1f m/s)" % peak)
+	var hips := visual.rig.ragdoll_bone(&"Hips").global_position
+	_check(hips.y > -0.05 and hips.y < 0.5, "it ends up lying on the floor (hips at %.2f m)" % hips.y)
+	var gap := Vector2(hips.x - punter.global_position.x, hips.z - punter.global_position.z).length()
+	_check(gap < 1.2, "where the fighter is (%.2f m away)" % gap)
+	var before := hips
+	await _frames(60)
+	_check(visual.rig.ragdoll_bone(&"Hips").global_position.distance_to(before) < 0.02, "and stays still once settled")
+	for _f in 480:
+		if visual.ragdoll.is_faded():
+			break
+		await get_tree().physics_frame
+	_check(visual.ragdoll.is_faded() and not visual.rig.visible, "a knocked-out punter fades away")
 
 
 # --- Helpers ---------------------------------------------------------------------------

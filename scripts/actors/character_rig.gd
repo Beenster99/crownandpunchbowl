@@ -711,6 +711,24 @@ func _end_ragdoll() -> void:
 	skeleton.reset_bone_poses()
 
 
+## Pins (true) or frees (false) every ragdoll body where it is, keeping the pose. Used once
+## a knocked-out body has come to rest so it never twitches or slides again.
+func freeze_ragdoll(on: bool) -> void:
+	# Jolt can't lock every axis, so a pinned body stops integrating forces and stops
+	# colliding: with no speed and nothing touching it, it stays exactly where it lies.
+	for pb in _physical.values():
+		var b := pb as PhysicalBone3D
+		b.custom_integrator = on
+		b.collision_mask = 0 if on else RAGDOLL_MASK | 8 | 128
+		b.gravity_scale = 0.0 if on else 1.0
+		b.linear_damp_mode = PhysicalBone3D.DAMP_MODE_REPLACE if on else PhysicalBone3D.DAMP_MODE_COMBINE
+		b.angular_damp_mode = b.linear_damp_mode
+		b.linear_damp = 60.0 if on else 0.8
+		b.angular_damp = 60.0 if on else 5.0
+		b.linear_velocity = Vector3.ZERO
+		b.angular_velocity = Vector3.ZERO
+
+
 ## The ragdoll's bodies (empty before the rig is built).
 func ragdoll_bones() -> Array[PhysicalBone3D]:
 	var out: Array[PhysicalBone3D] = []
@@ -1042,18 +1060,15 @@ func _build_ragdoll() -> void:
 		pb.collision_mask = RAGDOLL_MASK | 8 | 128
 		pb.mass = spec[bone_name][3]
 		pb.friction = 0.8
-		pb.linear_damp = 0.4
-		pb.angular_damp = 2.5
+		pb.linear_damp = 0.8
+		pb.angular_damp = 5.0
 		# The body sits halfway along the bone; the joint sits at the bone's root.
 		pb.body_offset = Transform3D(Basis(), Vector3(0, length * 0.5, 0))
 		pb.joint_offset = Transform3D(Basis(), Vector3(0, -length * 0.5, 0))
 		if bone_name != &"Hips":
 			pb.joint_type = PhysicalBone3D.JOINT_TYPE_CONE
 		var col := CollisionShape3D.new()
-		var cap := CapsuleShape3D.new()
-		cap.radius = radius
-		cap.height = maxf(length + radius * 0.5, radius * 2.0)
-		col.shape = cap
+		col.shape = _ragdoll_capsule(radius, maxf(length + radius * 0.5, radius * 2.0))
 		pb.add_child(col)
 		_sim.add_child(pb)
 		if bone_name != &"Hips":
@@ -1062,6 +1077,25 @@ func _build_ragdoll() -> void:
 			pb.set("joint_constraints/softness", 0.8)
 			pb.set("joint_constraints/relaxation", 1.0)
 		_physical[bone_name] = pb
+
+
+## A capsule for a ragdoll body. Jolt can't scale a real capsule non-uniformly (chunky
+## builds scale the model wider than tall), so those get a convex hull of the same capsule.
+func _ragdoll_capsule(radius: float, height: float) -> Shape3D:
+	var sc := _model.scale if _model != null else Vector3.ONE
+	if is_equal_approx(sc.x, sc.y) and is_equal_approx(sc.y, sc.z):
+		var cap := CapsuleShape3D.new()
+		cap.radius = radius
+		cap.height = height
+		return cap
+	var mesh := CapsuleMesh.new()
+	mesh.radius = radius
+	mesh.height = height
+	mesh.radial_segments = 10
+	mesh.rings = 2
+	var hull := ConvexPolygonShape3D.new()
+	hull.points = mesh.get_mesh_arrays()[Mesh.ARRAY_VERTEX]
+	return hull
 
 
 func _bone_length(i: int) -> float:
