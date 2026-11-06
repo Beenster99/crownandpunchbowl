@@ -78,6 +78,11 @@ func _physics_process(delta: float) -> void:
 
 
 func _read_input(delta: float) -> void:
+	if DartsBoard.local_input_locked():
+		# Playing darts: the darts panel has the controls.
+		move_input = Vector3.ZERO
+		_set_block(false)
+		return
 	var stick := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	move_input = Vector3(stick.x, 0.0, stick.y)
 	set_head_bob(Input.get_vector("bob_left", "bob_right", "bob_down", "bob_up"))
