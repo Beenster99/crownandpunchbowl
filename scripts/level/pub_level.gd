@@ -84,6 +84,7 @@ func _ready() -> void:
 			add_child(n)
 	builder = PubBuilder.new(self, $World, $Markers, PubEra.get_style(era))
 	_build(builder)
+	builder.dress()  # pictures, furniture and clutter round the walls (same on every peer)
 	_build_environment()
 	items = PubItems.install(self)
 	DartsBoard.install(self)  # every dartboard is playable (501 / 301, online too)
@@ -336,7 +337,7 @@ func _spawn_props() -> void:
 		var path := ITEM_SCENE_PATH % kind
 		if ItemData.KINDS.has(StringName(kind)):
 			# Pickups and weapons from the items workstream, named identically on every peer.
-			items.add_item(StringName(kind), m.global_position, m.global_rotation.y)
+			items.add_item(StringName(kind), m.global_position, m.global_rotation.y, String(m.get_meta("variant", "")))
 		elif ResourceLoader.exists(path):
 			var item := (load(path) as PackedScene).instantiate() as Node3D
 			item.name = "I%d" % _items_spawned
@@ -354,6 +355,21 @@ func _placeholder(parent: Node3D, kind: String, m: Marker3D) -> void:
 	root.name = kind.to_pascal_case()
 	root.transform = m.transform
 	parent.add_child(root, true)  # readable, same on every peer (props sync by path)
+	if PropLibrary.has(kind):
+		# A proper model (the marker's "variant" meta, else picked by position). Furniture
+		# is a real body that tips and skids; small things are just looks.
+		var variant: Variant = m.get_meta("variant", m.global_position)
+		var vis := PropLibrary.visual(kind, variant)
+		if kind in ["table", "chair", "stool"]:
+			var body := RigidBody3D.new()
+			body.name = "Body"
+			body.add_child(PropLibrary.shape(kind, variant))
+			body.add_child(vis)
+			PubPhysics.setup_prop(body, PropLibrary.mass(kind, variant), true)
+			root.add_child(body)
+		else:
+			root.add_child(vis)
+		return
 	match kind:
 		"table":
 			# A real body: top-heavy, so a fighter thrown into it tips it and sends it skidding.
