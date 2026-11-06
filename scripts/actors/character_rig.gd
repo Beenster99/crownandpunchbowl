@@ -1493,8 +1493,8 @@ func _anim_defs() -> Dictionary:
 	]}
 	# Block: forearms up in front of the face, chin tucked, braced.
 	var cover := _with(guard, {&"Hips": Vector3(0, -8, 0), &"Spine": Vector3(-16, 4, 0), &"Head": Vector3(-16, 0, 0),
-		&"ShoulderL": Vector3(72, 0, 22), &"ElbowL": Vector3(138, 0, 0), &"HandL": Vector3(-20, 0, 0),
-		&"ShoulderR": Vector3(72, 0, -22), &"ElbowR": Vector3(138, 0, 0), &"HandR": Vector3(-20, 0, 0),
+		&"ShoulderL": Vector3(72, -6, 0), &"ElbowL": Vector3(138, 0, 0), &"HandL": Vector3(-20, 0, 0),
+		&"ShoulderR": Vector3(72, 6, 0), &"ElbowR": Vector3(138, 0, 0), &"HandR": Vector3(-20, 0, 0),
 		&"KneeL": Vector3(-26, 0, 0), &"KneeR": Vector3(-24, 0, 0), &"_hips": Vector3(0, -0.05, 0), &"_brow": Vector3(0.9, 0, 0)})
 	defs[&"block"] = {"length": 1.0, "loop": true, "keys": [
 		[0.0, cover], [0.5, _with(cover, {&"Spine": Vector3(-17, 7, 0), &"_hips": Vector3(0, -0.06, 0)})], [1.0, cover],
