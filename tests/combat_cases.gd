@@ -19,7 +19,7 @@ func run() -> void:
 		"test_jab_hits_and_lunges", "test_no_snapping_to_far_enemies", "test_held_takes_bonus_damage",
 		"test_counter", "test_guard_breakers", "test_stance", "test_defend_prompt_text",
 		"test_knockdown_crawl_ko", "test_grab_escape_and_throw", "test_dodge_iframes",
-		"test_staff_never_ko", "test_no_friendly_fire", "test_heal_gets_up_from_crawl",
+		"test_staff_never_ko", "test_no_friendly_fire", "test_friendly_fire_setting", "test_heal_gets_up_from_crawl",
 		"test_ground_moves", "test_weapon_hooks", "test_player_punch_chain",
 		"test_player_combos_and_mashing", "test_player_kick_stomps", "test_player_input",
 		"test_sparring_punter", "test_sandbox_loads", "test_throw_over_railing",
@@ -285,6 +285,7 @@ func test_staff_never_ko() -> void:
 
 
 func test_no_friendly_fire() -> void:
+	GameData.friendly_fire = false
 	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
 	var mate := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -1.0))
 	var police := _fighter(Fighter.Team.POLICE, Vector3(3, 0, 0))
@@ -295,6 +296,31 @@ func test_no_friendly_fire() -> void:
 	_check(is_equal_approx(mate.hp, mate.max_hp), "no friendly fire")
 	_check(not police.is_hostile_to(punter), "police and punters are on the same side")
 	_check(police.is_hostile_to(p), "police are hostile to players")
+
+
+func test_friendly_fire_setting() -> void:
+	GameData.friendly_fire = true
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var mate := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, -1.0))
+	var s := _fighter(Fighter.Team.STAFF, Vector3(1.0, 0, 0))
+	var a := _fighter(Fighter.Team.PUNTERS, Vector3(-3, 0, 0))
+	var b := _fighter(Fighter.Team.PUNTERS, Vector3(-3, 0, -1))
+	await _wait(0.1)
+	_check(p.can_hit(mate) and mate.can_hit(p), "friendly fire on: players can hit each other")
+	_check(not p.is_hostile_to(mate), "a mate still isn't an enemy for the AI")
+	_check(not p.can_hit(s), "friendly fire still never reaches the bar staff")
+	_check(not a.can_hit(b), "punters still don't hit each other")
+	_check(Targeting.pick(p, Vector3(0, 0, -1)) == mate, "aiming at a mate picks them when nobody else is about")
+	p.request_attack(&"hook", mate)
+	await _wait(0.6)
+	_check(mate.hp < mate.max_hp, "friendly fire on: the hook lands on a mate (hp %.1f)" % mate.hp)
+	# With an enemy just as close, grabbing goes for the enemy.
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0.4, 0, -1.0))
+	await _wait(0.6)
+	p.rotation.y = 0.0
+	_check(Targeting.grab_candidate(p) == e, "grab prefers the enemy over a mate")
+	GameData.friendly_fire = false
+	_check(not p.can_hit(mate), "friendly fire off again")
 
 
 func test_heal_gets_up_from_crawl() -> void:

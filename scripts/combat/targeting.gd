@@ -19,7 +19,7 @@ static func pick(attacker: Fighter, dir: Vector3, max_range := Moves.LUNGE_RANGE
 	var best_score := INF
 	for node in attacker.get_tree().get_nodes_in_group(Fighter.GROUP):
 		var f := node as Fighter
-		if f == null or f == attacker or not attacker.is_hostile_to(f) or not f.can_be_targeted():
+		if f == null or f == attacker or not attacker.can_hit(f) or not f.can_be_targeted():
 			continue
 		if want_ground != (f.state == Fighter.State.DOWN or f.state == Fighter.State.CRAWL):
 			continue
@@ -33,6 +33,8 @@ static func pick(attacker: Fighter, dir: Vector3, max_range := Moves.LUNGE_RANGE
 		if has_aim and angle > 70.0:
 			continue
 		var score := dist + angle / (25.0 if has_aim else 45.0)
+		if not attacker.is_hostile_to(f):
+			score += 2.5  # friendly fire: only go for a mate when they're clearly who you mean
 		if f == attacker.target:
 			score -= 0.6  # stickiness so the camera of your attention doesn't flicker
 		if f.state == Fighter.State.WINDUP and f.target == attacker:
@@ -60,14 +62,14 @@ static func incoming_attackers(defender: Fighter, max_range := Moves.COUNTER_RAN
 	return out
 
 
-## Nearest grabbable enemy roughly in front, or null.
+## Nearest grabbable enemy roughly in front, or null. With friendly fire on, a mate as a last resort.
 static func grab_candidate(holder: Fighter, max_range := Moves.GRAB_RANGE) -> Fighter:
 	var best: Fighter = null
 	var best_d := INF
 	var fwd := holder.get_facing()
 	for node in holder.get_tree().get_nodes_in_group(Fighter.GROUP):
 		var f := node as Fighter
-		if f == null or f == holder or not holder.is_hostile_to(f) or not f.can_be_grabbed():
+		if f == null or f == holder or not holder.can_hit(f) or not f.can_be_grabbed():
 			continue
 		var to := f.global_position - holder.global_position
 		to.y = 0.0
@@ -76,6 +78,8 @@ static func grab_candidate(holder: Fighter, max_range := Moves.GRAB_RANGE) -> Fi
 			continue
 		if d > 0.05 and rad_to_deg(fwd.angle_to(to / d)) > 75.0:
 			continue
+		if not holder.is_hostile_to(f):
+			d += 1.0  # friendly fire: an enemy in reach is grabbed before a mate
 		if d < best_d:
 			best_d = d
 			best = f

@@ -191,11 +191,18 @@ func is_hostile_to(other: Fighter) -> bool:
 
 
 ## Whether an attack from this fighter can physically land on `other`.
-## Nobody hits the bar staff: attacks pass straight through them.
+## Nobody hits the bar staff: attacks pass straight through them. With friendly fire on
+## (GameData.friendly_fire, the host's setting) players' hits land on other players too.
 func can_hit(other: Fighter) -> bool:
 	if other == null or other == self:
 		return false
-	return is_hostile_to(other)
+	return is_hostile_to(other) or is_friendly_fire_on(other)
+
+
+## Player-on-player hits are allowed by the friendly fire setting. Bar staff never count.
+func is_friendly_fire_on(other: Fighter) -> bool:
+	return GameData.friendly_fire and other != null and other != self \
+		and team == Team.PLAYERS and other.team == Team.PLAYERS
 
 
 ## True while this fighter is winding up a telegraphed attack aimed at `defender`.
@@ -546,7 +553,7 @@ func _server_grab(victim: Fighter) -> void:
 		return
 	if victim == null:
 		victim = Targeting.grab_candidate(self)
-	if victim == null or not is_hostile_to(victim) or not victim.can_be_grabbed():
+	if victim == null or not can_hit(victim) or not victim.can_be_grabbed():
 		return
 	if victim.global_position.distance_to(global_position) > Moves.GRAB_RANGE + 0.3:
 		return

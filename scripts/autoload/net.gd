@@ -10,6 +10,7 @@ extends Node
 ##   Net.host(name, farmer) / Net.join(address, name, farmer)
 ##   Net.set_farmer(i), Net.set_ready(true)            # any peer
 ##   Net.set_pub(i), Net.set_difficulty(i)             # host only
+##   Net.set_friendly_fire(on)                         # host only, also mid-game
 ##   Net.start_game()                                  # host only, when can_start()
 ##   level _ready(): connect Net.all_peers_loaded, then call Net.level_ready()
 ##   Net.next_pub() / Net.restart_pub()                # host only
@@ -36,7 +37,7 @@ signal all_peers_loaded()
 const DEFAULT_PORT := 24565
 const MAX_PLAYERS := 4
 ## Bump when the lobby or spawn RPCs change so old builds can't join new hosts.
-const PROTOCOL_VERSION := 1
+const PROTOCOL_VERSION := 2
 const MENU_SCENE := "res://scenes/main/main_menu.tscn"
 ## Every node a MultiplayerSpawner creates joins this group (players, NPCs, items),
 ## so the host can despawn them cleanly before a pub change.
@@ -164,6 +165,8 @@ func leave() -> void:
 	if _port_opener:
 		_port_opener.close()
 	host_info = {}
+	# Back to solo (or about to host): our own friendly fire setting is the rule again.
+	GameData.friendly_fire = bool(Settings.get_value("gameplay", "friendly_fire"))
 	players_changed.emit()
 
 
@@ -212,6 +215,22 @@ func set_difficulty(index: int) -> void:
 		return
 	GameData.difficulty_index = clampi(index, 0, GameData.DIFFICULTIES.size() - 1)
 	_broadcast_lobby()
+
+
+## Host (or solo): whether players can hit each other. Works mid-game too.
+func set_friendly_fire(on: bool) -> void:
+	if not is_host():
+		return
+	GameData.friendly_fire = on
+	lobby_settings_changed.emit()
+	if is_online():
+		_sync_rules.rpc(on)
+
+
+@rpc("authority", "reliable")
+func _sync_rules(friendly_fire: bool) -> void:
+	GameData.friendly_fire = friendly_fire
+	lobby_settings_changed.emit()
 
 
 ## Host: everyone (except the host, who starts it) has pressed ready.
@@ -367,6 +386,7 @@ func _broadcast_lobby() -> void:
 	lobby_settings_changed.emit()
 	if is_online():
 		_sync_lobby.rpc(players, GameData.current_pub_index, GameData.difficulty_index)
+		_sync_rules.rpc(GameData.friendly_fire)
 
 
 @rpc("authority", "reliable")
