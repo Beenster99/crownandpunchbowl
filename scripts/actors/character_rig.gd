@@ -104,7 +104,9 @@ const SOCKETS: Array[StringName] = [&"hand_r", &"hand_l", &"head", &"chest", &"h
 const ANIM_JOINTS: Array[StringName] = [
 	&"Hips", &"Spine", &"Spine2", &"Chest", &"Neck", &"Head", &"Jaw", &"BrowL", &"BrowR",
 	&"ClavicleL", &"ShoulderL", &"ElbowL", &"HandL", &"Thumb1L", &"Thumb2L", &"Index1L", &"Index2L", &"Fingers1L", &"Fingers2L",
+	&"Ring1L", &"Ring2L", &"Pinky1L", &"Pinky2L",
 	&"ClavicleR", &"ShoulderR", &"ElbowR", &"HandR", &"Thumb1R", &"Thumb2R", &"Index1R", &"Index2R", &"Fingers1R", &"Fingers2R",
+	&"Ring1R", &"Ring2R", &"Pinky1R", &"Pinky2R",
 	&"HipL", &"KneeL", &"FootL", &"HipR", &"KneeR", &"FootR",
 ]
 ## Follow-through: seconds each joint trails the pose. The hips lead and the chest, head,
@@ -113,7 +115,9 @@ const OVERLAP := {
 	&"Spine2": 0.015, &"Chest": 0.03, &"Neck": 0.04, &"Head": 0.06, &"Jaw": 0.08, &"BrowL": 0.05, &"BrowR": 0.05,
 	&"ClavicleL": 0.02, &"ClavicleR": 0.02, &"HandL": 0.02, &"HandR": 0.02,
 	&"Thumb1L": 0.03, &"Thumb2L": 0.04, &"Index1L": 0.03, &"Index2L": 0.04, &"Fingers1L": 0.03, &"Fingers2L": 0.04,
+	&"Ring1L": 0.035, &"Ring2L": 0.045, &"Pinky1L": 0.04, &"Pinky2L": 0.05,
 	&"Thumb1R": 0.03, &"Thumb2R": 0.04, &"Index1R": 0.03, &"Index2R": 0.04, &"Fingers1R": 0.03, &"Fingers2R": 0.04,
+	&"Ring1R": 0.035, &"Ring2R": 0.045, &"Pinky1R": 0.04, &"Pinky2R": 0.05,
 }
 ## Animations are baked from the keyed poses at this rate.
 const BAKE_FPS := 30.0
@@ -667,6 +671,7 @@ func _dress() -> void:
 		&"boots": L.boots_color, &"hat": L.hat_color, &"neckerchief": L.neckerchief_color, &"metal": Color("c8ccd4"),
 		&"leather": Color("6b4a2a"), &"dark": Color("161616"), &"white": Color("ececec"), &"socks": Color("6a6a60"),
 		&"blood": Color("7a0b0b"), &"hivis_band": Color("b9bcc4"),
+		&"eyes": Color.WHITE, &"lashes": Color("1c1612"),
 	}
 	var mats := {}
 	var wanted := {
@@ -685,11 +690,15 @@ func _dress() -> void:
 		mi.visible = show
 		_meshes.append(mi)
 		for i in mi.mesh.get_surface_count():
-			var src := mi.mesh.surface_get_material(i)
-			var key := StringName(src.resource_name if src else "top")
-			if not mats.has(key):
-				mats[key] = _material(key, colours.get(key, Color.MAGENTA))
-			mi.set_surface_override_material(i, mats[key])
+			var src := mi.mesh.surface_get_material(i) as BaseMaterial3D
+			# Blender suffixes repeated names ("top.001"), so the palette key is the base name.
+			var key := StringName((src.resource_name if src else "top").get_slice(".", 0))
+			var tex: Texture2D = src.albedo_texture if src else null
+			var cache_key := [key, tex.get_rid() if tex else RID()]
+			if not mats.has(cache_key):
+				var default_colour := Color.WHITE if tex else Color.MAGENTA
+				mats[cache_key] = _material(key, colours.get(key, default_colour), src)
+			mi.set_surface_override_material(i, mats[cache_key])
 	for n in ["Blood_Nose", "Blood_Face", "Blood_Shirt", "Blood_Cheek"]:
 		if blood.has(n):
 			_blood_nodes.append(blood[n])
@@ -732,11 +741,35 @@ static func _detail_texture(freq: float, contrast: float) -> Texture2D:
 	return t
 
 
-func _material(key: StringName, colour: Color) -> StandardMaterial3D:
+## Detail maps baked from MakeHuman textures average this grey (tools/blender/build_humans.py),
+## so the tint is scaled back up to land on the look's colour.
+const DETAIL_MEAN := 0.8
+## Surfaces cut with alpha (strands of hair, lashes) are drawn both sides and clipped.
+const ALPHA_SURFACES := [&"hair", &"beard", &"brow", &"lashes"]
+
+
+func _material(key: StringName, colour: Color, src: BaseMaterial3D = null) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = colour
 	m.roughness = 0.82
-	if SURFACES.has(key):
+	var textured := src != null and src.albedo_texture != null
+	if textured:
+		# MakeHuman models carry UVs, a greyscale detail map (or real colours for "keep_*" and
+		# the eyes) and a normal map: tint the detail with the look's colour.
+		m.albedo_texture = src.albedo_texture
+		if not String(key).begins_with("keep") and key != &"eyes" and key != &"dark":
+			m.albedo_color = Color(colour.r / DETAIL_MEAN, colour.g / DETAIL_MEAN, colour.b / DETAIL_MEAN)
+		if src.normal_enabled and src.normal_texture:
+			m.normal_enabled = true
+			m.normal_texture = src.normal_texture
+			m.normal_scale = 0.8
+		if key in ALPHA_SURFACES:
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			m.alpha_scissor_threshold = 0.35
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if SURFACES.has(key):
+			m.roughness = SURFACES[key][3]
+	elif SURFACES.has(key):
 		var sf: Array = SURFACES[key]
 		var tex := _detail_texture(sf[0], sf[1])
 		m.roughness = sf[3]
@@ -746,13 +779,17 @@ func _material(key: StringName, colour: Color) -> StandardMaterial3D:
 		m.uv1_triplanar = true
 		m.uv1_scale = Vector3.ONE * float(sf[2])
 	match key:
-		&"eye_white", &"eye_dark":
+		&"eye_white", &"eye_dark", &"eyes":
 			m.roughness = 0.08
 			m.clearcoat_enabled = true
 			m.clearcoat = 1.0
 		&"metal":
 			m.metallic = 0.8
 			m.roughness = 0.35
+		&"stubble", &"hair" when not textured:
+			# Shaved heads and stubble are shells over the skin: let the skin show through.
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+			m.albedo_color.a = 0.4
 		&"blood":
 			m.roughness = 0.15
 			m.clearcoat_enabled = true
@@ -771,7 +808,7 @@ func _material(key: StringName, colour: Color) -> StandardMaterial3D:
 			m.subsurf_scatter_strength = 0.35
 			m.subsurf_scatter_skin_mode = true
 		&"top":
-			if look.top == CharacterLook.Top.SHIRT:
+			if look.top == CharacterLook.Top.SHIRT and not textured:
 				m.albedo_color = Color.WHITE
 				m.albedo_texture = _check_texture(look.top_color, look.top_trim)
 				m.uv1_triplanar = true
@@ -879,7 +916,8 @@ func _bone_length(i: int) -> float:
 	for k in kids:
 		var n := skeleton.get_bone_name(k)
 		if n in ["Nose", "Jaw", "BrowL", "BrowR", "ClavicleL", "ClavicleR"] or n.begins_with("Thumb") \
-				or n.begins_with("Index") or n.begins_with("Fingers"):
+				or n.begins_with("Index") or n.begins_with("Fingers") \
+				or n.begins_with("Ring") or n.begins_with("Pinky"):
 			continue
 		best = maxf(best, skeleton.get_bone_rest(k).origin.length())
 	if best > 0.0:
@@ -1062,7 +1100,8 @@ static func _expand(pose: Dictionary) -> Dictionary:
 			p[StringName("Clavicle" + s)] = Vector3(0, reach * side, lift * side)
 		var f: float = (p.get(StringName("_fist" + s), Vector3(0.25, 0, 0)) as Vector3).x
 		var c := -side  # curl towards the palm
-		for bone in [["Index1", 80.0], ["Index2", 95.0], ["Fingers1", 88.0], ["Fingers2", 100.0]]:
+		for bone in [["Index1", 80.0], ["Index2", 95.0], ["Fingers1", 88.0], ["Fingers2", 100.0],
+				["Ring1", 90.0], ["Ring2", 100.0], ["Pinky1", 92.0], ["Pinky2", 100.0]]:
 			var key := StringName(bone[0] + s)
 			if not p.has(key):
 				p[key] = Vector3(0, 0, bone[1] * f * c)

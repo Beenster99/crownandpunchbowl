@@ -1268,4 +1268,5 @@ def main():
         build(look_id, looks[look_id], keep)
 
 
-main()
+if __name__ == "__main__":
+    main()
