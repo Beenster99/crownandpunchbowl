@@ -430,7 +430,12 @@ func set_guard_zone(zone: StringName) -> void:
 	_guard_zone = zone
 	if zone != &"":
 		guard = true
-	if current in [&"block", &"guard_head", &"guard_body"]:
+	if zone == &"" and current in [&"guard_head", &"guard_body"]:
+		# The guard came down: back to standing or walking. (Playing _block_anim() here
+		# put the plain "block" on, which isn't a standing pose, so it never switched to
+		# the walk again and the fighter glided about with the legs still.)
+		play(_standing_anim(), 0.12)
+	elif current in [&"block", &"guard_head", &"guard_body"]:
 		play(_block_anim(), 0.12)
 	else:
 		_refresh_standing(0.12)
