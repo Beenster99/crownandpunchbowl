@@ -1,0 +1,470 @@
+{
+ "mx_block_head": {
+  "clip": "center_block",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.805,
+  "variant_of": "block_hit_head"
+ },
+ "mx_chat": {
+  "clip": "talking",
+  "loop": true,
+  "replaces": "idle_chat"
+ },
+ "mx_cheer": {
+  "clip": "cheering",
+  "from": 0.0,
+  "then": "idle",
+  "to": -1,
+  "variant_of": "cheer"
+ },
+ "mx_clap": {
+  "clip": "clapping",
+  "from": 0.0,
+  "then": "idle",
+  "to": -1,
+  "variant_of": "cheer"
+ },
+ "mx_crawl": {
+  "clip": "crawling",
+  "loop": true,
+  "root": "inplace",
+  "variant_of": "crawl"
+ },
+ "mx_cross": {
+  "clip": "cross_punch",
+  "contact": 0.13,
+  "from": 1.029,
+  "hit_at": 1.133,
+  "load": 0.078,
+  "speed": 0.8,
+  "speed_after": 0.8,
+  "then": "idle",
+  "to": 1.733,
+  "variant_of": "punch_r"
+ },
+ "mx_dodge_l": {
+  "clip": "dodging_right",
+  "from": 0.033,
+  "mirror": true,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.953,
+  "variant_of": "dodge_l"
+ },
+ "mx_dodge_r": {
+  "clip": "dodging_right",
+  "from": 0.033,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.953,
+  "variant_of": "dodge_r"
+ },
+ "mx_duck": {
+  "clip": "ducking",
+  "from": 0.167,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.087,
+  "variant_of": "dodge"
+ },
+ "mx_elbow": {
+  "clip": "illegal_elbow_punch",
+  "contact": 0.16,
+  "from": 0.433,
+  "hit_at": 0.6,
+  "load": 0.096,
+  "speed": 1.042,
+  "speed_after": 1.042,
+  "then": "idle",
+  "to": 1.381,
+  "variant_of": "hook_r"
+ },
+ "mx_fight_idle": {
+  "clip": "bouncing_fight_idle",
+  "loop": true,
+  "pool": "fight_idle"
+ },
+ "mx_fight_idle_b": {
+  "clip": "idle",
+  "loop": true,
+  "pool": "fight_idle"
+ },
+ "mx_get_up": {
+  "clip": "getting_up_3",
+  "from": 0.033,
+  "root": "inplace",
+  "then": "idle",
+  "to": -1,
+  "variant_of": "get_up"
+ },
+ "mx_groin": {
+  "clip": "kick_to_the_groin",
+  "from": 0.0,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "groin_hold",
+  "to": 1.61,
+  "variant_of": "groin_down"
+ },
+ "mx_headbutt": {
+  "clip": "illegal_headbutt",
+  "contact": 0.24,
+  "from": 0.675,
+  "hit_at": 0.867,
+  "load": 0.144,
+  "speed": 0.8,
+  "speed_after": 0.8,
+  "then": "idle",
+  "to": 1.467,
+  "variant_of": "headbutt"
+ },
+ "mx_hit_back": {
+  "clip": "hit_on_back_of_head",
+  "from": 0.0,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.92,
+  "variant_of": "hit_back"
+ },
+ "mx_hit_body": {
+  "clip": "hit_to_body",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.15,
+  "variant_of": "hit_body"
+ },
+ "mx_hit_head": {
+  "clip": "light_hit_to_head",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.8,
+  "variant_of": "hit_front"
+ },
+ "mx_hit_head_b": {
+  "clip": "light_hit_to_head_1",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.805,
+  "variant_of": "hit_front"
+ },
+ "mx_hit_reaction": {
+  "clip": "reaction",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.035,
+  "variant_of": "hit_front"
+ },
+ "mx_hit_ribs_l": {
+  "clip": "big_rib_hit",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.495,
+  "variant_of": "hit_body_l"
+ },
+ "mx_hit_ribs_r": {
+  "clip": "big_rib_hit",
+  "from": 0.0,
+  "mirror": true,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.495,
+  "variant_of": "hit_body_r"
+ },
+ "mx_hit_stomach": {
+  "clip": "big_stomach_hit",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.38,
+  "variant_of": "hit_body"
+ },
+ "mx_hit_stomach_b": {
+  "clip": "receive_stomach_uppercut",
+  "from": 0.067,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.447,
+  "variant_of": "hit_body"
+ },
+ "mx_hit_upper": {
+  "clip": "receive_uppercut_to_the_face",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.15,
+  "variant_of": "hit_uppercut"
+ },
+ "mx_hit_upper_b": {
+  "clip": "receiving_an_uppercut",
+  "from": 0.0,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.38,
+  "variant_of": "hit_uppercut"
+ },
+ "mx_hook_l": {
+  "clip": "hook",
+  "contact": 0.16,
+  "from": 0.216,
+  "hit_at": 0.6,
+  "load": 0.096,
+  "mirror": true,
+  "speed": 2.4,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.613,
+  "variant_of": "hook_l"
+ },
+ "mx_hook_r": {
+  "clip": "hook",
+  "contact": 0.16,
+  "from": 0.216,
+  "hit_at": 0.6,
+  "load": 0.096,
+  "speed": 2.4,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.613,
+  "variant_of": "hook_r"
+ },
+ "mx_idle_drunk": {
+  "clip": "drunk_idle",
+  "loop": true,
+  "pool": "drunk_idle"
+ },
+ "mx_idle_lean": {
+  "clip": "leaning",
+  "loop": true,
+  "pool": "calm_idle"
+ },
+ "mx_idle_shoulder": {
+  "clip": "one_shoulder_lean",
+  "loop": true,
+  "pool": "calm_idle"
+ },
+ "mx_idle_stand": {
+  "clip": "standing_idle",
+  "loop": true,
+  "pool": "calm_idle"
+ },
+ "mx_insult": {
+  "clip": "insult",
+  "from": 0.033,
+  "then": "idle",
+  "to": -1,
+  "variant_of": "taunt"
+ },
+ "mx_jab": {
+  "clip": "lead_jab",
+  "contact": 0.1,
+  "from": 0.26,
+  "hit_at": 0.5,
+  "load": 0.06,
+  "speed": 2.4,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.513,
+  "variant_of": "punch_l"
+ },
+ "mx_jab_b": {
+  "clip": "lead_jab_1",
+  "contact": 0.1,
+  "from": 0.16,
+  "hit_at": 0.4,
+  "load": 0.06,
+  "speed": 2.4,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.413,
+  "variant_of": "punch_l"
+ },
+ "mx_jab_c": {
+  "clip": "lead_jab_2",
+  "contact": 0.1,
+  "from": 0.227,
+  "hit_at": 0.467,
+  "load": 0.06,
+  "speed": 2.4,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.479,
+  "variant_of": "punch_l"
+ },
+ "mx_kick": {
+  "clip": "mma_kick",
+  "contact": 0.22,
+  "from": 0.233,
+  "hit_at": 0.667,
+  "load": 0.132,
+  "speed": 1.97,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.6,
+  "variant_of": "kick"
+ },
+ "mx_kick_b": {
+  "clip": "mma_kick_1",
+  "contact": 0.22,
+  "from": 0.2,
+  "hit_at": 0.6,
+  "load": 0.132,
+  "speed": 1.818,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.6,
+  "variant_of": "kick"
+ },
+ "mx_knee": {
+  "clip": "illegal_knee",
+  "contact": 0.34,
+  "from": 0.333,
+  "hit_at": 0.733,
+  "load": 0.204,
+  "speed": 1.176,
+  "speed_after": 1.176,
+  "then": "idle",
+  "to": 1.616,
+  "variant_of": "clinch_knee"
+ },
+ "mx_parry_l": {
+  "clip": "left_block",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.69,
+  "variant_of": "parry_l"
+ },
+ "mx_parry_r": {
+  "clip": "right_block",
+  "from": 0.0,
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.69,
+  "variant_of": "parry_r"
+ },
+ "mx_roundhouse": {
+  "clip": "roundhouse_kick",
+  "contact": 0.22,
+  "from": 0.533,
+  "hit_at": 0.933,
+  "load": 0.132,
+  "speed": 1.818,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.946,
+  "variant_of": "kick"
+ },
+ "mx_shrug": {
+  "clip": "shrugging",
+  "from": 0.133,
+  "then": "idle",
+  "to": -1,
+  "variant_of": "taunt"
+ },
+ "mx_stagger": {
+  "clip": "receiving_a_big_uppercut",
+  "from": 0.0,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.84,
+  "variant_of": "stagger"
+ },
+ "mx_step_l": {
+  "clip": "medium_right_side_step",
+  "from": 0.0,
+  "mirror": true,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.805,
+  "variant_of": "dodge_l"
+ },
+ "mx_step_r": {
+  "clip": "medium_right_side_step",
+  "from": 0.0,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 0.805,
+  "variant_of": "dodge_r"
+ },
+ "mx_stomp": {
+  "clip": "stomp",
+  "contact": 0.22,
+  "from": 0.624,
+  "hit_at": 0.8,
+  "load": 0.132,
+  "replaces": "stomp",
+  "speed": 0.8,
+  "speed_after": 0.8,
+  "then": "idle",
+  "to": 1.4
+ },
+ "mx_stomp_b": {
+  "clip": "zombie_kicking",
+  "contact": 0.22,
+  "from": 1.591,
+  "hit_at": 1.767,
+  "load": 0.132,
+  "speed": 0.8,
+  "speed_after": 0.8,
+  "then": "idle",
+  "to": 2.367,
+  "variant_of": "stomp"
+ },
+ "mx_taunt": {
+  "clip": "taunt",
+  "from": 0.0,
+  "then": "idle",
+  "to": -1,
+  "variant_of": "taunt"
+ },
+ "mx_taunt_b": {
+  "clip": "taunt_1",
+  "from": 0.2,
+  "then": "idle",
+  "to": -1,
+  "variant_of": "taunt"
+ },
+ "mx_uppercut": {
+  "clip": "uppercut",
+  "contact": 0.19,
+  "from": 0.233,
+  "hit_at": 0.567,
+  "load": 0.114,
+  "speed": 1.754,
+  "speed_after": 1.35,
+  "then": "idle",
+  "to": 1.039,
+  "variant_of": "uppercut_r"
+ },
+ "mx_walk": {
+  "clip": "walking",
+  "loop": true,
+  "replaces": "walk_relaxed",
+  "root": "inplace",
+  "speed": 1.183
+ },
+ "mx_weave": {
+  "clip": "dodging",
+  "from": 0.0,
+  "root": "inplace",
+  "speed": 1.15,
+  "then": "idle",
+  "to": 1.15,
+  "variant_of": "dodge_back"
+ }
+}

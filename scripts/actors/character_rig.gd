@@ -73,7 +73,7 @@ const MOVE_ANIMS := {
 	"jab": &"punch_l", "cross": &"punch_r", "hook": &"hook_r", "uppercut": &"uppercut_r",
 	"hook_l": &"hook_l", "hook_r": &"hook_r", "uppercut_r": &"uppercut_r",
 	"haymaker": &"punch_r", "counter": &"punch_r", "counter_whiff": &"dodge", "shove": &"punch_l",
-	"knee": &"clinch_knee", "stomp": &"kick", "baton": &"swing",
+	"knee": &"clinch_knee", "stomp": &"stomp", "baton": &"swing",
 	"clinch_knee": &"clinch_knee", "groin_kick": &"groin_kick", "shoulder_charge": &"shoulder_charge",
 	"body_swing": &"body_swing", "body_jab": &"jab_body", "body_hook": &"hook_l_body", "body_uppercut": &"uppercut_body",
 	"parry": &"parry_l", "slip_l": &"slip_l", "slip_r": &"slip_r",
@@ -168,6 +168,19 @@ var _sockets := {}
 var _bone := {}
 var _rest_global := {}
 var _scale := 1.0
+## The take actually playing (current is its base name). See play().
+var current_take: StringName = &""
+
+## Takes and pools with the motion-captured clips (RigMixamo) merged in, built once.
+static var _mixamo_merged := false
+static var _takes := {}
+static var _base := {}
+static var _fight_idles: Array[StringName] = []
+static var _calm_idles: Array[StringName] = []
+static var _drunk_idles: Array[StringName] = []
+static var _standing := {}
+static var _returns := {}
+static var _chains := {}
 var _lie := 0.0
 var _time := 0.0
 var _moving := false
@@ -213,16 +226,25 @@ func _process(delta: float) -> void:
 # --- Public API ------------------------------------------------------------
 
 ## Plays an animation by name with a short blend.
-func play(anim_name: StringName, blend := 0.1) -> void:
-	if anim == null or not anim.has_animation(anim_name):
+## Plays an animation by name. Where it has several takes (keyed and motion-captured) one
+## is picked at random unless pick is false. `current` is always the name asked for (the
+## base name of a take), so code can check what is happening without knowing the takes;
+## `current_take` is the one actually playing.
+func play(anim_name: StringName, blend := 0.1, pick := true) -> void:
+	_merge_mixamo()
+	var take := _variant(anim_name) if pick and _takes.has(anim_name) else anim_name
+	if anim == null or not anim.has_animation(take):
+		take = anim_name
+	if anim == null or not anim.has_animation(take):
 		push_warning("CharacterRig: no animation '%s'" % anim_name)
 		return
 	if ragdolling:
 		stop_ragdoll()
-	current = anim_name
+	current = base_of(take)
+	current_take = take
 	anim.speed_scale = 1.0
-	anim.play(anim_name, blend)
-	if STANDING.has(anim_name) or anim_name == &"hold":
+	anim.play(take, blend)
+	if _standing.has(take) or take == &"hold":
 		anim.seek(randf() * anim.current_animation_length if not Engine.is_editor_hint() else 0.0, true)
 
 
@@ -250,7 +272,7 @@ func play_move(move: String, zone := &"head") -> void:
 	guard = true
 	var a := _strike_for(move, zone)
 	if a != &"":
-		play(a, 0.05)
+		play(a, 0.05, false)
 	else:
 		push_warning("CharacterRig: no animation for move '%s'" % move)
 
@@ -276,7 +298,7 @@ func play_windup(move: String, seconds: float, zone := &"head") -> void:
 	if not anim.has_animation(lead):
 		lead = strike
 	var load_t := _load_time(lead)
-	play(lead, 0.08)
+	play(lead, 0.08, false)
 	# Load over the first 70% of the wind-up, then hold the coiled pose until release.
 	anim.speed_scale = clampf(load_t / maxf(seconds * 0.7, 0.01), 0.05, 1.5)
 	_windup_anim = lead
@@ -292,7 +314,7 @@ func release_strike() -> void:
 	_strike_anim = &""
 	_windup_anim = &""
 	_windup_hold = -1.0
-	play(strike, 0.04)
+	play(strike, 0.04, false)
 	anim.seek(_load_time(strike), true)
 
 
@@ -308,13 +330,16 @@ func _strike_for(move: String, zone := &"head") -> StringName:
 		base = &"hook_r"  # B is always the right hand
 	else:
 		base = MOVE_ANIMS.get(move, &"")
+	if base == &"stomp" and anim != null and not anim.has_animation(&"stomp"):
+		base = &"kick"
 	return _variant(base)
 
 
 func _variant(base: StringName) -> StringName:
-	if not VARIANTS.has(base) or Engine.is_editor_hint():
+	_merge_mixamo()
+	if not _takes.has(base) or Engine.is_editor_hint():
 		return base
-	var takes: Array = VARIANTS[base]
+	var takes: Array = _takes[base]
 	var pick: StringName = takes[randi() % takes.size()]
 	return pick if anim == null or anim.has_animation(pick) else base
 
@@ -497,21 +522,98 @@ func _standing_anim() -> StringName:
 		if m.y < -0.2 and absf(m.y) >= absf(m.x):
 			return &"walk_back"
 		return &"walk"
+	_merge_mixamo()
+	var fight := _available(_fight_idles)
 	if guard:
-		return FIGHT_IDLES[absi(look_seed) % FIGHT_IDLES.size()]
+		return fight[absi(look_seed) % fight.size()]
 	if talking:
 		return &"idle_chat"
 	if staff:
 		return &"idle_polish"
-	return CALM_IDLES[absi(look_seed) % CALM_IDLES.size()]
+	var drunk := _available(_drunk_idles)
+	if look.sway > 0.3 and drunk.size() > 0:
+		return drunk[absi(look_seed) % drunk.size()]
+	var calm := _available(_calm_idles)
+	return calm[absi(look_seed) % calm.size()]
 
 
 func _refresh_standing(blend: float) -> void:
-	if anim == null or not STANDING.has(current):
+	if anim == null or not _standing.has(current_take):
 		return
 	var want := _standing_anim()
 	if want != current:
 		play(want, blend)
+
+
+static func _merge_mixamo() -> void:
+	if _mixamo_merged:
+		return
+	_mixamo_merged = true
+	for base in VARIANTS:
+		_takes[base] = (VARIANTS[base] as Array).duplicate()
+	_fight_idles.assign(FIGHT_IDLES)
+	_calm_idles.assign(CALM_IDLES)
+	for n in STANDING:
+		_standing[n] = true
+	var t := RigMixamo.table()
+	for anim_name in t:
+		var def: Dictionary = t[anim_name]
+		if def.has("variant_of"):
+			var base := StringName(def["variant_of"])
+			if not _takes.has(base):
+				_takes[base] = [base]
+			(_takes[base] as Array).append(anim_name)
+		match String(def.get("pool", "")):
+			"fight_idle":
+				_fight_idles.append(anim_name)
+			"calm_idle":
+				_calm_idles.append(anim_name)
+			"drunk_idle":
+				_drunk_idles.append(anim_name)
+		if def.get("pool", "") != "":
+			_standing[anim_name] = true
+		var then := String(def.get("then", ""))
+		if then == "idle":
+			_returns[anim_name] = true
+		elif then != "":
+			_chains[anim_name] = StringName(then)
+	for base in _takes:
+		for take in _takes[base]:
+			if take != base:
+				_base[take] = base
+				if _standing.has(base):
+					_standing[take] = true
+
+
+## The animation a take stands in for (itself if it isn't a take of another).
+static func base_of(take: StringName) -> StringName:
+	_merge_mixamo()
+	return _base.get(take, take)
+
+
+## Every take of an animation, keyed and motion-captured.
+static func takes_of(base: StringName) -> Array:
+	_merge_mixamo()
+	return _takes.get(base, [base])
+
+
+## The fighting stances and calm idles characters pick from, by seed.
+static func fight_idles() -> Array[StringName]:
+	_merge_mixamo()
+	return _fight_idles
+
+
+static func calm_idles() -> Array[StringName]:
+	_merge_mixamo()
+	return _calm_idles
+
+
+func _available(pool: Array[StringName]) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for n in pool:
+		if anim == null or anim.has_animation(n):
+			out.append(n)
+	return out
 
 
 ## When a strike's wind-up ends (the coiled, loaded pose), in seconds. 0 if it has none.
@@ -990,7 +1092,7 @@ func _build_animations() -> void:
 	anim.root_node = anim.get_path_to(_model)
 	# Baking is the slow part, and every character built from the same model and build gets
 	# the same result, so a crowd shares one library per model.
-	var key := "%s|%.2f|%.3f|%.3f" % [_model_path, _lie, _scale, _kneel]
+	var key := "%s|%.2f|%.3f|%.3f|%s" % [_model_path, _lie, _scale, _kneel, RigMixamo.preview_all]
 	if not _lib_cache.has(key) or Engine.is_editor_hint():
 		var lib := AnimationLibrary.new()
 		var defs := _anim_defs()
@@ -998,19 +1100,39 @@ func _build_animations() -> void:
 		for anim_name in defs:
 			lib.add_animation(anim_name, _make_animation(defs[anim_name]))
 			timing[anim_name] = Vector2(float(defs[anim_name].get("load", 0.0)), float(defs[anim_name].get("contact", 0.0)))
+		# Motion-captured takes (RigMixamo) on top of the keyed set.
+		var mx := RigMixamo.definitions()
+		for anim_name in mx:
+			var def: Dictionary = mx[anim_name]
+			var a := RigMixamo.make(self, def)
+			if a == null:
+				continue
+			var t := Vector2(float(def.get("load", 0.0)), float(def.get("contact", 0.0)))
+			lib.add_animation(anim_name, a)
+			timing[anim_name] = t
+			if def.has("replaces"):
+				# Plays under the keyed animation's name, so every caller gets it.
+				var r := StringName(def["replaces"])
+				if lib.has_animation(r):
+					lib.remove_animation(r)
+				lib.add_animation(r, a)
+				timing[r] = t
 		_lib_cache[key] = [lib, timing]
 	anim.add_animation_library(&"", _lib_cache[key][0])
 	_timing = _lib_cache[key][1]
 	anim.animation_finished.connect(_on_animation_finished)
 
 
-func _on_animation_finished(anim_name: StringName) -> void:
+func _on_animation_finished(take: StringName) -> void:
+	var anim_name := base_of(take)
 	animation_finished.emit(anim_name)
 	if ragdolling:
 		return
-	if CHAINS.has(anim_name):
+	if _chains.has(take):
+		play(_chains[take], 0.15)
+	elif CHAINS.has(anim_name):
 		play(CHAINS[anim_name], 0.15)
-	elif auto_return_to_idle and RETURNS_TO_IDLE.has(anim_name):
+	elif auto_return_to_idle and (RETURNS_TO_IDLE.has(anim_name) or _returns.has(take)):
 		play(_standing_anim(), 0.15)
 
 

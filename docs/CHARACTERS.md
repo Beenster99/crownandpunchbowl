@@ -283,6 +283,43 @@ same guard:
   `hit_body_l`/`_r`), and `zone = &"groin"` plays `groin_down`, which chains into the
   `groin_hold` loop on all fours. `play_clinched()` is the knee's victim.
 
+### Motion capture (Mixamo)
+
+On top of the keyed set, 53 motion-captured takes from Mixamo play on every model
+(`RigMixamo`, `scripts/actors/rig_mixamo.gd`):
+
+- **Strikes:** jabs, a cross, hooks (the left one mirrored), an elbow, an uppercut, MMA
+  and roundhouse kicks, a headbutt, a knee and stomps.
+- **Defence:** blocks, parries, dodges, side steps, a duck and a weave.
+- **Getting hit:** head, body, rib and uppercut reactions, a stagger, a blow to the back
+  of the head, and doubling over from the groin kick.
+- **Floor:** getting up and crawling.
+- **Standing about:** two fight stances, three calm idles, a drunk idle (for looks that
+  sway), chatting, the calm walk, cheering, clapping, taunts and a shrug.
+
+Each one joins the random takes of a keyed animation (`variant_of`), replaces it
+(`replaces`), or joins a stance pool. `play()` picks a take. `current` stays the base name
+(`punch_r`, `hit_front`...), so game code doesn't need to know about takes;
+`current_take` is the take actually playing. Strikes are trimmed and sped up into the blow
+so they land at the same moment as the keyed take (combat timing is unchanged), then
+recover nearer real time. Clips that start turned are turned to face forward.
+
+Pipeline:
+
+```
+# Mixamo: Y Bot, FBX Binary, Without Skin, 30 fps, no keyframe reduction
+blender -b -P tools/blender/mixamo_to_rig.py -- <folder of .fbx>   # -> assets/animations/mixamo/*.json
+python3 tools/mixamo_clips.py --prune                              # picks and times them -> clips.json
+xvfb-run godot --path . --rendering-driver opengl3 --script res://tools/capture_mixamo.gd -- <out_dir>
+```
+
+The converter poses Mixamo's T-pose skeleton into our rest pose (arms hanging, palms in).
+For each frame it stores every joint's rotation in the rig's pose convention: character
+axes, composed down our chain. `RigMixamo.make()` bakes that with
+`rest_local * (M^-1 q M)`, like the keyed poses, so one file fits every build. The list
+of clips and what each is for is the table in `tools/mixamo_clips.py`. The JSON files are
+exported with the game (`include_filter` in `export_presets.cfg`).
+
 ### The procedural layer
 
 `RigReactor` is a `SkeletonModifier3D` under the skeleton that runs after the animation each
