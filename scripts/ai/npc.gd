@@ -226,7 +226,7 @@ func hear_words(who: Fighter, heard: Dictionary) -> String:
 			"provoke": return "riled"
 			"calm": return "calmed" if hits_from(who) == 0 else "unconvinced"
 			"chat": return "chat"
-		return "shrug"
+		return "chat"
 	match intent:
 		"calm":
 			return _try_placate(who, strength, bool(heard.get("apology", false)))
@@ -236,7 +236,8 @@ func hear_words(who: Fighter, heard: Dictionary) -> String:
 			if mood == Mood.CALM:
 				return "chat"
 			return "shrug"  # small talk in the middle of a scrap: "You what?"
-	return "shrug"
+	# Anything else said to a calm punter is just conversation.
+	return "chat" if mood == Mood.CALM else "shrug"
 
 
 ## Chance that a calming word works right now, 0..1.

@@ -185,7 +185,7 @@ func hear(who: Fighter, text: String, loud := false) -> Npc:
 			_thinking.rpc(String(npc.name))
 			return npc
 	var outcome := npc.hear_words(who, heard)
-	_reply(npc, TalkLines.reply(String(npc.kind), outcome, _rng), outcome)
+	_reply(npc, TalkLines.reply_for(_persona(npc), String(npc.kind), outcome, _rng), outcome)
 	return npc
 
 
@@ -216,7 +216,7 @@ func _on_answered(id: int, res: Dictionary) -> void:
 	# Claude couldn't answer (no connection, bad key...): fall back to Plan 1.
 	push_warning("Punter reply via Claude failed: %s" % res.get("error", ""))
 	var outcome := npc.hear_words(who, p["heard"])
-	_reply(npc, TalkLines.reply(String(npc.kind), outcome, _rng), outcome)
+	_reply(npc, TalkLines.reply_for(_persona(npc), String(npc.kind), outcome, _rng), outcome)
 
 
 func _reply(npc: Npc, text: String, outcome: String) -> void:
@@ -297,6 +297,7 @@ func situation(npc: Npc, who: Fighter, text: String, heard: Dictionary) -> Dicti
 	var hp := npc.hp / maxf(npc.max_hp, 1.0) if "hp" in npc else 1.0
 	var s := {
 		"name": p["name"], "background": p["background"], "temperament": temperament,
+		"interests": TalkLines.interest_words(p),
 		"mood": mood_words.get(npc.mood, "calm"),
 		"fighting_speaker": npc.mood == Npc.Mood.ENGAGED and npc.foe == who,
 		"hits_from_speaker": npc.hits_from(who), "seconds_since_hit": npc.since_hit_by(who),
@@ -320,12 +321,14 @@ func _persona(npc: Node) -> Dictionary:
 	return TalkLines.persona(String(npc.name), String(npc.get("kind")), VoiceCast.sex(npc))
 
 
+## What the punter calls whoever is talking to them: just a bloke at the bar, by first name
+## if known (no "the farmer", or Claude keeps going on about farming).
 func _farmer_name(who: Node) -> String:
 	if "farmer" in who and who.get("farmer") is Dictionary:
 		var n := String((who.get("farmer") as Dictionary).get("name", ""))
 		if n != "":
-			return "The farmer " + n
-	return "A farmer"
+			return n.split(" ")[0].replace("\"", "")
+	return "Someone"
 
 
 func _remember(npc: Npc, who: String, line: String) -> void:

@@ -120,11 +120,43 @@ static func reply(kind: String, outcome: String, rng: RandomNumberGenerator) -> 
 	return String(pool[rng.randi_range(0, pool.size() - 1)])
 
 
-## {name, background, group} for an NPC, stable for its node name.
+## {name, background, group, interests} for an NPC, stable for its node name. Interests are
+## three of the second-homers' chatter topics (ChatterLines): what they bang on about when
+## you just have a chat.
 static func persona(npc_name: String, kind: String, sex: String) -> Dictionary:
 	var group := group_of(kind)
 	var h := absi(hash(npc_name + kind))
 	var names: Array = NAMES[group].get(sex, NAMES[group]["m"])
 	var bgs: Array = BACKGROUNDS[group]
+	var topics := ChatterLines.topics()
+	var interests: Array[StringName] = []
+	var i := h
+	while interests.size() < 3:
+		var t: StringName = topics[i % topics.size()]
+		if not t in interests:
+			interests.append(t)
+		i = i / 3 + 7
 	return {"name": String(names[h % names.size()]), "background": String(bgs[(h / 7) % bgs.size()]),
-		"group": group}
+		"group": group, "interests": interests}
+
+
+## Interests as words for Claude: "red wine, the second home, yoga".
+static func interest_words(p: Dictionary) -> String:
+	var words := PackedStringArray()
+	for t in p.get("interests", []):
+		words.append(String(t).replace("_", " "))
+	return ", ".join(words)
+
+
+## A stock reply, but small talk from second-homers and rugby lads is a proper line of their
+## chit-chat about one of their interests (dogs, Agas, the second home...), not a quip.
+static func reply_for(p: Dictionary, kind: String, outcome: String, rng: RandomNumberGenerator) -> String:
+	var group := group_of(kind)
+	if outcome == "chat" and group in ["posh", "rugby"] and not (p.get("interests", []) as Array).is_empty():
+		var interests: Array = p["interests"]
+		var topic: StringName = interests[rng.randi_range(0, interests.size() - 1)]
+		var part := "open" if rng.randf() < 0.6 else "more"
+		var t := ChatterLines.text(ChatterLines.pick(topic, part, rng))
+		if t != "":
+			return t
+	return reply(kind, outcome, rng)

@@ -107,6 +107,8 @@ func test_reading_the_words() -> void:
 		"'not sorry' isn't an apology")
 	_check(TalkIntent.classify("Evening! What are you drinking?")["intent"] == "chat", "small talk is chat")
 	_check(TalkIntent.classify("the cat sat on the mat")["intent"] == "none", "nonsense is nothing")
+	var sys: String = PunterMind.SYSTEM
+	_check(sys.contains("real conversation") and sys.contains("second home"), "Claude is told to chat, middle-class style")
 	_check(TalkIntent.classify("calm down", true)["intent"] == "calm",
 		"shouting 'calm down' is still trying to calm things")
 	_check(TalkIntent.normalise("Didn't MEAN it!!") == "didnt mean it", "normalising drops apostrophes")
@@ -116,7 +118,13 @@ func test_personas_and_stock_replies() -> void:
 	var a := TalkLines.persona("N3", "second_homer", "m")
 	_check(a == TalkLines.persona("N3", "second_homer", "m"), "a punter's persona is stable")
 	_check(a["name"] != "" and a["background"] != "" and a["group"] == "posh", "persona has a name and story")
+	_check((a["interests"] as Array).size() == 3, "persona has three interests to talk about")
 	var rng := RandomNumberGenerator.new()
+	var chit := {}
+	for line in ChatterLines.all_keys():
+		chit[ChatterLines.text(line)] = true
+	var small_talk := TalkLines.reply_for(a, "second_homer", "chat", rng)
+	_check(chit.has(small_talk), "a second-homer's small talk is real chit-chat, not a quip (%s)" % small_talk)
 	for kind in ["second_homer", "local", "rugby_lad", "police", "staff", "rambler"]:
 		for outcome in ["calmed", "unconvinced", "riled", "fuming", "cowed", "chat", "shrug", "nonsense"]:
 			_check(TalkLines.reply(kind, outcome, rng) != "", "%s has a %s reply" % [kind, outcome])

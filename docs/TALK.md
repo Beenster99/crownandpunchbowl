@@ -27,6 +27,11 @@ punter you're facing hears you. Settings live on the **Talk** tab.
    ElevenLabs if a key is set, else Piper on the PC using the same VCTK speakers as the
    recorded barks, else the Windows voices.
 
+Calm punters hold a proper conversation rather than trading quips: each has three interests
+from the second-homers' chatter topics (dogs, wine, the second home, yoga...). Claude is told
+to chat from middle-class values and not to keep bringing up fighting or farming. Without a
+key, posh punters' and rugby lads' small talk comes from `ChatterLines`.
+
 Bar staff answer but never fight, and nobody can hit them. Police are never talked down.
 
 ## Co-op

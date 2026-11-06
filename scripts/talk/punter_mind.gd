@@ -20,24 +20,36 @@ const TIMEOUT := 12.0
 ## Requests allowed per session (a night of play is maybe 100).
 const SESSION_CAP := 400
 
-const SYSTEM := """You voice the non-player characters in Crown and Punchbowl, a comic co-op \
-brawler set in rough village pubs in rural England. The players are local farmers. The pubs \
-are full of smug second-home owners from London, locals, rugby lads on tour, the occasional \
-copper, and bar staff. A player has just spoken out loud to the character you are playing, \
-using their microphone. Answer as that character, out loud, in one or two short sentences of \
-spoken British English (at most 25 words). Be funny and in character: satire aimed at the \
-characters' own smugness and pettiness, not at real groups of people. Mild swearing (bloody, \
-sod, git, pillock) is fine; no slurs. Never mention being an AI or a game. If the player says \
-something hateful, react with disgust in character.
+const SYSTEM := """You voice the characters drinking in a village pub in rural England, in a \
+comic co-op game. Most of the punters are well-off middle-class incomers with second homes; \
+there are also some locals, rugby lads on tour, the odd copper and the bar staff. Someone in \
+the pub has just spoken to the character you are playing. Answer as that character, out \
+loud, in one to three sentences of natural spoken British English (at most 40 words).
+
+Hold a real conversation. If the pub is calm and they're being friendly, chat like a real \
+person would: answer what they actually said, ask them something back, and talk about your \
+own life and interests. Middle-class characters talk from their values and preoccupations: \
+the dog, the car, the house and the extension, investments, red wine and single malts, their \
+job and their boss, the second home, holidays, gardening, yoga and pilates, wellness, telly, \
+sustainability and electric cars, school fees, the tax regime, who to vote for, and how the \
+village was nicer before. Be gently satirical about their smugness and lack of self-awareness, \
+but let them be people, not a string of jokes. Don't keep bringing up fighting, violence, or \
+what the speaker does for a living, and don't call them a farmer, unless they raise it or a \
+fight is actually going on with them.
+
+If a fight is on, or they're provoking you or apologising for hitting you, react to that \
+naturally. Mild swearing (bloody, sod, git, pillock) is fine; no slurs. Never mention being an \
+AI or a game. If they say something hateful, react with disgust in character.
 
 Also decide what the words did to your character, as `effect`:
-- calm_down: you are placated and stop fighting this farmer (a decent apology, a fair point, \
+- calm_down: you are placated and stop fighting this person (a decent apology, a fair point, \
 a pint offered, good humour). Harder if they have hit you a lot, or you are hot-headed.
 - stay_wary: not convinced; you keep your distance and watch them.
 - square_up: you are provoked and want a fight with them.
 - attack: so provoked you go for them right now.
 - cower: you want no part of it.
-- no_change: small talk, or nothing that changes your mood.
+- no_change: conversation, small talk, or nothing that changes your mood. Most friendly \
+chat is no_change.
 Bar staff and police never calm_down; bar staff never fight."""
 
 const SCHEMA := {
@@ -95,7 +107,7 @@ static func headers(key: String) -> PackedStringArray:
 static func build_body(situation: Dictionary, model_id := "claude-haiku-5-5") -> Dictionary:
 	return {
 		"model": model_id,
-		"max_tokens": 300,
+		"max_tokens": 400,
 		# Quick, snappy banter: no extended thinking, low effort, JSON out.
 		"thinking": {"type": "disabled"},
 		"output_config": {"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
@@ -112,14 +124,16 @@ static func describe(s: Dictionary) -> String:
 	lines.append("You are %s, %s." % [s.get("name", "a punter"), s.get("background", "a drinker in the pub")])
 	if s.has("temperament"):
 		lines.append("Temperament: %s." % s["temperament"])
+	if String(s.get("interests", "")) != "":
+		lines.append("Things you love talking about: %s." % s["interests"])
 	lines.append("Pub: %s. %s" % [s.get("pub", "the pub"), s.get("pub_state", "")])
 	lines.append("Your mood right now: %s." % s.get("mood", "calm"))
 	if bool(s.get("fighting_speaker", false)):
-		lines.append("You are in a fight with the farmer who is speaking.")
+		lines.append("You are in a fight with the person who is speaking.")
 	var hits := int(s.get("hits_from_speaker", 0))
 	if hits > 0:
 		var ago := float(s.get("seconds_since_hit", 999.0))
-		lines.append("This farmer has hit you %d time%s tonight, the last one %s." % [hits,
+		lines.append("They have hit you %d time%s tonight, the last one %s." % [hits,
 			"" if hits == 1 else "s", "just now" if ago < 4.0 else "%d seconds ago" % roundi(ago)])
 	if s.has("hurt"):
 		lines.append("You are %s." % s["hurt"])
@@ -128,7 +142,7 @@ static func describe(s: Dictionary) -> String:
 		lines.append("Earlier tonight:")
 		for h in history:
 			lines.append("  %s: \"%s\"" % [h[0], h[1]])
-	var farmer := String(s.get("farmer", "A farmer"))
+	var farmer := String(s.get("farmer", "Someone"))
 	lines.append("%s %s to you: \"%s\"" % [farmer, "shouts" if bool(s.get("shouted", false)) else "says",
 		String(s.get("said", "")).strip_edges()])
 	if String(s.get("hint", "")) != "":
@@ -169,8 +183,8 @@ static func clean_reply(text: String) -> String:
 	var t := text.strip_edges().replace("\n", " ")
 	if t.begins_with("\"") and t.ends_with("\"") and t.length() > 2:
 		t = t.substr(1, t.length() - 2)
-	if t.length() > 200:
-		t = t.substr(0, 197) + "..."
+	if t.length() > 280:
+		t = t.substr(0, 277) + "..."
 	return t
 
 
