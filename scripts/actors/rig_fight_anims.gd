@@ -314,6 +314,29 @@ static func _kicks_and_dirty(defs: Dictionary, guard: Dictionary) -> void:
 
 # --- Defence --------------------------------------------------------------------
 
+## The footwork loops a held guard (LB or RB) steps with.
+const GUARD_STEPS: Array[StringName] = [&"walk", &"walk_back", &"strafe_l", &"strafe_r"]
+## Joints a held guard owns while the legs walk underneath it.
+const GUARD_UPPER: Array[StringName] = [&"Spine", &"Chest", &"Head", &"ShoulderL", &"ElbowL", &"HandL",
+	&"ShoulderR", &"ElbowR", &"HandR", &"_fistL", &"_fistR", &"_brow"]
+
+
+## A footwork loop with the arms, chest and head held in `cover` on every key.
+static func _guarded_steps(walk: Dictionary, cover: Dictionary) -> Dictionary:
+	var out := walk.duplicate(true)
+	var keys: Array = []
+	for k in walk["keys"]:
+		var key: Array = (k as Array).duplicate()
+		var pose: Dictionary = (key[1] as Dictionary).duplicate()
+		for j in GUARD_UPPER:
+			if cover.has(j):
+				pose[j] = cover[j]
+		key[1] = pose
+		keys.append(key)
+	out["keys"] = keys
+	return out
+
+
 static func _defence(defs: Dictionary, guard: Dictionary) -> void:
 	# Head guard (LB): both gloves up in front of the face, elbows in, chin buried, peeking out between them.
 	var high := _w(guard, {&"Hips": Vector3(0, -10, 0), &"Spine": Vector3(-14, 6, 0), &"Head": Vector3(-22, 4, 0),
@@ -338,6 +361,11 @@ static func _defence(defs: Dictionary, guard: Dictionary) -> void:
 		[0.6, _w(low, {&"Spine": Vector3(-26, 8, 0), &"_hips": Vector3(0, -0.1, 0.01)})],
 		[1.2, low],
 	]}
+	# Moving with a guard up: the feet keep stepping (forward, back, to the side) under the cover.
+	for base in GUARD_STEPS:
+		if defs.has(base):
+			defs[StringName("guard_head_" + String(base))] = _guarded_steps(defs[base], high)
+			defs[StringName("guard_body_" + String(base))] = _guarded_steps(defs[base], low)
 	# Taking one on the guard: knocked back a touch, then reset.
 	var cover := _key(defs, &"block", 0)
 	defs[&"block_hit_head"] = {"length": 0.36, "keys": [

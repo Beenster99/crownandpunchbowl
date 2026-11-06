@@ -32,13 +32,18 @@ const ANIMATIONS: Array[StringName] = [
 	&"guard_head", &"guard_body", &"block_hit", &"block_hit_head", &"block_hit_body", &"parry_l", &"parry_r",
 	&"slip_l", &"slip_r", &"dodge_l", &"dodge_r", &"dodge_back", &"dodge_fwd",
 	&"hit_body", &"hit_body_l", &"hit_body_r", &"hit_uppercut", &"hit_front_b", &"groin_down", &"groin_hold", &"clinched",
+	# Stepping with a guard held: forward, back and to each side, under each cover.
+	&"guard_head_walk", &"guard_head_walk_back", &"guard_head_strafe_l", &"guard_head_strafe_r",
+	&"guard_body_walk", &"guard_body_walk_back", &"guard_body_strafe_l", &"guard_body_strafe_r",
 ]
 
 ## The calm idles a character picks from (by seed). Staff polish glasses instead.
 const CALM_IDLES: Array[StringName] = [&"idle_relaxed", &"idle_pint", &"idle_relaxed"]
 ## Standing loops that guard/talk changes switch between.
 const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
-	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r", &"guard_head", &"guard_body"]
+	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r", &"guard_head", &"guard_body",
+	&"guard_head_walk", &"guard_head_walk_back", &"guard_head_strafe_l", &"guard_head_strafe_r",
+	&"guard_body_walk", &"guard_body_walk_back", &"guard_body_strafe_l", &"guard_body_strafe_r"]
 ## Fighting stances, picked by seed so everyone squares up their own way.
 const FIGHT_IDLES: Array[StringName] = [&"idle", &"idle_brawler", &"idle", &"idle_wary", &"idle_brawler"]
 ## Strikes with more than one take. play_move() picks one at random each time.
@@ -483,6 +488,9 @@ func set_move_speed(speed: float) -> void:
 	_refresh_standing(0.15)
 	if current in [&"walk", &"walk_back", &"strafe_l", &"strafe_r"]:
 		anim.speed_scale = clampf(speed / 2.6, 0.6, 2.2)
+	elif String(current).begins_with("guard_") and _moving:
+		# Guarded steps are short: a slow shuffle still turns the feet over.
+		anim.speed_scale = clampf(speed / 1.6, 0.6, 2.2)
 	elif current == &"walk_relaxed":
 		anim.speed_scale = clampf(speed / 2.0, 0.6, 2.2)
 
@@ -512,16 +520,16 @@ func set_talking(on: bool) -> void:
 ## The idle or walk that fits right now.
 func _standing_anim() -> StringName:
 	if _guard_zone != &"":
+		if _moving:
+			# Covered up and moving: the feet still step under the guard, no gliding.
+			var stepping := StringName("guard_%s_%s" % [_guard_zone, _guard_step()])
+			if anim != null and anim.has_animation(stepping):
+				return stepping
 		return _block_anim() if _block_anim() != &"block" else &"idle"
 	if _moving:
 		if not guard:
 			return &"walk_relaxed"
-		var m := _move_local
-		if m.length() > 0.2 and absf(m.x) > absf(m.y) * 1.2:
-			return &"strafe_r" if m.x > 0.0 else &"strafe_l"
-		if m.y < -0.2 and absf(m.y) >= absf(m.x):
-			return &"walk_back"
-		return &"walk"
+		return _guard_step()
 	_merge_mixamo()
 	var fight := _available(_fight_idles)
 	if guard:
@@ -535,6 +543,16 @@ func _standing_anim() -> StringName:
 		return drunk[absi(look_seed) % drunk.size()]
 	var calm := _available(_calm_idles)
 	return calm[absi(look_seed) % calm.size()]
+
+
+## Which footwork loop fits the move direction with the fists up.
+func _guard_step() -> StringName:
+	var m := _move_local
+	if m.length() > 0.2 and absf(m.x) > absf(m.y) * 1.2:
+		return &"strafe_r" if m.x > 0.0 else &"strafe_l"
+	if m.y < -0.2 and absf(m.y) >= absf(m.x):
+		return &"walk_back"
+	return &"walk"
 
 
 func _refresh_standing(blend: float) -> void:
