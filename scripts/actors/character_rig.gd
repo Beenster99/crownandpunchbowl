@@ -32,13 +32,18 @@ const ANIMATIONS: Array[StringName] = [
 	&"guard_head", &"guard_body", &"block_hit", &"block_hit_head", &"block_hit_body", &"parry_l", &"parry_r",
 	&"slip_l", &"slip_r", &"dodge_l", &"dodge_r", &"dodge_back", &"dodge_fwd",
 	&"hit_body", &"hit_body_l", &"hit_body_r", &"hit_uppercut", &"hit_front_b", &"groin_down", &"groin_hold", &"clinched",
+	# Stepping with a guard held: forward, back and to each side, under each cover.
+	&"guard_head_walk", &"guard_head_walk_back", &"guard_head_strafe_l", &"guard_head_strafe_r",
+	&"guard_body_walk", &"guard_body_walk_back", &"guard_body_strafe_l", &"guard_body_strafe_r",
 ]
 
 ## The calm idles a character picks from (by seed). Staff polish glasses instead.
 const CALM_IDLES: Array[StringName] = [&"idle_relaxed", &"idle_pint", &"idle_relaxed"]
 ## Standing loops that guard/talk changes switch between.
 const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
-	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r", &"guard_head", &"guard_body"]
+	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r", &"guard_head", &"guard_body",
+	&"guard_head_walk", &"guard_head_walk_back", &"guard_head_strafe_l", &"guard_head_strafe_r",
+	&"guard_body_walk", &"guard_body_walk_back", &"guard_body_strafe_l", &"guard_body_strafe_r"]
 ## Fighting stances, picked by seed so everyone squares up their own way.
 const FIGHT_IDLES: Array[StringName] = [&"idle", &"idle_brawler", &"idle", &"idle_wary", &"idle_brawler"]
 ## Strikes with more than one take. play_move() picks one at random each time.
@@ -488,6 +493,9 @@ func set_move_speed(speed: float) -> void:
 	_refresh_standing(0.15)
 	if current in [&"walk", &"walk_back", &"strafe_l", &"strafe_r"]:
 		anim.speed_scale = clampf(speed / 2.6, 0.6, 2.2)
+	elif String(current).begins_with("guard_") and _moving:
+		# Guarded steps are short: a slow shuffle still turns the feet over.
+		anim.speed_scale = clampf(speed / 1.6, 0.6, 2.2)
 	elif current == &"walk_relaxed":
 		anim.speed_scale = clampf(speed / 2.0, 0.6, 2.2)
 
@@ -517,16 +525,16 @@ func set_talking(on: bool) -> void:
 ## The idle or walk that fits right now.
 func _standing_anim() -> StringName:
 	if _guard_zone != &"":
+		if _moving:
+			# Covered up and moving: the feet still step under the guard, no gliding.
+			var stepping := StringName("guard_%s_%s" % [_guard_zone, _guard_step()])
+			if anim != null and anim.has_animation(stepping):
+				return stepping
 		return _block_anim() if _block_anim() != &"block" else &"idle"
 	if _moving:
 		if not guard:
 			return &"walk_relaxed"
-		var m := _move_local
-		if m.length() > 0.2 and absf(m.x) > absf(m.y) * 1.2:
-			return &"strafe_r" if m.x > 0.0 else &"strafe_l"
-		if m.y < -0.2 and absf(m.y) >= absf(m.x):
-			return &"walk_back"
-		return &"walk"
+		return _guard_step()
 	_merge_mixamo()
 	var fight := _available(_fight_idles)
 	if guard:
@@ -540,6 +548,16 @@ func _standing_anim() -> StringName:
 		return drunk[absi(look_seed) % drunk.size()]
 	var calm := _available(_calm_idles)
 	return calm[absi(look_seed) % calm.size()]
+
+
+## Which footwork loop fits the move direction with the fists up.
+func _guard_step() -> StringName:
+	var m := _move_local
+	if m.length() > 0.2 and absf(m.x) > absf(m.y) * 1.2:
+		return &"strafe_r" if m.x > 0.0 else &"strafe_l"
+	if m.y < -0.2 and absf(m.y) >= absf(m.x):
+		return &"walk_back"
+	return &"walk"
 
 
 func _refresh_standing(blend: float) -> void:
@@ -1375,11 +1393,13 @@ static func _with(base: Dictionary, changes: Dictionary) -> Dictionary:
 func _anim_defs() -> Dictionary:
 	var lie := _lie
 	var fists := {&"_fistL": Vector3(1, 0, 0), &"_fistR": Vector3(1, 0, 0)}
-	# Boxing guard: bladed with the left side forward, chin tucked behind the fists, knees soft.
+	# Boxing guard (mid range): bladed with the left side forward, elbows down in front of the ribs,
+	# forearms up, the lead fist a little out at eye height and the rear fist by the cheek, chin
+	# tucked, knees soft.
 	var guard := _with(fists, {
 		&"Hips": Vector3(0, -16, 0), &"Spine": Vector3(-8, 9, 0), &"Head": Vector3(-8, 6, 0),
-		&"ShoulderL": Vector3(58, 0, 4), &"ElbowL": Vector3(124, 0, 0), &"HandL": Vector3(-10, 0, 0),
-		&"ShoulderR": Vector3(52, 0, -6), &"ElbowR": Vector3(132, 0, 0), &"HandR": Vector3(-10, 0, 0),
+		&"ShoulderL": Vector3(50, -25, 25), &"ElbowL": Vector3(115, 0, 0), &"HandL": Vector3(0, -70, 0),
+		&"ShoulderR": Vector3(40, 30, -30), &"ElbowR": Vector3(136, 0, 0), &"HandR": Vector3(0, 70, 0),
 		&"HipL": Vector3(16, 0, -6), &"KneeL": Vector3(-18, 0, 0), &"HipR": Vector3(-10, 0, 6), &"KneeR": Vector3(-16, 0, 0),
 		&"_hips": Vector3(0, -0.02, 0), &"_brow": Vector3(0.6, 0, 0),
 	})
@@ -1426,10 +1446,10 @@ func _anim_defs() -> Dictionary:
 	defs[&"idle"] = {"length": 1.2, "loop": true, "keys": [
 		[0.0, guard],
 		[0.3, _with(guard, {&"_hips": Vector3(0.008, -0.035, 0), &"KneeL": Vector3(-24, 0, 0), &"KneeR": Vector3(-22, 0, 0),
-			&"ShoulderL": Vector3(54, 0, 6), &"ElbowL": Vector3(120, 0, 0), &"Spine": Vector3(-10, 11, 0)})],
-		[0.6, _with(guard, {&"_hips": Vector3(0, -0.015, 0), &"ShoulderR": Vector3(56, 0, -4)})],
+			&"ShoulderL": Vector3(47, -25, 25), &"ElbowL": Vector3(112, 0, 0), &"Spine": Vector3(-10, 11, 0)})],
+		[0.6, _with(guard, {&"_hips": Vector3(0, -0.015, 0), &"ShoulderR": Vector3(43, 30, -30)})],
 		[0.9, _with(guard, {&"_hips": Vector3(-0.008, -0.035, 0), &"KneeL": Vector3(-24, 0, 0), &"KneeR": Vector3(-22, 0, 0),
-			&"ShoulderR": Vector3(50, 0, -8), &"ElbowR": Vector3(128, 0, 0), &"Spine": Vector3(-9, 7, 0), &"Head": Vector3(-9, 9, 0)})],
+			&"ShoulderR": Vector3(38, 30, -30), &"ElbowR": Vector3(132, 0, 0), &"Spine": Vector3(-9, 7, 0), &"Head": Vector3(-9, 9, 0)})],
 		[1.2, guard],
 	]}
 	var step := _with(guard, {&"Spine": Vector3(-10, 14, 0), &"HipL": Vector3(32, 0, -6), &"KneeL": Vector3(-12, 0, 0),

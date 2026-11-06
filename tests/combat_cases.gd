@@ -30,7 +30,8 @@ func run() -> void:
 		"test_hook_knocks_head_sideways", "test_one_punch_doesnt_drop_a_fresh_man",
 		"test_punches_can_miss", "test_no_stick_punch_goes_straight", "test_foe_health_bar",
 		"test_stamina", "test_jabs_crush_a_guard", "test_body_shots_sap_stamina", "test_power_shot",
-		"test_punish_a_miss", "test_player_holds_for_power",
+		"test_punish_a_miss", "test_player_holds_for_power", "test_clean_shot_into_the_gap",
+		"test_perfect_parry",
 	]
 	# COMBAT_ONLY=test_a,test_b runs just those.
 	var only := OS.get_environment("COMBAT_ONLY")
@@ -1234,3 +1235,64 @@ func test_player_holds_for_power() -> void:
 	_check(p.state == Fighter.State.ATTACK, "letting go throws it")
 	await _until_free(p)
 	_check(not p.button(&"jab", false, false, false, true), "jabs don't load: they're quick")
+
+
+func test_clean_shot_into_the_gap() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	var bars := FoeHealthBars.new()
+	bars.player = p
+	p.add_child(bars)
+	await _wait(0.1)
+	_check(e.open_zone() == &"", "a man just stood there shows nothing")
+	e.request_block(true, Moves.GUARD_HEAD)
+	await _wait(0.4)
+	_check(e.open_zone() == Moves.GUARD_BODY, "covering up high leaves the body open")
+	p.stance_target = e
+	await _wait(0.1)
+	var bar := bars.bar_for(e)
+	var word := bar.get_node_or_null("Opening") as Label3D if bar != null else null
+	_check(word != null and word.text == "BODY OPEN", "the bar says where he's open (%s)" % [word.text if word else "none"])
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	var hp := e.hp
+	p.request_attack(&"body_jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("opening", false)) and not bool(hits[0].get("blocked", false)),
+		"a body shot under a high guard is a clean shot")
+	_check(is_equal_approx(hp - e.hp, 4.0 * Moves.CLEAN_BONUS), "and hits harder (%.2f)" % (hp - e.hp))
+	# The same shot into the guard is just blocked.
+	await _until_free(e)
+	e.request_block(true, Moves.GUARD_BODY)
+	await _wait(0.4)
+	hits.clear()
+	p.request_attack(&"body_jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("blocked", false)) and not bool(hits[0].get("opening", false)),
+		"into the guard it's blocked")
+
+
+func test_perfect_parry() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	await _wait(0.1)
+	var taken := []
+	p.hit_taken.connect(func(info): taken.append(info))
+	e.request_attack(&"swing", p)
+	while e.state == Fighter.State.WINDUP and e.windup_remaining() > 0.05:
+		await get_tree().physics_frame
+	p.request_block(true, Moves.GUARD_HEAD)
+	await _wait(0.3)
+	_check(taken.size() == 1 and bool(taken[0].get("parried", false)) and bool(taken[0].get("perfect", false)),
+		"a guard raised at the last moment is a perfect parry")
+	# Raised early it still blocks, but it's no read.
+	await _until_free(e)
+	await _wait(1.2)
+	p.request_block(false)
+	await _wait(0.1)
+	taken.clear()
+	p.request_block(true, Moves.GUARD_HEAD)
+	e.request_attack(&"swing", p)
+	await _until_free(e)
+	_check(taken.size() == 1 and not bool(taken[0].get("perfect", false)), "an early guard isn't a perfect read")

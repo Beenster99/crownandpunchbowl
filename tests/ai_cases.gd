@@ -18,7 +18,7 @@ func run() -> void:
 		"test_mates_join_in", "test_attack_tokens_cap", "test_gang_up_rush",
 		"test_held_punter_struggles_free", "test_bar_staff", "test_waves_and_cleared",
 		"test_police_raid", "test_cooling_off", "test_one_or_two_at_a_time",
-		"test_punters_counter_cover_and_breathe",
+		"test_punters_counter_cover_and_breathe", "test_guard_follows_the_shots",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -412,6 +412,8 @@ func test_punters_counter_cover_and_breathe() -> void:
 	t["defence"] = 1.0
 	t["guard_skill"] = 1.0
 	npc._type = t
+	var speed := npc.move_speed
+	npc.move_speed = 0.0  # stand still for the exchange (he'd circle back out of reach)
 	npc.engage(p, true)
 	npc._attack_cd = 99.0  # not throwing anything of his own here
 	npc.global_position = Vector3(0, 0, -1.2)
@@ -421,8 +423,18 @@ func test_punters_counter_cover_and_breathe() -> void:
 	var tells := []
 	var cb := func(a, _t, _s): tells.append(a)
 	Events.attack_telegraphed.connect(cb)
-	p.request_attack(&"jab", npc)
-	await _wait(1.0)
+	# (Now and then he steps back out of it instead: keep jabbing until one lands on the gloves.)
+	var blocked := []
+	var bcb := func(i): if bool(i.get("blocked", false)): blocked.append(i)
+	npc.hit_taken.connect(bcb)
+	for attempt in 6:
+		npc.global_position = Vector3(0, 0, -1.2)
+		await _until_can_act(p)
+		p.request_attack(&"jab", npc)
+		await _wait(1.0)
+		if not blocked.is_empty():
+			break
+	npc.hit_taken.disconnect(bcb)
 	Events.attack_telegraphed.disconnect(cb)
 	_check(npc.current_move == &"counter_jab" or tells.has(npc),
 		"a jab on his gloves gets a counter jab back (%s)" % [npc.current_move])
@@ -439,6 +451,8 @@ func test_punters_counter_cover_and_breathe() -> void:
 	# Gassed: he backs off and won't come in until he's got his breath.
 	npc.request_block(false)
 	await _wait(0.1)
+	npc.move_speed = speed
+	npc.global_position = Vector3(0, 0, -1.2)
 	npc.stamina = 5.0
 	npc._attack_cd = 0.0
 	npc._recover_t = 0.0
@@ -447,3 +461,35 @@ func test_punters_counter_cover_and_breathe() -> void:
 	_check(npc.global_position.distance_to(p.global_position) > start + 0.3,
 		"a gassed punter backs off to breathe (%.2f -> %.2f)" % [start,
 		npc.global_position.distance_to(p.global_position)])
+
+
+## Squared up in range, a punter holds a guard between attacks, and it follows the shots:
+## work his body and the elbows come down, leaving the head.
+func test_guard_follows_the_shots() -> void:
+	var d := _director()
+	var p := _player(Vector3(0, 0, 0), 1000.0)
+	var npc := d.spawn(&"police", Vector3(0, 0, -1.6))
+	await _wait(0.1)
+	var t: Dictionary = npc._type.duplicate()
+	t["defence"] = 1.0
+	t["guard_skill"] = 1.0
+	npc._type = t
+	npc.move_speed = 0.0
+	npc.engage(p, true)
+	npc._attack_cd = 99.0
+	var high := false
+	for i in 90:
+		await get_tree().physics_frame
+		high = high or (npc.state == Fighter.State.BLOCK and npc.guard_zone == Moves.GUARD_HEAD)
+	_check(high, "squared up close, he keeps a high guard up")
+	_check(npc.open_zone() == Moves.GUARD_BODY, "which leaves the body open (%s)" % npc.open_zone())
+	# Dig the body (round the guard, as if it had got through) and the guard drops to cover it.
+	for i in 3:
+		npc.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3(0, 0, -1), "zone": Moves.GUARD_BODY,
+			"stagger": 0.1})
+		await _wait(0.3)
+	var low := false
+	for i in 120:
+		await get_tree().physics_frame
+		low = low or (npc.state == Fighter.State.BLOCK and npc.guard_zone == Moves.GUARD_BODY)
+	_check(low, "after body shots he covers the body instead (%s)" % [npc._zone_heat])

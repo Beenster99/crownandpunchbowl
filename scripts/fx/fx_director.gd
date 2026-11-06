@@ -311,6 +311,18 @@ func hit_stop(seconds: float) -> void:
 	_hit_stop_until = maxi(_hit_stop_until, Time.get_ticks_usec() + int(seconds * 1_000_000.0))
 
 
+## A beat of slow motion (a perfect parry or slip): time runs at `scale` for `seconds` of
+## real time. Only in solo play; online, every peer has to keep the same clock.
+func slow_mo(seconds: float, scale: float) -> void:
+	if seconds <= 0.0 or (multiplayer.has_multiplayer_peer() and not multiplayer.get_peers().is_empty()):
+		return
+	if not _hit_stop_active:
+		_hit_stop_base = Engine.time_scale
+		_hit_stop_active = true
+	Engine.time_scale = minf(_hit_stop_base, maxf(scale, hit_stop_time_scale))
+	_hit_stop_until = maxi(_hit_stop_until, Time.get_ticks_usec() + int(seconds * 1_000_000.0))
+
+
 func shake(amount: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam and cam.has_method("add_shake"):

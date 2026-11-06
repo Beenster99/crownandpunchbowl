@@ -124,6 +124,14 @@ const CHARGE_HOLD := 0.5            ## held at full power this long, it goes on 
 const POWER_MAX := 1.9              ## damage (and stagger/poise) multiplier at full power
 const POWER_MIN := 0.15             ## less charge than this is just a normal punch
 const POWER_STAMINA := 0.8          ## a full-power shot costs this much extra (x its cost)
+## A punch that goes into the gap in a guard (at the body of a man covering his head, or the
+## head of one covering his body) is a clean shot: harder, heavier, and it rocks him.
+const CLEAN_BONUS := 1.35
+## A parry or slip timed this close to the punch landing is a perfect read: time dips for a
+## beat (solo only) and the counter window opens as usual.
+const PERFECT_WINDOW := 0.1
+const PERFECT_SLOWMO := 0.35        ## seconds of slow motion (real time)
+const PERFECT_TIME_SCALE := 0.3
 ## Catch a man in the recovery of a punch (above all one that missed) and it's a punish.
 const PUNISH_BONUS := 1.35
 const NOSE_BREAK_DAMAGE := 9.0     ## a face hit this hard can break a nose
