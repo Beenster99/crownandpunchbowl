@@ -22,18 +22,46 @@ const ANIMATIONS: Array[StringName] = [
 	&"cheer", &"taunt", &"block", &"hook_l", &"hook_r", &"uppercut_r", &"hit_left", &"hit_right",
 	# Calm, before anyone kicks off: relaxed stances, a pint, chatting, staff polishing.
 	&"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
+	# The fight set (RigFightAnims): stances, footwork, punch variants, body shots, kicks,
+	# the clinch knee, shoulder charge and groin kick, guards, parries, slips and dodges,
+	# and the reactions that go with them.
+	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r",
+	&"punch_l_b", &"punch_l_c", &"punch_r_b", &"hook_l_b", &"hook_r_b", &"uppercut_l", &"uppercut_r_b", &"headbutt_b",
+	&"jab_body", &"cross_body", &"hook_l_body", &"hook_r_body", &"uppercut_body",
+	&"kick_b", &"kick_low", &"groin_kick", &"clinch_knee", &"shoulder_charge", &"body_swing",
+	&"guard_head", &"guard_body", &"block_hit", &"block_hit_head", &"block_hit_body", &"parry_l", &"parry_r",
+	&"slip_l", &"slip_r", &"dodge_l", &"dodge_r", &"dodge_back", &"dodge_fwd",
+	&"hit_body", &"hit_body_l", &"hit_body_r", &"hit_uppercut", &"hit_front_b", &"groin_down", &"groin_hold", &"clinched",
 ]
 
 ## The calm idles a character picks from (by seed). Staff polish glasses instead.
 const CALM_IDLES: Array[StringName] = [&"idle_relaxed", &"idle_pint", &"idle_relaxed"]
 ## Standing loops that guard/talk changes switch between.
-const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed"]
+const STANDING: Array[StringName] = [&"idle", &"walk", &"idle_relaxed", &"idle_pint", &"idle_chat", &"idle_polish", &"walk_relaxed",
+	&"idle_brawler", &"idle_wary", &"walk_back", &"strafe_l", &"strafe_r", &"guard_head", &"guard_body"]
+## Fighting stances, picked by seed so everyone squares up their own way.
+const FIGHT_IDLES: Array[StringName] = [&"idle", &"idle_brawler", &"idle", &"idle_wary", &"idle_brawler"]
+## Strikes with more than one take. play_move() picks one at random each time.
+const VARIANTS := {
+	&"punch_l": [&"punch_l", &"punch_l_b", &"punch_l_c"], &"punch_r": [&"punch_r", &"punch_r_b"],
+	&"hook_l": [&"hook_l", &"hook_l_b"], &"hook_r": [&"hook_r", &"hook_r_b"],
+	&"uppercut_r": [&"uppercut_r", &"uppercut_r_b", &"uppercut_l"], &"kick": [&"kick", &"kick_b", &"kick_low"],
+	&"headbutt": [&"headbutt", &"headbutt_b"], &"hook_l_body": [&"hook_l_body", &"hook_r_body"],
+	&"hit_front": [&"hit_front", &"hit_front_b"],
+}
+## Body-shot takes of a move, for play_move(move, &"body").
+const BODY_ANIMS := {
+	"jab": &"jab_body", "punch_l": &"jab_body", "cross": &"cross_body", "punch_r": &"cross_body",
+	"hook": &"hook_l_body", "hook_l": &"hook_l_body", "hook_r": &"hook_r_body", "uppercut": &"uppercut_body",
+	"uppercut_r": &"uppercut_body", "swing": &"body_swing", "haymaker": &"body_swing",
+}
 
 ## Fighter state name (lower case, as in Fighter.State) -> animation.
 const STATE_ANIMS := {
 	"idle": &"idle", "attack": &"punch_r", "windup": &"windup", "stagger": &"stagger",
 	"down": &"knockdown", "crawl": &"crawl", "ko": &"ko", "held": &"held_struggle",
-	"grabbing": &"grab", "dodge": &"dodge", "block": &"block",
+	"grabbing": &"grab", "dodge": &"dodge", "block": &"block", "doubled": &"groin_hold", "parry": &"parry_l",
+	"clinched": &"clinched",
 }
 
 ## Move names (as in Events.hit_landed "move") -> animation. "punch" alternates hands.
@@ -45,16 +73,25 @@ const MOVE_ANIMS := {
 	"jab": &"punch_l", "cross": &"punch_r", "hook": &"hook_r", "uppercut": &"uppercut_r",
 	"hook_l": &"hook_l", "hook_r": &"hook_r", "uppercut_r": &"uppercut_r",
 	"haymaker": &"punch_r", "counter": &"punch_r", "counter_whiff": &"dodge", "shove": &"punch_l",
-	"knee": &"kick", "stomp": &"kick", "baton": &"swing",
+	"knee": &"clinch_knee", "stomp": &"kick", "baton": &"swing",
+	"clinch_knee": &"clinch_knee", "groin_kick": &"groin_kick", "shoulder_charge": &"shoulder_charge",
+	"body_swing": &"body_swing", "body_jab": &"jab_body", "body_hook": &"hook_l_body", "body_uppercut": &"uppercut_body",
+	"parry": &"parry_l", "slip_l": &"slip_l", "slip_r": &"slip_r",
 }
 
 ## One-shots that hand over to another animation when they finish.
-const CHAINS := {&"knockdown": &"down", &"grab": &"hold"}
+const CHAINS := {&"knockdown": &"down", &"grab": &"hold", &"groin_down": &"groin_hold"}
 ## One-shots that go back to idle (or walk) when they finish.
 const RETURNS_TO_IDLE: Array[StringName] = [
 	&"punch_l", &"punch_r", &"kick", &"headbutt", &"swing", &"throw", &"hit_front",
 	&"hit_back", &"stagger", &"get_up", &"drink", &"eat", &"dodge", &"cheer", &"taunt",
 	&"hook_l", &"hook_r", &"uppercut_r", &"hit_left", &"hit_right",
+	&"punch_l_b", &"punch_l_c", &"punch_r_b", &"hook_l_b", &"hook_r_b", &"uppercut_l", &"uppercut_r_b", &"headbutt_b",
+	&"jab_body", &"cross_body", &"hook_l_body", &"hook_r_body", &"uppercut_body",
+	&"kick_b", &"kick_low", &"groin_kick", &"clinch_knee", &"shoulder_charge", &"body_swing",
+	&"block_hit", &"block_hit_head", &"block_hit_body", &"parry_l", &"parry_r", &"slip_l", &"slip_r",
+	&"dodge_l", &"dodge_r", &"dodge_back", &"dodge_fwd",
+	&"hit_body", &"hit_body_l", &"hit_body_r", &"hit_uppercut", &"hit_front_b",
 ]
 ## Lying on the floor. Drunken sway is switched off for these.
 const ON_FLOOR: Array[StringName] = [&"knockdown", &"down", &"crawl", &"ko"]
@@ -141,6 +178,10 @@ var _windup_hold := -1.0  # freeze the lead-in here (the loaded pose) until rele
 var _strike_anim := &""   # what release_strike() plays, from its load time
 var _model_path := ""
 var _timing := {}  # anim name -> Vector2(load, contact)
+var _kneel := -0.45  # hips offset that puts the knees on the floor
+var _reactor: RigReactor
+var _guard_zone := &""  # "", "head" (LB) or "body" (RB)
+var _move_local := Vector2.ZERO  # x right, y forward, m/s
 
 static var _lib_cache := {}
 
@@ -156,6 +197,9 @@ func _process(delta: float) -> void:
 	if _model == null or look == null:
 		return
 	_tick_windup()
+	if _reactor:
+		_reactor.active = not ragdolling
+		_reactor.breath = 1.0 + clampf(_blood, 0.0, 1.0)
 	_time += delta
 	var w := 0.0 if ON_FLOOR.has(current) or ragdolling else look.sway
 	_model.rotation.z = sin(_time * 1.3) * 0.07 * w
@@ -186,6 +230,10 @@ func play_state(state_name: String) -> void:
 		start_ragdoll(dir.normalized() * ragdoll_impulse + Vector3.UP * ragdoll_impulse * 0.25)
 	elif key == "idle":
 		play(_standing_anim())
+	elif key == "block":
+		play(_block_anim())
+	elif key == "doubled" and current in [&"groin_down", &"groin_hold"]:
+		return
 	elif STATE_ANIMS.has(key):
 		play(STATE_ANIMS[key])
 	else:
@@ -193,13 +241,12 @@ func play_state(state_name: String) -> void:
 
 
 ## Plays an attack or action by move name. "punch" alternates left and right.
-func play_move(move: String) -> void:
+## zone &"body" throws the body-shot take of the move where there is one.
+func play_move(move: String, zone := &"head") -> void:
 	guard = true
-	if move == "punch":
-		play(&"punch_l" if _next_punch_left else &"punch_r", 0.05)
-		_next_punch_left = not _next_punch_left
-	elif MOVE_ANIMS.has(move):
-		play(MOVE_ANIMS[move], 0.05)
+	var a := _strike_for(move, zone)
+	if a != &"":
+		play(a, 0.05)
 	else:
 		push_warning("CharacterRig: no animation for move '%s'" % move)
 
@@ -215,8 +262,8 @@ const _WINDUP_LEADS := {"haymaker": &"windup"}
 ## Lines up a move over `seconds`: plays the strike's load slowly into the loaded pose
 ## (most of the way through the wind-up) and holds it there, so you can see the punch
 ## coming. release_strike() then throws it. Falls back to play_move() for unknown moves.
-func play_windup(move: String, seconds: float) -> void:
-	var strike := _strike_for(move)
+func play_windup(move: String, seconds: float, zone := &"head") -> void:
+	var strike := _strike_for(move, zone)
 	if strike == &"" or anim == null or not anim.has_animation(strike):
 		play_move(move)
 		return
@@ -245,10 +292,27 @@ func release_strike() -> void:
 	anim.seek(_load_time(strike), true)
 
 
-func _strike_for(move: String) -> StringName:
-	if move == "hook" and anim != null and anim.has_animation(&"hook_r"):
-		return &"hook_r"
-	return MOVE_ANIMS.get(move, &"")
+## The animation for a move, with a random take where there are several.
+func _strike_for(move: String, zone := &"head") -> StringName:
+	var base: StringName = &""
+	if move == "punch":
+		base = &"punch_l" if _next_punch_left else &"punch_r"
+		_next_punch_left = not _next_punch_left
+	elif zone == &"body" and BODY_ANIMS.has(move):
+		base = BODY_ANIMS[move]
+	elif move == "hook":
+		base = &"hook_r"  # B is always the right hand
+	else:
+		base = MOVE_ANIMS.get(move, &"")
+	return _variant(base)
+
+
+func _variant(base: StringName) -> StringName:
+	if not VARIANTS.has(base) or Engine.is_editor_hint():
+		return base
+	var takes: Array = VARIANTS[base]
+	var pick: StringName = takes[randi() % takes.size()]
+	return pick if anim == null or anim.has_animation(pick) else base
 
 
 func _load_time(anim_name: StringName) -> float:
@@ -273,10 +337,33 @@ func _tick_windup() -> void:
 
 ## Plays a hit reaction. Pass the hit's world direction (attacker to victim) so a KO
 ## that follows throws the ragdoll the right way.
-func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> void:
+## zone is &"head", &"body" or &"groin" (down on all fours). move is the attacker's move
+## id, if known (an uppercut throws the head up). The head snaps away from the blow on a
+## spring (RigReactor) on top of whichever reaction plays.
+func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO, zone := &"head", move := "") -> void:
 	guard = true
 	if direction != Vector3.ZERO:
 		_last_hit = direction
+	var side := 0.0
+	var push := Vector3.BACK if from_front else Vector3.FORWARD
+	if direction.length() > 0.01 and is_inside_tree():
+		push = global_basis.inverse() * direction.normalized()
+		side = global_basis.x.normalized().dot(direction.normalized())
+	var upper := move.begins_with("uppercut") or move in ["uppercut_r", "uppercut_l", "clinch_knee", "knee"]
+	if _reactor:
+		_reactor.hit(push, zone, (2.2 if heavy else 1.2) + (0.6 if absf(side) > 0.45 else 0.0), upper)
+	match zone:
+		&"groin":
+			play(&"groin_down", 0.05)
+			return
+		&"body":
+			if side > 0.45:
+				play(&"hit_body_l", 0.03)
+			elif side < -0.45:
+				play(&"hit_body_r", 0.03)
+			else:
+				play(&"hit_body", 0.03)
+			return
 	if heavy:
 		play(&"stagger", 0.04)
 		return
@@ -284,23 +371,97 @@ func play_hit(from_front := true, heavy := false, direction := Vector3.ZERO) -> 
 		play(&"hit_back", 0.03)
 		return
 	# From the front: a blow coming across (a hook) whips the head round to that side.
-	var side := 0.0
-	if direction.length() > 0.01 and is_inside_tree():
-		side = global_basis.x.normalized().dot(direction.normalized())
 	if side > 0.45:
 		play(&"hit_left", 0.03)  # pushed to our right: struck on the left
 	elif side < -0.45:
 		play(&"hit_right", 0.03)
+	elif upper:
+		play(&"hit_uppercut", 0.03)
 	else:
-		play(&"hit_front", 0.03)
+		play(_variant(&"hit_front"), 0.03)
+
+
+## A blow taken on the guard: a small knock back in whichever cover is up.
+func play_block_hit(direction := Vector3.ZERO, zone := &"head") -> void:
+	if _reactor:
+		var push := global_basis.inverse() * direction.normalized() if direction.length() > 0.01 and is_inside_tree() else Vector3.BACK
+		_reactor.hit(push, &"head", 0.35)
+	if _guard_zone == &"body" or zone == &"body":
+		play(&"block_hit_body", 0.03)
+	elif _guard_zone == &"head":
+		play(&"block_hit_head", 0.03)
+	else:
+		play(&"block_hit", 0.03)
+
+
+## Which cover is up: &"" (the normal guard), &"head" (LB) or &"body" (RB).
+func set_guard_zone(zone: StringName) -> void:
+	if zone == _guard_zone:
+		return
+	_guard_zone = zone
+	if zone != &"":
+		guard = true
+	if current in [&"block", &"guard_head", &"guard_body"]:
+		play(_block_anim(), 0.12)
+	else:
+		_refresh_standing(0.12)
+
+
+func _block_anim() -> StringName:
+	match _guard_zone:
+		&"head":
+			return &"guard_head"
+		&"body":
+			return &"guard_body"
+	return &"block"
+
+
+## Head movement from the right stick: x slips (+ right), y ducks (+ down) or leans back
+## (- up), -1..1. Layered over whatever is playing. Call every frame.
+func set_head_bob(v: Vector2) -> void:
+	if _reactor:
+		_reactor.set_bob(v)
+
+
+## A dodge in a world direction: a step left, right, back or a dip forward, relative to facing.
+func play_dodge(world_dir: Vector3) -> void:
+	guard = true
+	var d := Vector3.ZERO
+	if world_dir.length() > 0.01 and is_inside_tree():
+		d = global_basis.inverse() * world_dir.normalized()
+	if d.length() < 0.01:
+		play(&"dodge", 0.04)  # no direction: duck under it
+	elif absf(d.x) >= absf(d.z):
+		play(&"dodge_r" if d.x > 0.0 else &"dodge_l", 0.04)
+	else:
+		play(&"dodge_back" if d.z > 0.0 else &"dodge_fwd", 0.04)
+
+
+## A parry: the lead hand slaps it away, now and then the rear hand catches it.
+func play_parry() -> void:
+	guard = true
+	play(&"parry_r" if randf() < 0.3 else &"parry_l", 0.03)
+
+
+## Head dragged down into a clinch, for the victim of a clinch knee.
+func play_clinched() -> void:
+	play(&"clinched", 0.08)
 
 
 ## Call every frame with horizontal speed in m/s. Switches between idle and walk.
 func set_move_speed(speed: float) -> void:
 	_moving = speed > 0.2
 	_refresh_standing(0.15)
-	if current == &"walk" or current == &"walk_relaxed":
-		anim.speed_scale = clampf(speed / (2.6 if current == &"walk" else 2.0), 0.6, 2.2)
+	if current in [&"walk", &"walk_back", &"strafe_l", &"strafe_r"]:
+		anim.speed_scale = clampf(speed / 2.6, 0.6, 2.2)
+	elif current == &"walk_relaxed":
+		anim.speed_scale = clampf(speed / 2.0, 0.6, 2.2)
+
+
+## Velocity in the character's own frame (x right, y forward), m/s. With the guard up,
+## picks walking, backing off or side-stepping. Call before set_move_speed().
+func set_move_vector(local: Vector2) -> void:
+	_move_local = local
 
 
 ## Fists up (a fight is on) or relaxed (calm pub). Blends over if standing or walking.
@@ -321,10 +482,19 @@ func set_talking(on: bool) -> void:
 
 ## The idle or walk that fits right now.
 func _standing_anim() -> StringName:
+	if _guard_zone != &"":
+		return _block_anim() if _block_anim() != &"block" else &"idle"
 	if _moving:
-		return &"walk" if guard else &"walk_relaxed"
+		if not guard:
+			return &"walk_relaxed"
+		var m := _move_local
+		if m.length() > 0.2 and absf(m.x) > absf(m.y) * 1.2:
+			return &"strafe_r" if m.x > 0.0 else &"strafe_l"
+		if m.y < -0.2 and absf(m.y) >= absf(m.x):
+			return &"walk_back"
+		return &"walk"
 	if guard:
-		return &"idle"
+		return FIGHT_IDLES[absi(look_seed) % FIGHT_IDLES.size()]
 	if talking:
 		return &"idle_chat"
 	if staff:
@@ -457,9 +627,16 @@ func rebuild() -> void:
 	_scale = look.model_height
 	var hips_rest: Vector3 = (_rest_global[_bone[&"Hips"]] as Transform3D).origin
 	_lie = ((0.15 * look.girth + 0.04 * look.belly) * look.model_height - hips_rest.y) / _scale
+	# Kneeling: the hips come down by the height of the knee, less a little for the kneecap.
+	var knee_y: float = (_rest_global[_bone[&"KneeL"]] as Transform3D).origin.y
+	_kneel = -(knee_y - 0.035 * _scale) / _scale
 	_dress()
 	_build_sockets()
 	_build_animations()
+	_reactor = RigReactor.new()
+	_reactor.name = "Reactor"
+	_reactor.setup(self, skeleton)
+	skeleton.add_child(_reactor)
 	if not Engine.is_editor_hint():
 		_build_ragdoll()
 	set_blood(_blood)
@@ -664,7 +841,7 @@ func _build_animations() -> void:
 	anim.root_node = anim.get_path_to(_model)
 	# Baking is the slow part, and every character built from the same model and build gets
 	# the same result, so a crowd shares one library per model.
-	var key := "%s|%.2f|%.3f" % [_model_path, _lie, _scale]
+	var key := "%s|%.2f|%.3f|%.3f" % [_model_path, _lie, _scale, _kneel]
 	if not _lib_cache.has(key) or Engine.is_editor_hint():
 		var lib := AnimationLibrary.new()
 		var defs := _anim_defs()
@@ -931,6 +1108,7 @@ func _anim_defs() -> Dictionary:
 
 	var defs := {}
 	_calm_defs(defs, relaxed)
+	var fight_pain := {&"_jaw": Vector3(0.55, 0, 0), &"_brow": Vector3(-0.9, 0, 0), &"_fistL": Vector3(0.6, 0, 0), &"_fistR": Vector3(0.6, 0, 0)}
 
 	# --- Stance and footwork ------------------------------------------------
 	# On the balls of the feet: a small bounce, hands circling, eyes on the man in front.
@@ -1222,6 +1400,7 @@ func _anim_defs() -> Dictionary:
 	defs[&"taunt"] = {"length": 1.4, "keys": [
 		[0.0, guard], [0.25, beckon], [0.45, curl], [0.65, beckon], [0.85, curl], [1.05, beckon], [1.4, guard],
 	]}
+	RigFightAnims.add(defs, guard, fight_pain, _kneel)
 	return defs
 
 

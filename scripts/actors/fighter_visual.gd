@@ -82,6 +82,8 @@ func _process(_delta: float) -> void:
 	if fighter == null or rig == null:
 		return
 	var v := fighter.velocity
+	var local := fighter.global_basis.inverse() * Vector3(v.x, 0.0, v.z)
+	rig.set_move_vector(Vector2(local.x, -local.z))  # facing is -Z
 	rig.set_move_speed(Vector2(v.x, v.z).length())
 	# Clients see `state` arrive through the state synchroniser, which doesn't fire
 	# state_changed; catch those changes here.
@@ -126,7 +128,11 @@ func _play_state(s: int) -> void:
 		return
 	if key == "windup":
 		return
-	if key == "stagger" and rig.current in [&"hit_front", &"hit_back"]:
+	if key == "stagger" and rig.current in [&"hit_front", &"hit_back", &"hit_front_b", &"hit_left", &"hit_right",
+			&"hit_uppercut", &"hit_body", &"hit_body_l", &"hit_body_r"]:
+		return
+	if key == "dodge":
+		rig.play_dodge(fighter.velocity)
 		return
 	rig.play_state(key)
 
@@ -144,16 +150,24 @@ func _on_move_started(move_id: StringName) -> void:
 
 
 func _on_hit_taken(info: Dictionary) -> void:
-	if fighter.is_down() or bool(info.get("blocked", false)) or bool(info.get("parried", false)):
-		return  # a hit taken on the guard keeps the block pose
+	if fighter.is_down():
+		return
 	var from_front := true
-	var dir := Vector3.ZERO
+	var dir: Vector3 = info.get("direction", Vector3.ZERO)
 	var a := info.get("attacker") as Node3D
 	if a != null and is_instance_valid(a):
 		var to_a := a.global_position - fighter.global_position
 		from_front = fighter.get_facing().dot(to_a) >= 0.0
-		dir = -to_a.normalized()  # the way the blow pushes them, for a KO ragdoll
-	rig.play_hit(from_front, bool(info.get("heavy", false)), dir)
+		if dir.length() < 0.01:
+			dir = -to_a.normalized()  # the way the blow pushes them, for a KO ragdoll
+	dir.y = 0.0
+	var zone := StringName(info.get("zone", "head"))
+	if bool(info.get("parried", false)):
+		return
+	if bool(info.get("blocked", false)):
+		rig.play_block_hit(dir, zone)  # knocked back a touch in the cover
+		return
+	rig.play_hit(from_front, bool(info.get("heavy", false)), dir, zone, String(info.get("move", "")))
 
 
 func _on_nose_broken(f: Node) -> void:

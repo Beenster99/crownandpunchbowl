@@ -16,6 +16,7 @@ func _initialize() -> void:
 	_check_lying_down()
 	_check_calm_and_guard()
 	_check_rich_rig()
+	_check_fight_set()
 	await _check_ragdoll()
 	if _failures == 0:
 		print("CHARACTERS OK: %d looks, %d animations" % [CharacterLooks.all_ids().size(), CharacterRig.ANIMATIONS.size()])
@@ -127,7 +128,7 @@ func _check_calm_and_guard() -> void:
 	if rig.current != &"idle_chat":
 		_fail("chatting should gesture, got %s" % rig.current)
 	rig.set_guard(true)
-	if rig.current != &"idle":
+	if not CharacterRig.FIGHT_IDLES.has(rig.current):
 		_fail("guard up should raise the fists, got %s" % rig.current)
 	rig.set_move_speed(3.0)
 	if rig.current != &"walk":
@@ -179,6 +180,86 @@ func _check_rich_rig() -> void:
 	var reach := rig.to_local(rig.bone_position(&"HandR")).z
 	if reach > -0.45:
 		_fail("a cross should reach forward at contact, hand at z %.2f" % reach)
+	rig.queue_free()
+
+
+## The extended fight set: every strike take has its timing in order, body shots and the
+## new moves map to their own animations, guards and dodges pick the right take, a kick in
+## the balls ends on all fours and a punch snaps the head back on top of the animation.
+func _check_fight_set() -> void:
+	var rig := CharacterRig.new()
+	rig.look_id = "kev"
+	root.add_child(rig)
+	var strikes: Array = []
+	for base in CharacterRig.VARIANTS:
+		if String(base).begins_with("hit_"):
+			continue
+		strikes.append_array(CharacterRig.VARIANTS[base])
+	strikes.append_array([&"jab_body", &"cross_body", &"uppercut_body", &"groin_kick", &"clinch_knee", &"shoulder_charge", &"body_swing"])
+	for a in strikes:
+		var l := rig.load_time(a)
+		var c := rig.contact_time(a)
+		if not (l > 0.0 and c > l and c < rig.anim.get_animation(a).length):
+			_fail("%s: load %.2f and contact %.2f out of order" % [a, l, c])
+	var moves := {"clinch_knee": &"clinch_knee", "groin_kick": &"groin_kick", "shoulder_charge": &"shoulder_charge",
+		"body_swing": &"body_swing"}
+	for m in moves:
+		rig.play_move(m)
+		if rig.current != moves[m]:
+			_fail("move %s played %s" % [m, rig.current])
+	rig.play_move("jab", &"body")
+	if rig.current != &"jab_body":
+		_fail("a body jab should play jab_body, got %s" % rig.current)
+	for i in 12:
+		rig.play_move("hook")
+		if not CharacterRig.VARIANTS[&"hook_r"].has(rig.current):
+			_fail("hook should be a right hook take, got %s" % rig.current)
+	# Guards.
+	rig.set_guard(true)
+	rig.play(&"idle", 0.0)
+	rig.set_guard_zone(&"head")
+	if rig.current != &"guard_head":
+		_fail("LB should raise the head guard, got %s" % rig.current)
+	rig.set_guard_zone(&"body")
+	if rig.current != &"guard_body":
+		_fail("RB should drop to the body guard, got %s" % rig.current)
+	rig.set_guard_zone(&"")
+	# Dodges by direction (the rig faces -Z: +X is its right).
+	for pair in [[Vector3.RIGHT, &"dodge_r"], [Vector3.LEFT, &"dodge_l"], [Vector3.BACK, &"dodge_back"], [Vector3.FORWARD, &"dodge_fwd"]]:
+		rig.play_dodge(pair[0])
+		if rig.current != pair[1]:
+			_fail("dodge %s played %s, wanted %s" % [pair[0], rig.current, pair[1]])
+	# Footwork.
+	rig.play(&"idle", 0.0)
+	rig.set_move_vector(Vector2(-2.0, 0.0))
+	rig.set_move_speed(2.0)
+	if rig.current != &"strafe_l":
+		_fail("moving left in the guard should strafe, got %s" % rig.current)
+	rig.set_move_vector(Vector2(0.0, -2.0))
+	rig.set_move_speed(2.0)
+	if rig.current != &"walk_back":
+		_fail("backing off should backpedal, got %s" % rig.current)
+	rig.set_move_vector(Vector2.ZERO)
+	rig.set_move_speed(0.0)
+	# Groin: down on all fours, chest low and the knees on the floor.
+	rig.play_hit(true, false, Vector3.BACK, &"groin")
+	if rig.current != &"groin_down":
+		_fail("a kick in the balls should play groin_down, got %s" % rig.current)
+	rig.play(&"groin_hold", 0.0)
+	rig.anim.seek(0.0, true)
+	var chest := rig.bone_position(&"Chest").y
+	var knee := rig.bone_position(&"KneeL").y
+	if chest > 0.9 or knee > 0.2:
+		_fail("on all fours: chest %.2f m and knee %.2f m should be low" % [chest, knee])
+	# Body shots fold, uppercuts lift the chin.
+	rig.play_hit(true, false, Vector3.BACK, &"body")
+	if not rig.current in [&"hit_body", &"hit_body_l", &"hit_body_r"]:
+		rig.queue_free()
+		_fail("a body shot should fold them, got %s" % rig.current)
+		return
+	rig.play_hit(true, false, Vector3.BACK, &"head", "uppercut")
+	if rig.current != &"hit_uppercut":
+		_fail("an uppercut should lift the chin, got %s" % rig.current)
 	rig.queue_free()
 
 
