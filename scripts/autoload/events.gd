@@ -19,6 +19,8 @@ signal attack_telegraphed(attacker: Node, target: Node, seconds: float)
 ## `defender` parried `attacker`'s punch with a well-timed block (their next punch counters).
 signal attack_countered(defender: Node, attacker: Node)
 ## A strike hit nothing: the target stepped out of reach or off to the side.
+## A player locked on to `target` (null: let go). Local to the player's own peer.
+signal lock_changed(player: Node, target: Node)
 signal attack_whiffed(attacker: Node, move: StringName)
 ## `defender` was blocking, but a guard breaker (kick, headbutt, haymaker) went through.
 signal guard_broken(defender: Node, attacker: Node)

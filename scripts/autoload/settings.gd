@@ -145,6 +145,8 @@ const ACTIONS := {
 	"guard_body": ["Body guard (hold; both guards together: hold them)", {"key": KEY_CTRL}, {"joy": JOY_BUTTON_RIGHT_SHOULDER}],
 	"headbutt": ["Headbutt", {"key": KEY_Q}, {"joy": JOY_BUTTON_RIGHT_STICK}],
 	"dodge": ["Dodge (the way you're moving)", {"key": KEY_SPACE}, {"joy": JOY_BUTTON_A}],
+	"lock_on": ["Lock on to the man in front (again: let go)", {"key": KEY_TAB}, {"joy": JOY_BUTTON_LEFT_STICK}],
+	"lock_next": ["Locked on: switch to the next man", {"key": KEY_R}, {"joy": JOY_BUTTON_DPAD_RIGHT}],
 	"bob_up": ["Lean back (head movement)", {"key": KEY_UP}, {"axis": JOY_AXIS_RIGHT_Y, "dir": -1}],
 	"bob_down": ["Duck (head movement)", {"key": KEY_DOWN}, {"axis": JOY_AXIS_RIGHT_Y, "dir": 1}],
 	"bob_left": ["Slip left (head movement)", {"key": KEY_LEFT}, {"axis": JOY_AXIS_RIGHT_X, "dir": -1}],

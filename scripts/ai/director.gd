@@ -170,6 +170,24 @@ func engaged_cap() -> int:
 	return maxi(1, int(GameData.difficulty().get("max_engaged", 2)))
 
 
+## How many punters may be fighting at once in the whole pub: one player's fight
+## (engaged_cap()) plus one more for each other player. A fight stays one on one, or one on
+## two when someone's mate wades in, never the whole pub. Police raids don't count.
+func total_engaged_cap() -> int:
+	return engaged_cap() + maxi(_standing_players().size() - 1, 0)
+
+
+## Punters (not police) fighting anyone right now.
+func engaged_total() -> Array[Npc]:
+	var out: Array[Npc] = []
+	for node in get_tree().get_nodes_in_group(&"npcs"):
+		var npc := node as Npc
+		if npc != null and npc.mood == Npc.Mood.ENGAGED and not npc.is_down() \
+				and not bool(npc.type_value("always_engaged")):
+			out.append(npc)
+	return out
+
+
 ## NPCs (standing, not KO'd) currently squaring up to `foe`.
 func engaged_on(foe: Fighter) -> Array[Npc]:
 	var out: Array[Npc] = []
@@ -183,7 +201,9 @@ func engaged_on(foe: Fighter) -> Array[Npc]:
 ## Whether another NPC may join the fight against `foe` (voluntary joins only: a punter
 ## who is hit always fights back).
 func has_room(foe: Fighter) -> bool:
-	return foe == null or engaged_on(foe).size() < engaged_cap()
+	if foe == null:
+		return true
+	return engaged_on(foe).size() < engaged_cap() and engaged_total().size() < total_engaged_cap()
 
 
 ## An NPC asks for a turn to attack. Rushing NPCs always get one. Tokens are spread across
@@ -455,6 +475,14 @@ func _trim_engaged() -> void:
 			return a.engagement_score() > b.engagement_score())
 		for i in range(cap, on_p.size()):
 			on_p[i].back_off()
+	# And the pub as a whole: one fight per player, not a free-for-all.
+	var all := engaged_total()
+	var total := total_engaged_cap()
+	if all.size() > total:
+		all.sort_custom(func(a: Npc, b: Npc) -> bool:
+			return a.engagement_score() > b.engagement_score())
+		for i in range(total, all.size()):
+			all[i].back_off()
 
 
 # --- Helpers ---------------------------------------------------------------------------

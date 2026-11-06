@@ -4,7 +4,8 @@ extends Node
 ## one or two they're fighting), so you can see who's nearly done. It fades in when the
 ## fight starts, follows the punter, and fades out a moment after they leave the fight or
 ## go down for good. A thin strip under it shows their stamina, so you can see when they're
-## gassed and their guard is there for the taking, and a word under that says where his guard
+## gassed and their guard is there for the taking. A marker over the head shows who you're
+## locked on to (L3 / Tab), and a word under the bar says where his guard
 ## is open right now (HEAD, BODY or WIDE OPEN), unless the "opening_hints" setting is off.
 ## PlayerFighter adds one of these for the local player.
 
@@ -22,6 +23,9 @@ const STAMINA_GASSED := Color(1.0, 0.75, 0.2)
 ## The opening word under the bar.
 const OPEN_WORDS := {&"head": "HEAD OPEN", &"body": "BODY OPEN", &"all": "WIDE OPEN"}
 const OPEN_COLOUR := Color(0.7, 1.0, 0.5)
+## Over the head of the man you're locked on to.
+const LOCK_COLOUR := Color(0.95, 0.75, 0.3)
+const LOCK_HEIGHT := 2.15
 
 var player: Fighter
 
@@ -38,7 +42,7 @@ func foes() -> Array[Fighter]:
 		var f := node as Fighter
 		if f == null or f == player or f.is_ko() or not player.is_hostile_to(f):
 			continue
-		var engaged := f == player.stance_target
+		var engaged := f == player.stance_target or f == player.lock_target
 		if "mood" in f and "foe" in f:
 			engaged = engaged or (int(f.get("mood")) == 2 and f.get("foe") == player)  # Npc.Mood.ENGAGED
 		if engaged and f.global_position.distance_to(player.global_position) < 8.0:
@@ -80,6 +84,8 @@ func _process(delta: float) -> void:
 		var open := fighter.open_zone() if show_openings() else &""
 		word.text = OPEN_WORDS.get(open, "")
 		word.modulate = OPEN_COLOUR * Color(1, 1, 1, float(b["alpha"]))
+		var mark: Label3D = b["lock"]
+		mark.visible = fighter == player.lock_target and player.is_locked()
 		(b["root"] as Node3D).visible = float(b["alpha"]) > 0.01
 		if float(b["alpha"]) <= 0.0 and want == 0.0:
 			(b["root"] as Node3D).queue_free()
@@ -126,8 +132,23 @@ func _make(f: Fighter) -> Dictionary:
 	open.render_priority = 7
 	open.modulate = Color(1, 1, 1, 0)
 	root.add_child(open)
-	return {"root": root, "fill": fill, "bg": bg, "stamina": stamina, "open": open, "alpha": 0.0,
-		"seen": LINGER}
+	var lock := Label3D.new()
+	lock.name = "LockMark"
+	lock.text = "▼"
+	lock.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lock.fixed_size = true
+	lock.pixel_size = PIXEL_SIZE
+	lock.font_size = 26
+	lock.outline_size = 6
+	lock.outline_modulate = Color(0, 0, 0, 0.8)
+	lock.modulate = LOCK_COLOUR
+	lock.no_depth_test = true
+	lock.render_priority = 8
+	lock.position = Vector3(0, LOCK_HEIGHT - root.position.y, 0)
+	lock.visible = false
+	root.add_child(lock)
+	return {"root": root, "fill": fill, "bg": bg, "stamina": stamina, "open": open, "lock": lock,
+		"alpha": 0.0, "seen": LINGER}
 
 
 func show_openings() -> bool:

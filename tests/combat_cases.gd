@@ -31,7 +31,7 @@ func run() -> void:
 		"test_punches_can_miss", "test_no_stick_punch_goes_straight", "test_foe_health_bar",
 		"test_stamina", "test_jabs_crush_a_guard", "test_body_shots_sap_stamina", "test_power_shot",
 		"test_punish_a_miss", "test_player_holds_for_power", "test_clean_shot_into_the_gap",
-		"test_perfect_parry",
+		"test_perfect_parry", "test_lock_on",
 	]
 	# COMBAT_ONLY=test_a,test_b runs just those.
 	var only := OS.get_environment("COMBAT_ONLY")
@@ -1296,3 +1296,35 @@ func test_perfect_parry() -> void:
 	e.request_attack(&"swing", p)
 	await _until_free(e)
 	_check(taken.size() == 1 and not bool(taken[0].get("perfect", false)), "an early guard isn't a perfect read")
+
+
+func test_lock_on() -> void:
+	var p := _player(Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var a := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	var b := _fighter(Fighter.Team.PUNTERS, Vector3(1.0, 0, -0.9), Vector3(0, 0, 0))
+	a.toughness = 5.0
+	b.toughness = 5.0
+	await _wait(0.1)
+	p.toggle_lock()
+	_check(p.lock_target == a and p.is_locked(), "lock on picks the man in front")
+	p.next_lock()
+	_check(p.lock_target == b, "switch to the next man")
+	p.next_lock()
+	_check(p.lock_target == a, "and round again")
+	p.next_lock()
+	# Locked on to the one at the side, a punch goes at him, not the one in front.
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	await _wait(0.3)
+	p.button(&"jab")
+	await _until_free(p)
+	_check(hits.size() == 1 and hits[0]["victim"] == b, "locked on, the punch goes at him")
+	_check(p.stance_target == b, "and you stay squared up to him")
+	p.toggle_lock()
+	_check(p.lock_target == null, "lock on again lets go")
+	# The lock lets go when he's down.
+	p.toggle_lock()
+	var locked := p.lock_target
+	locked.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3(0, 0, -1), "knockdown": true})
+	await _wait(0.1)
+	_check(p.lock_target == null, "the lock lets go of a man on the floor")
