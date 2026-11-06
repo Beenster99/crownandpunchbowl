@@ -14,14 +14,14 @@ const PATH := "user://settings.cfg"
 
 const DEFAULTS := {
 	"gameplay": {"difficulty": 1, "camera_shake": 1.0, "blood": 1, "counter_prompts": true,
-		"subtitles": true, "context_prompts": true, "vibration": true, "control_hints": true},
+		"subtitles": true, "context_prompts": true, "vibration": true, "control_hints": true, "friendly_fire": false},
 	"sound": {"master": 0.9, "music": 0.6, "sfx": 1.0, "voice": 1.0, "mute_unfocused": false},
 	"graphics": {"window_mode": 0, "vsync": true, "max_fps": 0, "render_scale": 1.0, "shadows": true,
 		"msaa": 1, "ui_scale": 1.0, "resolution": "auto", "quality": 2, "shadow_quality": 2,
 		"ambient_occlusion": true, "bloom": true, "fog": true, "screen_aa": 0, "brightness": 1.0,
 		"fov": 40.0},
 	## Remembered front-end choices, not shown on the settings screen.
-	"profile": {"name": "Farmer", "farmer": 0, "pub": 0},
+	"profile": {"name": "Farmer", "farmer": 0, "pub": 0, "camera_zoom": 0.7},
 }
 
 ## How each setting is shown on the settings screen. Keys missing here are not shown.
@@ -30,6 +30,8 @@ const OPTIONS := {
 	"gameplay": {
 		"difficulty": {"label": "Default difficulty", "type": "choice", "items": [],
 			"hint": "Used when you host or play solo. The host's choice applies in co-op."},
+		"friendly_fire": {"label": "Players can hit each other", "type": "toggle",
+			"hint": "Friendly fire: punches, kicks, grabs and thrown things land on your mates too. The host's choice applies in co-op. Nobody can hit the bar staff."},
 		"camera_shake": {"label": "Camera shake", "type": "slider", "min": 0.0, "max": 1.5,
 			"step": 0.05, "percent": true},
 		"blood": {"label": "Blood", "type": "choice", "items": ["Off", "Normal", "Buckets"]},
@@ -62,7 +64,7 @@ const OPTIONS := {
 		"max_fps": {"label": "Frame rate cap", "type": "choice", "items": ["Unlimited", "30", "60", "120", "144", "240"],
 			"values": [0, 30, 60, 120, 144, 240]},
 		"fov": {"label": "Field of view", "type": "slider", "min": 30.0, "max": 60.0, "step": 1.0,
-			"suffix": "°", "hint": "Wider shows more of the pub. Zoom in and out during a fight with the zoom keys."},
+			"suffix": "°", "hint": "Wider shows more of the pub. Zoom in and out during a fight with the mouse wheel, + and - keys, or D-pad up and down."},
 		"brightness": {"label": "Brightness", "type": "slider", "min": 0.6, "max": 1.6, "step": 0.05, "percent": true},
 		"render_scale": {"label": "3D render scale", "type": "slider", "min": 0.5, "max": 1.0, "step": 0.05,
 			"percent": true, "hint": "Lower it if the game runs slowly. Menus stay sharp."},
@@ -568,4 +570,12 @@ func _apply(section: String, key: String) -> void:
 			get_tree().root.content_scale_factor = float(v)
 		["gameplay", "difficulty"]:
 			GameData.difficulty_index = clampi(int(v), 0, GameData.DIFFICULTIES.size() - 1)
+		["gameplay", "friendly_fire"]:
+			# The host's choice is the session rule (Net syncs it). A client's own setting waits
+			# until it hosts or plays solo. Net isn't loaded yet when settings first apply.
+			var net := get_node_or_null("/root/Net")
+			if net != null:
+				net.set_friendly_fire(bool(v))
+			elif multiplayer.is_server():
+				GameData.friendly_fire = bool(v)
 		# graphics/shadows, gameplay/blood etc. are read by the systems that use them.

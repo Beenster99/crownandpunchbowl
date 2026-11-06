@@ -10,22 +10,30 @@ extends Camera3D
 @export var max_distance := 20.0
 @export var follow_speed := 5.0
 ## Player zoom range, as a multiple of the framing distance (the zoom_in / zoom_out actions).
-@export var min_zoom := 0.65
-@export var max_zoom := 1.35
+@export var min_zoom := 0.4
+@export var max_zoom := 1.5
 @export var zoom_step := 0.08
+## Fixed keyboard zoom keys on top of the rebindable mouse wheel: = / + zooms in, - zooms out.
+const KEYS_IN := [KEY_EQUAL, KEY_KP_ADD]
+const KEYS_OUT := [KEY_MINUS, KEY_KP_SUBTRACT]
+## Default framing for a new player: fairly close in on the fight.
+const DEFAULT_ZOOM := 0.7
 ## Floor area (x, z, width, depth) the framing centre is kept inside. Zero size = no limit.
 @export var bounds := Rect2()
 
 var targets: Array[Node3D] = []
-## 1.0 = default framing. Below 1 is closer. Kept across pubs for the session.
-static var zoom := 1.0
+## 1.0 = the full framing distance. Below 1 is closer. Saved with the settings
+## (profile/camera_zoom), so it carries across pubs and sessions.
+static var zoom := DEFAULT_ZOOM
 var _trauma := 0.0
 var _zoom_smooth := 1.0
+var _hold_t := 0.0
 
 
 func _ready() -> void:
 	fov = float(Settings.get_value("graphics", "fov"))
 	current = true
+	zoom = clampf(float(Settings.get_value("profile", "camera_zoom")), min_zoom, max_zoom)
 	_zoom_smooth = zoom
 	Settings.changed.connect(_on_settings_changed)
 
@@ -35,16 +43,40 @@ func _on_settings_changed(section: String, key: String) -> void:
 		fov = float(Settings.get_value("graphics", "fov"))
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	# Mouse wheel ticks and button presses step the zoom; held pad buttons keep going in _process.
-	if event.is_action_pressed("zoom_in"):
+## _input rather than _unhandled_input: the HUD sits over the whole screen, and a mouse wheel
+## tick over any of its controls would otherwise be swallowed before it reached the camera.
+func _input(event: InputEvent) -> void:
+	if _menu_open():
+		return
+	# Wheel ticks and presses step the zoom; held buttons and keys keep going in _process.
+	if event.is_action_pressed("zoom_in") or _zoom_key(event, KEYS_IN):
 		zoom_by(-zoom_step)
-	elif event.is_action_pressed("zoom_out"):
+	elif event.is_action_pressed("zoom_out") or _zoom_key(event, KEYS_OUT):
 		zoom_by(zoom_step)
+
+
+func _zoom_key(event: InputEvent, keys: Array) -> bool:
+	var k := event as InputEventKey
+	return k != null and k.pressed and not k.echo and k.physical_keycode in keys
+
+
+## A pause or settings screen has the focus, so the wheel and D-pad belong to it.
+func _menu_open() -> bool:
+	return get_tree().paused or get_viewport().gui_get_focus_owner() != null
 
 
 func zoom_by(amount: float) -> void:
 	zoom = clampf(zoom + amount, min_zoom, max_zoom)
+
+
+func _held(action: String, keys: Array) -> bool:
+	# The mouse wheel has no "held", so only buttons and keys count here.
+	if InputMap.has_action(action) and Input.is_action_pressed(action):
+		return true
+	for k in keys:
+		if Input.is_physical_key_pressed(k):
+			return true
+	return false
 
 
 func add_shake(amount: float) -> void:
@@ -58,9 +90,18 @@ func snap() -> void:
 
 
 func _process(delta: float) -> void:
-	for a in [["zoom_in", -1.0], ["zoom_out", 1.0]]:
-		if InputMap.has_action(a[0]) and Input.is_action_pressed(a[0]) and Settings.device == "pad":
-			zoom_by(a[1] * delta * 0.6)
+	if not _menu_open():
+		# Held: after a short delay the zoom keeps sliding (D-pad, or the keyboard keys).
+		var dir := 0.0
+		if _held("zoom_in", KEYS_IN):
+			dir -= 1.0
+		if _held("zoom_out", KEYS_OUT):
+			dir += 1.0
+		_hold_t = _hold_t + delta if dir != 0.0 else 0.0
+		if _hold_t > 0.25:
+			zoom_by(dir * delta * 0.8)
+		elif _hold_t == 0.0 and not is_equal_approx(float(Settings.get_value("profile", "camera_zoom")), zoom):
+			Settings.set_value("profile", "camera_zoom", zoom)  # saved once the zoom settles
 	_zoom_smooth = lerpf(_zoom_smooth, zoom, clampf(8.0 * delta, 0.0, 1.0))
 	_frame(clampf(follow_speed * delta, 0.0, 1.0))
 	if _trauma > 0.0:

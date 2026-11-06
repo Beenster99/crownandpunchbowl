@@ -17,6 +17,7 @@ var _port_edit: SpinBox
 var _farmer: OptionButton
 var _pub: OptionButton
 var _difficulty: OptionButton
+var _friendly_fire: CheckButton
 var _player_list: ItemList
 var _ready_toggle: CheckButton
 var _start: Button
@@ -107,6 +108,14 @@ func _ready() -> void:
 		_difficulty.add_item(d["name"])
 	_difficulty.item_selected.connect(func(i: int): Net.set_difficulty(i))
 	_lobby_box.add_child(_row("Difficulty", _difficulty))
+	_friendly_fire = CheckButton.new()
+	_friendly_fire.text = "Players can hit each other"
+	_friendly_fire.tooltip_text = "Friendly fire. The host decides. Nobody can hit the bar staff."
+	# The host's toggle is their own setting, which Net syncs to everyone.
+	_friendly_fire.toggled.connect(func(on: bool):
+		if Net.is_host():
+			Settings.set_value("gameplay", "friendly_fire", on))
+	_lobby_box.add_child(_friendly_fire)
 	_player_list = ItemList.new()
 	_player_list.custom_minimum_size.y = 140
 	_lobby_box.add_child(_player_list)
@@ -171,6 +180,8 @@ func _refresh() -> void:
 	_difficulty.select(GameData.difficulty_index)
 	_pub.disabled = not host
 	_difficulty.disabled = not host
+	_friendly_fire.set_pressed_no_signal(GameData.friendly_fire)
+	_friendly_fire.disabled = not host
 	_ready_toggle.visible = not host
 	_start.visible = host
 	_start.disabled = not Net.can_start()
