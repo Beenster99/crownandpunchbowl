@@ -127,7 +127,7 @@ func test_bottle_breaks_into_broken_bottle() -> void:
 	Events.item_broken.connect(func(i): broken.append(i))
 	p.request_attack(&"jab", e)
 	await _wait(0.5)
-	_check(is_equal_approx(e.hp, e.max_hp - 7.5), "bottle jab does 1.5x (hp %.1f)" % e.hp)
+	_check(is_equal_approx(e.hp, e.max_hp - float(Moves.get_move(&"jab")["damage"]) * 1.5), "bottle jab does 1.5x (hp %.1f)" % e.hp)
 	_check(broken.has(bottle), "bottle smashes on the first hit")
 	_check(_held_kind(p) == &"broken_bottle", "left holding a broken bottle (got %s)" % _held_kind(p))
 	_check(p.weapon is PubItem and (p.weapon as PubItem).sharp, "broken bottle is sharp")

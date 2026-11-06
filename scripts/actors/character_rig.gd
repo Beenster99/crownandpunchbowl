@@ -122,6 +122,9 @@ var _blood_nodes: Array[Node3D] = []
 var _last_hit := Vector3.ZERO
 var _sim: PhysicalBoneSimulator3D
 var _physical := {}
+var _windup_anim := &""   # lead-in playing slowly while a punch is lined up
+var _windup_hold := -1.0  # freeze the lead-in here (the loaded pose) until release
+var _strike_anim := &""   # what release_strike() plays, from its load time
 
 
 func _ready() -> void:
@@ -134,6 +137,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _model == null or look == null:
 		return
+	_tick_windup()
 	_time += delta
 	var w := 0.0 if ON_FLOOR.has(current) or ragdolling else look.sway
 	_model.rotation.z = sin(_time * 1.3) * 0.07 * w
@@ -180,6 +184,73 @@ func play_move(move: String) -> void:
 		play(MOVE_ANIMS[move], 0.05)
 	else:
 		push_warning("CharacterRig: no animation for move '%s'" % move)
+
+
+## Wind-up fallbacks: seconds into each strike animation where the punch is fully loaded.
+## load_time() (owned by the animation data) wins when it exists.
+const _WINDUP_LOADS := {&"punch_r": 0.08, &"punch_l": 0.08, &"hook_l": 0.12, &"hook_r": 0.12,
+	&"uppercut_r": 0.14, &"kick": 0.12, &"headbutt": 0.16, &"swing": 0.22, &"windup": 0.5}
+## Moves whose wind-up uses a separate lead-in animation (a big telegraphed cock-back).
+const _WINDUP_LEADS := {"haymaker": &"windup"}
+
+
+## Lines up a move over `seconds`: plays the strike's load slowly into the loaded pose
+## (most of the way through the wind-up) and holds it there, so you can see the punch
+## coming. release_strike() then throws it. Falls back to play_move() for unknown moves.
+func play_windup(move: String, seconds: float) -> void:
+	var strike := _strike_for(move)
+	if strike == &"" or anim == null or not anim.has_animation(strike):
+		play_move(move)
+		return
+	guard = true
+	var lead: StringName = _WINDUP_LEADS.get(move, strike)
+	if not anim.has_animation(lead):
+		lead = strike
+	var load_t := _load_time(lead)
+	play(lead, 0.08)
+	# Load over the first 70% of the wind-up, then hold the coiled pose until release.
+	anim.speed_scale = clampf(load_t / maxf(seconds * 0.7, 0.01), 0.05, 1.5)
+	_windup_anim = lead
+	_windup_hold = load_t
+	_strike_anim = strike
+
+
+## Throws the punch lined up by play_windup(), from its loaded pose. No-op otherwise.
+func release_strike() -> void:
+	if _strike_anim == &"" or anim == null:
+		return
+	var strike := _strike_anim
+	_strike_anim = &""
+	_windup_anim = &""
+	_windup_hold = -1.0
+	play(strike, 0.04)
+	anim.seek(_load_time(strike), true)
+
+
+func _strike_for(move: String) -> StringName:
+	if move == "hook" and anim != null and anim.has_animation(&"hook_r"):
+		return &"hook_r"
+	return MOVE_ANIMS.get(move, &"")
+
+
+func _load_time(anim_name: StringName) -> float:
+	if has_method("load_time"):
+		return float(call("load_time", anim_name))
+	return float(_WINDUP_LOADS.get(anim_name, 0.1))
+
+
+func _tick_windup() -> void:
+	if _windup_anim == &"":
+		return
+	if current != _windup_anim or anim == null:
+		# Something else took over (a hit, a dodge): the wind-up is off.
+		_windup_anim = &""
+		_windup_hold = -1.0
+		_strike_anim = &""
+		return
+	if anim.speed_scale > 0.0 and anim.current_animation_position >= _windup_hold:
+		anim.seek(_windup_hold, true)
+		anim.speed_scale = 0.0
 
 
 ## Plays a hit reaction. Pass the hit's world direction (attacker to victim) so a KO
