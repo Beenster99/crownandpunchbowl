@@ -626,7 +626,8 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 		return
 	var m := _resolve_move(move_id)
 	if tgt == null and (bool(m["lunge"]) or bool(m["charge"])):
-		tgt = Targeting.pick(self, get_facing(), Moves.LUNGE_RANGE, bool(m["ground"]))
+		# No stick aim here: only the man in front (passing the facing would count as aiming).
+		tgt = Targeting.pick(self, Vector3.ZERO, Moves.LUNGE_RANGE, bool(m["ground"]))
 	if _counter_ready > 0.0 and not bool(m["ground"]):
 		bonus *= Moves.COUNTER_BONUS
 		if combo_name == "":
@@ -732,6 +733,8 @@ func _server_add_escape(amount: float) -> void:
 func _server_resolve_hit() -> void:
 	var victims := _find_victims()
 	var m := _move
+	if state != State.GRABBING and float(m["damage"]) > 0.0 and not bool(m.get("charge", false)):
+		_rpc_strike_result.rpc(not victims.is_empty())
 	for v in victims:
 		var to := v.global_position - global_position
 		to.y = 0.0
@@ -788,8 +791,10 @@ func _find_victims() -> Array[Fighter]:
 		if holding != null:
 			out.append(holding)
 		return out
+	# The man you aimed at only gets hit if he's still there: in reach and in front of you.
+	# Step back, slip off to the side or duck round, and it misses.
 	if not bool(m["sweep"]) and _valid_victim(target, m) \
-			and _flat_dist(target) <= reach + 0.35:
+			and _flat_dist(target) <= reach + Moves.REACH_SLACK and _in_arc(target, m):
 		out.append(target)
 		return out
 	var fwd := get_facing()
@@ -813,6 +818,14 @@ func _find_victims() -> Array[Fighter]:
 	if best != null:
 		out.append(best)
 	return out
+
+
+func _in_arc(f: Fighter, m: Dictionary) -> bool:
+	var to := f.global_position - global_position
+	to.y = 0.0
+	if to.length() < 0.05:
+		return true
+	return get_facing().angle_to(to.normalized()) <= deg_to_rad(float(m["arc"]) * 0.5)
 
 
 func _valid_victim(f: Fighter, m: Dictionary) -> bool:
@@ -924,6 +937,21 @@ func _rpc_slip(dir: Vector2) -> void:
 	slip_dir = dir
 	_combat_t = maxf(_combat_t, 1.0)
 	slipped.emit(dir)
+
+
+## A strike connected (it stops dead on them) or missed (the weight carries on through
+## thin air and you're a beat slower recovering).
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_strike_result(hit: bool) -> void:
+	if not _sender_is_host():
+		return
+	if hit:
+		_impulse = _impulse.limit_length(0.3)
+		return
+	if state == State.ATTACK:
+		_state_len += Moves.WHIFF_RECOVER
+	_impulse += get_facing() * Moves.WHIFF_STUMBLE
+	Events.attack_whiffed.emit(self, current_move)
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -1140,11 +1168,13 @@ func _update_stance() -> void:
 		stance_changed.emit(on)
 
 
-## Nearest enemy within ENGAGE_RANGE who is up for a fight (recently in an exchange, or
-## winding up, attacking or blocking).
+## The enemy within ENGAGE_RANGE who is up for a fight (recently in an exchange, or
+## winding up, attacking or blocking) that we're most squared up to: near and in front,
+## and sticky, so a punter wandering up at your shoulder doesn't spin you round.
 func _nearest_active_foe() -> Fighter:
 	var best: Fighter = null
-	var best_d := Moves.ENGAGE_RANGE
+	var best_score := INF
+	var fwd := get_facing()
 	for node in get_tree().get_nodes_in_group(GROUP):
 		var f := node as Fighter
 		if f == null or f == self or not is_hostile_to(f) or f.is_down():
@@ -1152,8 +1182,18 @@ func _nearest_active_foe() -> Fighter:
 		if f._combat_t <= 0.0 and not (f.state in [State.WINDUP, State.ATTACK, State.BLOCK]):
 			continue
 		var d := _flat_dist(f)
-		if d < best_d:
-			best_d = d
+		if d > Moves.ENGAGE_RANGE:
+			continue
+		var to := f.global_position - global_position
+		to.y = 0.0
+		var angle := rad_to_deg(fwd.angle_to(to.normalized())) if to.length() > 0.01 else 0.0
+		var score := d + angle / 60.0
+		if f == stance_target:
+			score -= 1.0
+		if f.state == State.WINDUP and f.target == self:
+			score -= 0.5  # the one about to hit you
+		if score < best_score:
+			best_score = score
 			best = f
 	return best
 

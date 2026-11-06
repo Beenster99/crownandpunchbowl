@@ -119,6 +119,9 @@ func _ready() -> void:
 	_flat.bus = "SFX"
 	add_child(_flat)
 	Events.hit_landed.connect(_on_hit_landed)
+	Events.attack_whiffed.connect(func(a: Node, _m: StringName):
+		if _valid(a):
+			play("whoosh", head_position(a), -3.0))
 	Events.nose_broken.connect(_on_nose_broken)
 	Events.fighter_knocked_down.connect(_on_knocked_down)
 	Events.fighter_crawling.connect(_on_crawling)

@@ -49,7 +49,7 @@ enum Police { NONE, WAITING, CALLED, ARRIVED }
 @export var police_delay := 8.0
 @export var police_count := 2
 ## Breather between two attacks on the same player, so blows come one at a time.
-@export var attack_gap := 0.9
+@export var attack_gap := 1.4
 ## Seed for crowd randomness (0 = random).
 @export var rng_seed := 0
 ## Spawn the starting crowd by itself. Turn off to call start() yourself.
