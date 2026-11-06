@@ -55,18 +55,21 @@ const PUBS := [
 ]
 
 ## Multipliers read by AI, combat and spawning. 1.0 = baseline.
+## max_attackers: punters swinging at once (pub-wide, at full heat). max_engaged: punters
+## squaring up to one player at once; the rest of the pub watches. Keep both small: the fight
+## is meant to be one or two at a time, not the whole pub.
 const DIFFICULTIES := [
 	{"id": "shandy", "name": "Pint of Shandy", "blurb": "A gentle evening out.",
-		"enemy_damage": 0.6, "enemy_health": 0.8, "max_attackers": 2, "gang_up_chance": 0.15,
+		"enemy_damage": 0.6, "enemy_health": 0.8, "max_attackers": 1, "max_engaged": 2, "gang_up_chance": 0.0,
 		"police_chance": 0.2, "heal_multiplier": 1.4, "telegraph_time": 0.75, "reinforcements": 0.7},
 	{"id": "session", "name": "Session Ale", "blurb": "A proper night out.",
-		"enemy_damage": 1.0, "enemy_health": 1.0, "max_attackers": 3, "gang_up_chance": 0.3,
+		"enemy_damage": 1.0, "enemy_health": 1.0, "max_attackers": 2, "max_engaged": 2, "gang_up_chance": 0.1,
 		"police_chance": 0.4, "heal_multiplier": 1.0, "telegraph_time": 0.6, "reinforcements": 1.0},
 	{"id": "scrumpy", "name": "Scrumpy", "blurb": "Your legs will go before your fists do.",
-		"enemy_damage": 1.3, "enemy_health": 1.2, "max_attackers": 4, "gang_up_chance": 0.5,
+		"enemy_damage": 1.3, "enemy_health": 1.2, "max_attackers": 2, "max_engaged": 3, "gang_up_chance": 0.18,
 		"police_chance": 0.6, "heal_multiplier": 0.8, "telegraph_time": 0.48, "reinforcements": 1.3},
 	{"id": "last_orders", "name": "Last Orders", "blurb": "Nobody leaves standing.",
-		"enemy_damage": 1.7, "enemy_health": 1.4, "max_attackers": 6, "gang_up_chance": 0.7,
+		"enemy_damage": 1.7, "enemy_health": 1.4, "max_attackers": 2, "max_engaged": 3, "gang_up_chance": 0.28,
 		"police_chance": 0.85, "heal_multiplier": 0.6, "telegraph_time": 0.38, "reinforcements": 1.6},
 ]
 

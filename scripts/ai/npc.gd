@@ -86,10 +86,16 @@ func type_value(key: String) -> Variant:
 
 # --- Mood changes (host) ---------------------------------------------------------------
 
-## Pick a fight with `who`. Ignored for staff.
-func engage(who: Fighter) -> void:
+## Pick a fight with `who`. Ignored for staff. Unless `forced` (they hit us), the Director
+## may say that player already has enough on, and we just watch instead.
+func engage(who: Fighter, forced := false) -> void:
 	if team == Team.STAFF or who == null or not is_hostile_to(who):
 		return
+	if not forced and foe != who and not bool(_type.get("always_engaged", false)):
+		var d := _find_director()
+		if d != null and not d.has_room(who):
+			alert()
+			return
 	mood = Mood.ENGAGED
 	foe = who
 	chatting_with = null
@@ -103,6 +109,32 @@ func alert() -> void:
 	mood = Mood.ALERT
 	chatting_with = null
 	_quiet_t = 0.0
+
+
+## Step back out of the fight and spectate (the Director does this to keep it 1-2 at a time).
+func back_off() -> void:
+	if bool(_type.get("always_engaged", false)) or mood != Mood.ENGAGED:
+		return
+	_drop_token()
+	mood = Mood.ALERT
+	foe = null
+	rushing = 0.0
+	rush_grab = false
+	_quiet_t = 0.0
+
+
+## How much this NPC is in the thick of it (higher stays in when the Director trims).
+func engagement_score() -> float:
+	var s := -_quiet_t
+	if bool(_type.get("always_engaged", false)):
+		s += 1000.0
+	if rushing > 0.0:
+		s += 100.0
+	if _has_token:
+		s += 50.0
+	if foe != null and is_instance_valid(foe):
+		s -= global_position.distance_to(foe.global_position) * 0.5
+	return s
 
 
 func calm_down() -> void:
@@ -128,7 +160,7 @@ func _on_hit_taken(info: Dictionary) -> void:
 		# Whoever hit you is now your problem, unless you're busy with someone else.
 		if mood != Mood.ENGAGED or foe == null or not foe.can_be_targeted() \
 				or _rng.randf() < 0.6:
-			engage(attacker)
+			engage(attacker, true)
 
 
 # --- Brain ----------------------------------------------------------------------------
@@ -237,7 +269,7 @@ func _think_alert(delta: float) -> void:
 	_engage_roll_t -= delta
 	if _engage_roll_t <= 0.0:
 		_engage_roll_t = 2.0
-		if heat > 0.35 and _rng.randf() < float(_type["bravery"]) * heat * 0.3:
+		if heat > 0.45 and _rng.randf() < float(_type["bravery"]) * heat * 0.15:
 			engage(p)
 
 
@@ -269,7 +301,8 @@ func _think_engaged(delta: float) -> void:
 		_token_t = 0.0
 	if wants_in and _has_token:
 		if d > 1.8:
-			move_input = (dir + _separation() * 0.3).limit_length(1.0)
+			# Step in deliberately rather than charging, so the player sees who's coming.
+			move_input = (dir + _separation() * 0.3).limit_length(0.8)
 			return
 		if rush_grab and foe.can_be_grabbed():
 			rush_grab = false
@@ -284,20 +317,24 @@ func _think_engaged(delta: float) -> void:
 		else:
 			_drop_token()
 		var aggression := maxf(float(_type["aggression"]), 0.1)
-		_attack_cd = _rng.randf_range(1.0, 2.2) / aggression
+		_attack_cd = _rng.randf_range(1.8, 3.2) / aggression
 		if rushing > 0.0:
-			_attack_cd *= 0.5
+			_attack_cd *= 0.6
 		return
-	# Waiting for a turn: circle on a ring round the foe, strafing, keeping apart from mates.
+	# Waiting for a turn: size them up. Circle slowly on a ring round the foe, sometimes
+	# just stand and stare, keeping apart from mates.
 	_strafe_t -= delta
 	if _strafe_t <= 0.0:
 		_strafe_t = _rng.randf_range(1.5, 3.5)
-		if _rng.randf() < 0.4:
-			_strafe = -_strafe
-	var ring := float(_type["circle_distance"])
+		var roll := _rng.randf()
+		if roll < 0.3:
+			_strafe = 0.0  # hold ground and glare
+		elif roll < 0.6 or _strafe == 0.0:
+			_strafe = -1.0 if _rng.randf() < 0.5 else 1.0
+	var ring := float(_type["circle_distance"]) + 0.4
 	var radial := clampf(d - ring, -1.0, 1.0)
 	var tangent := Vector3(-dir.z, 0.0, dir.x) * _strafe
-	move_input = (dir * radial * 0.8 + tangent * 0.35 + _separation()).limit_length(0.7)
+	move_input = (dir * radial * 0.6 + tangent * 0.25 + _separation()).limit_length(0.5)
 
 
 ## Holding a player for mates: stand still and knee them now and then.

@@ -6,7 +6,7 @@ extends Node
 ## the host thinks.
 ##
 ## Heat (0..1) is the pace dial. Players raise it by fighting (hits and knockouts); it decays when they ease off. Heat sets:
-##   - how many attack tokens are out (1 up to the difficulty's max_attackers)
+##   - how many attack tokens are out (1 up to the difficulty's max_attackers, at most 2)
 ##   - how likely onlookers are to wade in
 ##   - how likely a gang-up rush is (difficulty gang_up_chance)
 ##   - when a police raid is called (if the pub rolled one, difficulty police_chance)
@@ -40,13 +40,16 @@ enum Police { NONE, WAITING, CALLED, ARRIVED }
 @export var reserve_punters := 8
 @export var wave_size := Vector2i(2, 4)
 ## A wave comes in this often during a fight, or sooner if the room thins out.
-@export var wave_interval := 30.0
+@export var wave_interval := 45.0
 @export var wave_when_standing_below := 3
-@export var heat_decay := 0.025
-@export var rush_interval := 8.0
+@export var heat_decay := 0.035
+## Seconds between gang-up checks. Rushes are rare: the fight should be one or two at a time.
+@export var rush_interval := 20.0
 @export var rush_duration := 4.0
 @export var police_delay := 8.0
 @export var police_count := 2
+## Breather between two attacks on the same player, so blows come one at a time.
+@export var attack_gap := 0.9
 ## Seed for crowd randomness (0 = random).
 @export var rng_seed := 0
 ## Spawn the starting crowd by itself. Turn off to call start() yourself.
@@ -65,6 +68,9 @@ var _rng := RandomNumberGenerator.new()
 var _spawner: MultiplayerSpawner
 var _next_id := 0
 var _tokens: Array[Npc] = []
+var _last_attack := {}  # player -> time (s) the last token on them was granted
+var _clock := 0.0
+var _trim_t := 0.0
 var _wave_t := 0.0
 var _rush_t := 0.0
 var _police_t := 0.0
@@ -153,7 +159,28 @@ func _spawn_npc(data: Variant) -> Node:
 ## How many NPCs may be attacking at once right now.
 func token_cap() -> int:
 	var most := int(GameData.difficulty()["max_attackers"])
-	return maxi(1, roundi(lerpf(1.0, float(most), clampf(heat * 1.25, 0.0, 1.0))))
+	return maxi(1, roundi(lerpf(1.0, float(most), clampf(heat, 0.0, 1.0))))
+
+
+## How many NPCs may be squaring up to one player at once. Everyone else spectates.
+func engaged_cap() -> int:
+	return maxi(1, int(GameData.difficulty().get("max_engaged", 2)))
+
+
+## NPCs (standing, not KO'd) currently squaring up to `foe`.
+func engaged_on(foe: Fighter) -> Array[Npc]:
+	var out: Array[Npc] = []
+	for node in get_tree().get_nodes_in_group(&"npcs"):
+		var npc := node as Npc
+		if npc != null and npc.mood == Npc.Mood.ENGAGED and npc.foe == foe and not npc.is_down():
+			out.append(npc)
+	return out
+
+
+## Whether another NPC may join the fight against `foe` (voluntary joins only: a punter
+## who is hit always fights back).
+func has_room(foe: Fighter) -> bool:
+	return foe == null or engaged_on(foe).size() < engaged_cap()
 
 
 ## An NPC asks for a turn to attack. Rushing NPCs always get one. Tokens are spread across
@@ -168,6 +195,8 @@ func request_token(npc: Npc) -> bool:
 	var cap := token_cap()
 	if _tokens.size() >= cap:
 		return false
+	if _clock - float(_last_attack.get(npc.foe, -100.0)) < attack_gap:
+		return false
 	var players := maxi(1, _standing_players().size())
 	var per_target := maxi(1, ceili(float(cap) / players))
 	var on_foe := 0
@@ -177,6 +206,7 @@ func request_token(npc: Npc) -> bool:
 	if on_foe >= per_target:
 		return false
 	_tokens.append(npc)
+	_last_attack[npc.foe] = _clock
 	return true
 
 
@@ -203,9 +233,14 @@ func punters_left() -> int:
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server() or not _started or cleared:
 		return
+	_clock += delta
 	heat = maxf(heat - heat_decay * delta, 0.0)
 	if not fight_on:
 		return
+	_trim_t -= delta
+	if _trim_t <= 0.0:
+		_trim_t = 1.0
+		_trim_engaged()
 	_tick_waves(delta)
 	_tick_rush(delta)
 	_tick_police(delta)
@@ -247,13 +282,13 @@ func _tick_rush(delta: float) -> void:
 	if _rush_t < rush_interval:
 		return
 	_rush_t = 0.0
-	if heat < 0.25:
+	if heat < 0.5:
 		return
-	if _rng.randf() < float(GameData.difficulty()["gang_up_chance"]) * (0.5 + heat):
+	if _rng.randf() < float(GameData.difficulty()["gang_up_chance"]) * heat:
 		gang_up()
 
 
-## Several punters round on one player at once. Rugby lads and police may grab them for
+## A couple of punters round on one player at once (never more than max_attackers). Rugby lads and police may grab them for
 ## their mates. Returns the NPCs taking part.
 func gang_up(victim: Fighter = null) -> Array[Npc]:
 	var crew: Array[Npc] = []
@@ -277,11 +312,17 @@ func gang_up(victim: Fighter = null) -> Array[Npc]:
 	candidates.sort_custom(func(a: Npc, b: Npc) -> bool:
 		return a.global_position.distance_squared_to(victim.global_position) \
 			< b.global_position.distance_squared_to(victim.global_position))
-	var size := mini(candidates.size(), int(GameData.difficulty()["max_attackers"]) + 1)
+	var size := mini(candidates.size(), int(GameData.difficulty()["max_attackers"]))
+	if size < 2:
+		return crew
+	# Anyone else squaring up to this player steps back and watches the rush.
+	for npc in engaged_on(victim):
+		if npc not in candidates.slice(0, size):
+			npc.back_off()
 	var grabber_picked := false
 	for i in size:
 		var npc := candidates[i]
-		npc.engage(victim)
+		npc.engage(victim, true)
 		npc.rushing = rush_duration
 		if not grabber_picked and bool(npc.type_value("grabs")):
 			npc.rush_grab = true
@@ -348,7 +389,7 @@ func _on_hit_landed(info: Dictionary) -> void:
 		return
 	if attacker.team == Fighter.Team.PLAYERS and victim.team != Fighter.Team.PLAYERS:
 		_start_fight()
-		heat = minf(heat + (0.08 if bool(info.get("heavy", false)) else 0.05), 1.0)
+		heat = minf(heat + (0.06 if bool(info.get("heavy", false)) else 0.04), 1.0)
 		_rouse_mates(victim, attacker)
 	elif attacker.team != Fighter.Team.PLAYERS and victim.team == Fighter.Team.PLAYERS:
 		heat = minf(heat + 0.02, 1.0)
@@ -388,10 +429,25 @@ func _rouse_mates(victim: Fighter, attacker: Fighter) -> void:
 			continue
 		if npc.global_position.distance_to(victim.global_position) > MATE_RADIUS:
 			continue
-		if _rng.randf() < float(npc.type_value("bravery")):
+		if has_room(attacker) and _rng.randf() < float(npc.type_value("bravery")):
 			npc.engage(attacker)
 		else:
 			npc.alert()
+
+
+## Keep each player's fight to engaged_cap(): extra punters who haven't been hit lately
+## back off into the crowd and watch until there's room.
+func _trim_engaged() -> void:
+	var cap := engaged_cap()
+	for p in _standing_players():
+		var on_p := engaged_on(p)
+		if on_p.size() <= cap:
+			continue
+		# Keep the ones in the thick of it: recently hit, rushing, holding a token, police.
+		on_p.sort_custom(func(a: Npc, b: Npc) -> bool:
+			return a.engagement_score() > b.engagement_score())
+		for i in range(cap, on_p.size()):
+			on_p[i].back_off()
 
 
 # --- Helpers ---------------------------------------------------------------------------
