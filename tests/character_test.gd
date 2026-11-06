@@ -15,6 +15,7 @@ func _initialize() -> void:
 	_check_state_and_move_mapping()
 	_check_lying_down()
 	_check_calm_and_guard()
+	_check_rich_rig()
 	await _check_ragdoll()
 	if _failures == 0:
 		print("CHARACTERS OK: %d looks, %d animations" % [CharacterLooks.all_ids().size(), CharacterRig.ANIMATIONS.size()])
@@ -146,6 +147,39 @@ func _check_calm_and_guard() -> void:
 	if barman.current != &"idle_polish":
 		_fail("bar staff should polish glasses, got %s" % barman.current)
 	barman.queue_free()
+
+
+## The fight rig: every model has the extra bones, strikes publish their timing, a guard
+## clenches the fists and a punch reaches forward.
+func _check_rich_rig() -> void:
+	var rig := CharacterRig.new()
+	rig.look_id = "mags"
+	root.add_child(rig)
+	for b in [&"Spine2", &"Neck", &"Jaw", &"BrowL", &"BrowR", &"ClavicleL", &"ClavicleR", &"Thumb1L", &"Index2R", &"Fingers2L"]:
+		if rig.skeleton.find_bone(b) < 0:
+			_fail("rig has no %s bone" % b)
+	for a in [&"punch_l", &"punch_r", &"hook_l", &"hook_r", &"uppercut_r"]:
+		var l := rig.load_time(a)
+		var c := rig.contact_time(a)
+		if not (l > 0.0 and c > l and c < rig.anim.get_animation(a).length):
+			_fail("%s: load %.2f and contact %.2f out of order" % [a, l, c])
+	if CharacterRig.MOVE_ANIMS["hook"] != &"hook_r":
+		_fail("hook should be the right hook")
+	var hand := rig.skeleton.find_bone("HandR")
+	var tip := rig.skeleton.find_bone("Index2R")
+	var dist := {}
+	for a in [&"idle_relaxed", &"idle"]:
+		rig.play(a, 0.0)
+		rig.anim.seek(0.0, true)
+		dist[a] = rig.bone_position(&"Index2R").distance_to(rig.bone_position(&"HandR"))
+	if dist[&"idle"] >= dist[&"idle_relaxed"]:
+		_fail("the guard should clench the fists")
+	rig.play(&"punch_r", 0.0)
+	rig.anim.seek(rig.contact_time(&"punch_r"), true)
+	var reach := rig.to_local(rig.bone_position(&"HandR")).z
+	if reach > -0.45:
+		_fail("a cross should reach forward at contact, hand at z %.2f" % reach)
+	rig.queue_free()
 
 
 func _check_lying_down() -> void:

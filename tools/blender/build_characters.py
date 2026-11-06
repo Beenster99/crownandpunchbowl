@@ -32,13 +32,22 @@ LOOKS = os.path.join(OUT_DIR, "looks.json")
 
 BONES = [
     # name, parent
-    ("Hips", None), ("Spine", "Hips"), ("Chest", "Spine"), ("Neck", "Chest"), ("Head", "Neck"),
-    ("Nose", "Head"),
-    ("ShoulderL", "Chest"), ("ElbowL", "ShoulderL"), ("HandL", "ElbowL"),
-    ("ShoulderR", "Chest"), ("ElbowR", "ShoulderR"), ("HandR", "ElbowR"),
-    ("HipL", "Hips"), ("KneeL", "HipL"), ("FootL", "KneeL"),
-    ("HipR", "Hips"), ("KneeR", "HipR"), ("FootR", "KneeR"),
+    ("Hips", None), ("Spine", "Hips"), ("Spine2", "Spine"), ("Chest", "Spine2"), ("Neck", "Chest"),
+    ("Head", "Neck"), ("Nose", "Head"), ("Jaw", "Head"), ("BrowL", "Head"), ("BrowR", "Head"),
 ]
+for _s in "LR":
+    BONES += [
+        ("Clavicle" + _s, "Chest"), ("Shoulder" + _s, "Clavicle" + _s), ("Elbow" + _s, "Shoulder" + _s),
+        ("Hand" + _s, "Elbow" + _s),
+        ("Thumb1" + _s, "Hand" + _s), ("Thumb2" + _s, "Thumb1" + _s),
+        ("Index1" + _s, "Hand" + _s), ("Index2" + _s, "Index1" + _s),
+        ("Fingers1" + _s, "Hand" + _s), ("Fingers2" + _s, "Fingers1" + _s),
+    ]
+for _s in "LR":
+    BONES += [("Hip" + _s, "Hips"), ("Knee" + _s, "Hip" + _s), ("Foot" + _s, "Knee" + _s)]
+
+
+HAND_SCALE = 1.3  # cartoon hands: big enough to read as fists from the game camera
 
 
 def col(hexstr):
@@ -94,12 +103,37 @@ class Build:
             self.p["elbow" + s] = sh + down * self.upper
             self.p["wrist" + s] = self.p["elbow" + s] + down * self.fore
             self.p["fist" + s] = self.p["wrist" + s] + down * 0.1 * L["hand_size"]
+            self._hand(s, side, down)
             hip = Vector((self.hw * 0.27 * side, 0, lv - 0.04))
             self.p["hip" + s] = hip
             self.p["knee" + s] = hip + Vector((0, 0, -self.thigh))
             self.p["ankle" + s] = self.p["knee" + s] + Vector((0, 0, -self.shin))
             self.p["toe" + s] = Vector((hip.x, 0.15, 0.03))
         self.segments = self._segments()
+
+    def _hand(self, s, side, down):
+        """Palm, three finger chains and a thumb. The hand hangs along the arm with the palm
+        facing the thigh and the knuckles in a line from front (index) to back (pinky).
+        Chunky, cartoon proportions to match the heads."""
+        hs = self.L["hand_size"] * HAND_SCALE
+        fwd = Vector((0, 1, 0))
+        inward = Vector((-side, 0, 0))
+        w = self.p["wrist" + s]
+        k = w + down * 0.068 * hs
+        self.p["knuckles" + s] = k
+        h = {"palm": (w, k), "down": down, "fwd": fwd, "inward": inward, "fingers": []}
+        # (name, offset along the knuckle line, length)
+        for name, off, length in (("index", 0.027, 0.058), ("middle", 0.009, 0.064), ("ring", -0.009, 0.06),
+                                  ("pinky", -0.026, 0.048)):
+            base = k + fwd * off * hs
+            tip = base + down * length * hs
+            h["fingers"].append((name, base, tip))
+        tb = w + down * 0.016 * hs + fwd * 0.036 * hs + inward * 0.01 * hs
+        td = (down * 0.75 + fwd * 0.55 + inward * 0.3).normalized()
+        h["thumb"] = (tb, tb + td * 0.06 * hs)
+        h["finger_r"] = 0.0082 * hs
+        self.hand = getattr(self, "hand", {})
+        self.hand[s] = h
 
     def _segments(self):
         p = self.p
@@ -112,10 +146,34 @@ class Build:
             "Nose": (self.head_c + Vector((0, self.r * 0.95, -self.r * 0.05)),
                      self.head_c + Vector((0, self.r * 1.25, -self.r * 0.05))),
         }
+        mid = (p["spine"] + p["chest"]) * 0.5
+        seg["Spine"] = (p["spine"], mid)
+        seg["Spine2"] = (mid, p["chest"])
+        r, hc = self.r, self.head_c
+        # Jaw: hinge just in front of the ears, down to the chin.
+        seg["Jaw"] = (hc + Vector((0, 0.1 * r, -0.2 * r)), hc + Vector((0, 0.78 * r, -0.78 * r)))
+        brow = self.L["brow"]
+        for s, side in (("L", -1), ("R", 1)):
+            # Brows run from the outer end (the pivot) to the inner end, so a twist lowers or
+            # raises the inner end: a frown or a wince.
+            seg["Brow" + s] = (hc + Vector((0.55 * r * side, (0.86 + 0.12 * brow) * r, (0.40 + 0.06 * brow) * r)),
+                               hc + Vector((0.12 * r * side, (0.98 + 0.14 * brow) * r, (0.42 + 0.04 * brow) * r)))
         for s in "LR":
+            # The clavicle runs from the base of the neck to the shoulder joint.
+            side = -1 if s == "L" else 1
+            seg["Clavicle" + s] = (p["chest"] + self.chest_rot @ Vector((0.035 * side, 0.01, 0.3)), p["shoulder" + s])
             seg["Shoulder" + s] = (p["shoulder" + s], p["elbow" + s])
             seg["Elbow" + s] = (p["elbow" + s], p["wrist" + s])
-            seg["Hand" + s] = (p["wrist" + s], p["fist" + s])
+            h = self.hand[s]
+            seg["Hand" + s] = h["palm"]
+            fingers = {n: (a, b) for n, a, b in h["fingers"]}
+            for bone, (a, b) in (("Index", fingers["index"]),
+                                 ("Fingers", ((fingers["middle"][0] + fingers["ring"][0]) * 0.5,
+                                              (fingers["middle"][1] + fingers["ring"][1]) * 0.5)),
+                                 ("Thumb", h["thumb"])):
+                j = a + (b - a) * 0.55
+                seg[bone + "1" + s] = (a, j)
+                seg[bone + "2" + s] = (j, b)
             seg["Hip" + s] = (p["hip" + s], p["knee" + s])
             seg["Knee" + s] = (p["knee" + s], p["ankle" + s])
             seg["Foot" + s] = (p["ankle" + s], p["toe" + s])
@@ -224,13 +282,37 @@ def capsule(a, b, r, stiff=2.0):
 
 
 PART_TORSO, PART_ARM_L, PART_ARM_R, PART_LEG_L, PART_LEG_R = 1, 2, 3, 4, 5
+PART_HAND_L, PART_HAND_R, PART_HEAD, PART_LIPS, PART_BROW = 6, 7, 8, 9, 10
+FINGER_BONES = ["Thumb1", "Thumb2", "Index1", "Index2", "Fingers1", "Fingers2"]
 PART_BONES = {
-    PART_TORSO: ["Hips", "Spine", "Chest", "Neck", "Head"],
-    PART_ARM_L: ["Chest", "ShoulderL", "ElbowL", "HandL"],
-    PART_ARM_R: ["Chest", "ShoulderR", "ElbowR", "HandR"],
+    PART_TORSO: ["Hips", "Spine", "Spine2", "Chest", "Neck", "Head", "ClavicleL", "ClavicleR"],
+    PART_ARM_L: ["Chest", "ClavicleL", "ShoulderL", "ElbowL", "HandL"],
+    PART_ARM_R: ["Chest", "ClavicleR", "ShoulderR", "ElbowR", "HandR"],
+    PART_HAND_L: ["ElbowL", "HandL"] + [b + "L" for b in FINGER_BONES],
+    PART_HAND_R: ["ElbowR", "HandR"] + [b + "R" for b in FINGER_BONES],
     PART_LEG_L: ["Hips", "HipL", "KneeL", "FootL"],
     PART_LEG_R: ["Hips", "HipR", "KneeR", "FootR"],
+    PART_HEAD: ["Neck", "Head"],
+    PART_LIPS: ["Head"],
+    PART_BROW: ["Head"],
 }
+
+
+def smoothstep(e0, e1, x):
+    t = max(0.0, min(1.0, (x - e0) / (e1 - e0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def expand_candidates(cands):
+    """Explicit bone lists predate the second spine bone and the clavicles: add them where
+    their neighbours are listed, so clothes bend with the body."""
+    out = list(cands)
+    if "Spine" in out and "Chest" in out and "Spine2" not in out:
+        out.append("Spine2")
+    for s in "LR":
+        if "Shoulder" + s in out and "Clavicle" + s not in out:
+            out.append("Clavicle" + s)
+    return out
 
 
 def tag_part(me, part):
@@ -415,6 +497,7 @@ class Character:
         self.L = look
         self.b = Build(look)
         self.objects = []  # (obj, rigid_bone or None, candidate bones or None)
+        self.face_objects = set()  # objects whose lower face follows the jaw and brows the brow bones
         L = look
         b = self.b
         self.M = {}
@@ -433,10 +516,12 @@ class Character:
     def m(self, name):
         return mat(name, self.palette[name])
 
-    def add(self, name, me, materials, rigid=None, bones=None):
+    def add(self, name, me, materials, rigid=None, bones=None, face=False):
         smooth_all(me)
         obj = mesh_obj(name, me, [self.m(n) for n in materials])
         self.objects.append((obj, rigid, bones))
+        if face:
+            self.face_objects.add(name)
         return obj
 
     # --- Body ---------------------------------------------------------------------
@@ -473,8 +558,7 @@ class Character:
             arm = [
                 capsule(p["shoulder" + s], p["elbow" + s], 0.07 * t, 2.0),
                 ball(p["shoulder" + s], 0.08 * t, 2.0),
-                capsule(p["elbow" + s], p["wrist" + s], 0.058 * t, 2.0),
-                ellip(p["wrist" + s] + (p["fist" + s] - p["wrist" + s]) * 0.55, (0.062 * hs, 0.066 * hs, 0.07 * hs), stiff=2.0),
+                capsule(p["elbow" + s], p["wrist" + s] + (p["wrist" + s] - p["elbow" + s]).normalized() * 0.01, 0.058 * t, 2.0),
             ]
             limbs.append(("arm" + s, tag_part(metaballs("arm" + s, arm, resolution=0.013), PART_ARM_L if s == "L" else PART_ARM_R)))
             leg = [
@@ -504,6 +588,30 @@ class Character:
         body = decimate(body, 7000)
         self.body_me = decimate(self.body_dense, 10000)
         self.add("Body", body, mats)
+        self.build_hands()
+
+    def build_hands(self):
+        """Proper hands with fingers, so fists clench, hands open to grab and fingers wrap a
+        pint. A separate mesh (finer voxels than the arms), tucked into the sleeve."""
+        parts = []
+        for s in "LR":
+            h = self.b.hand[s]
+            w, k = h["palm"]
+            d, fwd, inward = h["down"], h["fwd"], h["inward"]
+            hs = self.L["hand_size"] * HAND_SCALE
+            rot = Matrix((inward, fwd, d)).transposed()  # local x thick, y wide, z long
+            fr = h["finger_r"]
+            el = [ellip((w + k) * 0.5 + d * 0.004 * hs, (0.021 * hs, 0.038 * hs, 0.04 * hs), rot, stiff=2.0),
+                  capsule(w - d * 0.02 * hs, w + d * 0.01 * hs, 0.03 * hs)]
+            for name, a, b in h["fingers"]:
+                el.append(capsule(a - d * 0.008 * hs, b, fr * (0.92 if name == "pinky" else 1.0)))
+            ta, tb = h["thumb"]
+            el.append(capsule(ta, tb, fr * 1.1))
+            el.append(ellip(ta + (tb - ta) * 0.2, (0.016 * hs, 0.02 * hs, 0.022 * hs), rot))
+            me = metaballs("hand" + s, el, resolution=0.0034, smooth=2)
+            parts.append((tag_part(me, PART_HAND_L if s == "L" else PART_HAND_R), 0))
+        hands = decimate(join_meshes("Hands", parts), 2600)
+        self.add("Hands", hands, ["skin"])
 
     def region(self, c, waist_z, rugby, part):
         """Material index for a point on the body."""
@@ -564,24 +672,26 @@ class Character:
         head = metaballs("head", el, resolution=0.011)
         for poly in head.polygons:
             poly.material_index = 0
+        tag_part(head, PART_HEAD)
         self.head_me = decimate(head.copy(), 4000)
 
         ears = []
         for s in (-1, 1):
             ears.append(ellip(hc + Vector((0.98 * r * s, -0.02 * r, -0.02 * r)), (r * 0.09, r * 0.2, r * 0.27), stiff=2.0))
-        ears_me = metaballs("ears", ears, resolution=0.006)
+        ears_me = tag_part(metaballs("ears", ears, resolution=0.006), PART_HEAD)
         nose_size = L["nose_size"]
         nose = metaballs("nose", [
             capsule(hc + Vector((0, 0.86 * r, 0.22 * r)), hc + Vector((0, 1.0 * r, -0.12 * r)), r * 0.1 * nose_size, 2.0),
             ellip(hc + Vector((0, 1.02 * r, -0.16 * r)), (r * 0.17 * nose_size, r * 0.16 * nose_size, r * 0.15 * nose_size)),
         ], resolution=0.005)
-        lips = metaballs("lips", [ellip(hc + Vector((0, 0.9 * r, -0.48 * r)), (r * 0.3, r * 0.07, r * (0.07 if fem else 0.05)))], resolution=0)
+        lips = tag_part(metaballs("lips", [ellip(hc + Vector((0, 0.9 * r, -0.48 * r)), (r * 0.3, r * 0.07, r * (0.07 if fem else 0.05)))], resolution=0), PART_LIPS)
         brows = metaballs("brows", [
             capsule(hc + Vector((0.12 * r * s, (0.98 + 0.14 * brow) * r, (0.42 + 0.04 * brow) * r)),
                     hc + Vector((0.55 * r * s, (0.86 + 0.12 * brow) * r, (0.40 + 0.06 * brow) * r)), r * 0.065, 2.0)
             for s in (-1, 1)], resolution=0)
+        tag_part(brows, PART_BROW)
         face = join_meshes("Head", [(decimate(head.copy(), 3000), 0), (ears_me, 0), (lips, 2), (brows, 3)])
-        self.add("Face", face, ["skin", "flush", "lips", "brow"], bones=["Head", "Neck"])
+        self.add("Face", face, ["skin", "flush", "lips", "brow"], bones=["Head", "Neck"], face=True)
         self.add("NoseMesh", nose, ["flush"], rigid="Nose")
 
         eyes = []
@@ -724,7 +834,7 @@ class Character:
                 th = lambda co: 0.022
             me = shell(self.head_me, "beard", pred, th, solid=style != "STUBBLE")
             if me is not None:
-                self.add("Beard_" + style, me, ["stubble"] if style == "STUBBLE" else mats, rigid="Head")
+                self.add("Beard_" + style, me, ["stubble"] if style == "STUBBLE" else mats, bones=["Head"], face=True)
 
     # --- Hats ---------------------------------------------------------------------
     def build_hats(self, styles):
@@ -945,7 +1055,7 @@ class Character:
             return d.y > 0.45 * r and -0.75 * r < d.z < -0.25 * r and abs(d.x) < 0.5 * r
         me = shell(self.head_me, "blood_face", face, lambda co: 0.004, solid=False)
         if me:
-            self.add("Blood_Face", me, ["blood"], rigid="Head")
+            self.add("Blood_Face", me, ["blood"], bones=["Head"], face=True)
 
         def cheek(c, n):
             d = c - hc
@@ -993,13 +1103,16 @@ class Character:
         part = None
         if "part" in me.attributes:
             part = [d.value for d in me.attributes["part"].data]
+        face = obj.name in self.face_objects
         for v in me.vertices:
             co = v.co
             cands = bones
-            if part is not None and part[v.index] in PART_BONES:
-                cands = PART_BONES[part[v.index]]
+            pt = part[v.index] if part is not None else 0
+            if pt in PART_BONES:
+                cands = PART_BONES[pt]
             if cands is None:
                 cands = self.body_candidates(co)
+            cands = expand_candidates(cands)
             ds = []
             for n in cands:
                 a, bb = segs[n]
@@ -1009,17 +1122,51 @@ class Character:
                 ds.append((d, n))
             ds.sort()
             ds = ds[:3]
-            ws = [(1.0 / max(d, 0.01) ** 5, n) for d, n in ds]
+            ws = [(1.0 / max(d, 0.01 if pt not in (PART_HAND_L, PART_HAND_R) else 0.002) ** 5, n) for d, n in ds]
             tot = sum(w for w, _ in ws)
-            for w, n in ws:
-                if w / tot > 0.02:
-                    groups[n].add([v.index], w / tot, "REPLACE")
+            weights = {n: w / tot for w, n in ws}
+            if face:
+                self.face_weights(co, pt, weights)
+            for n, w in weights.items():
+                if w > 0.02:
+                    groups[n].add([v.index], w, "REPLACE")
+
+    def face_weights(self, co, pt, weights):
+        """Moves some of the Head's weight to the jaw (chin, lower lip, beard) and the brows."""
+        head = weights.get("Head", 0.0)
+        if head <= 0.0:
+            return
+        r, hc = self.b.r, self.b.head_c
+        d = co - hc
+        if pt == PART_BROW:
+            weights.pop("Head")
+            weights["BrowL" if d.x < 0 else "BrowR"] = head
+            return
+        if pt == PART_LIPS:
+            jaw = smoothstep(-0.46 * r, -0.52 * r, d.z)
+        else:
+            jaw = smoothstep(-0.3 * r, -0.62 * r, d.z) * smoothstep(-0.2 * r, 0.4 * r, d.y)
+        brow = 0.0
+        if pt == PART_HEAD and d.y > 0.5 * r:
+            for s in "LR":
+                a, b = self.b.segments["Brow" + s]
+                ab = b - a
+                t = max(0.0, min(1.0, (co - a).dot(ab) / ab.length_squared))
+                dist = (co - (a + ab * t)).length
+                f = 0.55 * smoothstep(0.2 * r, 0.06 * r, dist)
+                if f > brow:
+                    brow, brow_bone = f, "Brow" + s
+        weights["Head"] = head * (1.0 - jaw - brow)
+        if jaw > 0.0:
+            weights["Jaw"] = weights.get("Jaw", 0.0) + head * jaw
+        if brow > 0.0:
+            weights[brow_bone] = weights.get(brow_bone, 0.0) + head * brow
 
     def body_candidates(self, co):
         p = self.b.p
         for s in "LR":
             if abs(co.x) > abs(p["shoulder" + s].x) - 0.035 and co.z > p["hips"].z - 0.05 and (s == "R") == (co.x > 0):
-                return ["Chest", "Shoulder" + s, "Elbow" + s, "Hand" + s]
+                return ["Chest", "Clavicle" + s, "Shoulder" + s, "Elbow" + s, "Hand" + s]
         if co.z < p["hips"].z - 0.06:
             s = "R" if co.x > 0 else "L"
             return ["Hips", "Hip" + s, "Knee" + s, "Foot" + s]
