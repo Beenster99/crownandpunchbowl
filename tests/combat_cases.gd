@@ -911,6 +911,14 @@ func test_groin_kick_combo() -> void:
 	_check(moves == [&"jab", &"body_jab", &"groin_kick"], "jab, body jab, kick goes low (got %s)" % [moves])
 	_check(combos.has("Below the belt"), "and it's a combo (got %s)" % [combos])
 	_check(e.state == Fighter.State.DOUBLED, "they go down on all fours holding it (state %d)" % e.state)
+	# Or straight off: LB + X with the stick pulled back.
+	await _wait(Moves.DOUBLED_TIME + 1.0)
+	moves.clear()
+	p.move_input = Vector3(0, 0, 1)  # facing -z: pulling back
+	await _tap(p, &"jab", true)
+	p.move_input = Vector3.ZERO
+	await _wait(0.6)
+	_check(moves == [&"groin_kick"], "LB + X, stick back, is the groin kick (got %s)" % [moves])
 	_check(not e.is_down() and e.can_be_grabbed(), "doubled over, they can still be hit and held")
 	await _wait(Moves.DOUBLED_TIME + 0.3)
 	_check(e.state == Fighter.State.IDLE, "and get back up after a while (state %d)" % e.state)

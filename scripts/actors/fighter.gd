@@ -781,6 +781,20 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 	_rpc_start_move.rpc(move_id, _path(tgt), bonus, combo_name, hold)
 
 
+## Pull out of a wind-up before it goes: a feint. Host only (NPCs).
+func cancel_windup() -> void:
+	if multiplayer.is_server() and state == State.WINDUP and not _charging:
+		_rpc_cancel_windup.rpc()
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_cancel_windup() -> void:
+	if not _sender_is_host() or state != State.WINDUP:
+		return
+	_enter(State.IDLE, 0.0)
+	Events.attack_feinted.emit(self)
+
+
 ## Throw the power shot being held, if there is one.
 func _server_unleash() -> void:
 	if state != State.WINDUP or not _hold_power:

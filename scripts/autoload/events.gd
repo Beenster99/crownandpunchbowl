@@ -22,6 +22,8 @@ signal attack_countered(defender: Node, attacker: Node)
 ## A player locked on to `target` (null: let go). Local to the player's own peer.
 signal lock_changed(player: Node, target: Node)
 signal attack_whiffed(attacker: Node, move: StringName)
+## A punter started a punch and pulled out of it (a feint).
+signal attack_feinted(attacker: Node)
 ## `defender` was blocking, but a guard breaker (kick, headbutt, haymaker) went through.
 signal guard_broken(defender: Node, attacker: Node)
 ## Head shots have him on wobbly legs (Fighter.is_rocked), or body shots have winded him.

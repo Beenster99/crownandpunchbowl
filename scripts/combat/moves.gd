@@ -244,6 +244,13 @@ const DATA := {
 	&"counter_jab": {"damage": 6.0, "telegraph": true, "windup_scale": 0.55, "active": 0.06,
 		"recover": 0.45, "reach": 1.35, "arc": 70.0, "stagger": 0.3, "poise": 8.0,
 		"knockback": 1.4, "to_face": true},
+	# Punters who can box: a quick jab at the head (slip it or cover up) and a straight right.
+	&"punter_jab": {"damage": 5.0, "telegraph": true, "windup_scale": 0.5, "active": 0.06,
+		"recover": 0.35, "reach": 1.4, "arc": 60.0, "stagger": 0.25, "poise": 6.0,
+		"knockback": 1.0, "to_face": true},
+	&"punter_cross": {"damage": 8.0, "telegraph": true, "windup_scale": 0.7, "active": 0.06,
+		"recover": 0.5, "reach": 1.4, "arc": 60.0, "stagger": 0.35, "poise": 10.0,
+		"knockback": 1.8, "to_face": true},
 	&"haymaker": {"damage": 14.0, "telegraph": true, "windup_scale": 1.5, "active": 0.07,
 		"recover": 0.95, "reach": 1.4, "arc": 80.0, "stagger": 0.6, "poise": 30.0,
 		"knockback": 4.0, "heavy": true, "to_face": true, "guard_break": true, "side": 1.0},
@@ -256,8 +263,9 @@ const DATA := {
 }
 
 ## Enemy tells are this much longer than the difficulty's telegraph_time, so you can see
-## someone lining a punch up and decide what to do about it.
-const ENEMY_WINDUP_SCALE := 1.35
+## someone lining a punch up and decide what to do about it. Quick shots (punter_jab) scale
+## it right down: those you slip or block on reflex.
+const ENEMY_WINDUP_SCALE := 1.15
 ## Locomotion has weight: speeding up and slowing down take a moment (m/s per second).
 const ACCEL := 16.0
 const DECEL := 20.0
@@ -296,6 +304,8 @@ const MASH_LIMIT := 2              ## presses too early in a row before you fumb
 const FUMBLE_TIME := 0.35          ## you're off balance this long after mashing
 ## Seconds without landing a hit before the combo counter resets.
 const COMBO_TIMEOUT := 2.2
+## Punters' own combinations: follow-ups thrown straight off the last one (in its recovery).
+const PUNTER_FOLLOW_UPS := {&"punter_jab": 2, &"punter_cross": 2, &"body_swing": 1}
 
 
 ## The combo `history` (oldest first) completes, or {}.

@@ -77,7 +77,8 @@ const MOVE_ANIMS := {
 	# Move ids from scripts/combat/moves.gd. Placeholders reuse the nearest animation.
 	"jab": &"punch_l", "cross": &"punch_r", "hook": &"hook_r", "uppercut": &"uppercut_r",
 	"hook_l": &"hook_l", "hook_r": &"hook_r", "uppercut_r": &"uppercut_r",
-	"haymaker": &"punch_r", "counter": &"punch_r", "counter_whiff": &"dodge", "shove": &"punch_l",
+	"haymaker": &"punch_r", "counter": &"punch_r", "punter_jab": &"punch_l", "punter_cross": &"punch_r",
+	"counter_jab": &"punch_l", "counter_whiff": &"dodge", "shove": &"punch_l",
 	"knee": &"clinch_knee", "stomp": &"stomp", "baton": &"swing",
 	"clinch_knee": &"clinch_knee", "groin_kick": &"groin_kick", "shoulder_charge": &"shoulder_charge",
 	"body_swing": &"body_swing", "body_jab": &"jab_body", "body_hook": &"hook_l_body", "body_uppercut": &"uppercut_body",
@@ -1400,11 +1401,13 @@ func _anim_defs() -> Dictionary:
 	var fists := {&"_fistL": Vector3(1, 0, 0), &"_fistR": Vector3(1, 0, 0)}
 	# Boxing guard (mid range): bladed with the left side forward, elbows down in front of the ribs,
 	# forearms up, the lead fist a little out at eye height and the rear fist by the cheek, chin
-	# tucked, knees soft.
+	# tucked, knees soft. The arm angles are fitted (on the real models) so the knuckles land
+	# by the cheek and brow, the fists stay either side of the face and the elbows clear the
+	# chest: see docs/CONVENTIONS.md, "Guard poses".
 	var guard := _with(fists, {
 		&"Hips": Vector3(0, -16, 0), &"Spine": Vector3(-8, 9, 0), &"Head": Vector3(-8, 6, 0),
-		&"ShoulderL": Vector3(50, -25, 25), &"ElbowL": Vector3(115, 0, 0), &"HandL": Vector3(0, -70, 0),
-		&"ShoulderR": Vector3(40, 30, -30), &"ElbowR": Vector3(136, 0, 0), &"HandR": Vector3(0, 70, 0),
+		&"ShoulderL": Vector3(75, -16, -3), &"ElbowL": Vector3(96, 0, 0), &"HandL": Vector3(6, -70, 5),
+		&"ShoulderR": Vector3(63, 50, 24), &"ElbowR": Vector3(112, 0, 0), &"HandR": Vector3(-13, 70, -4),
 		&"HipL": Vector3(16, 0, -6), &"KneeL": Vector3(-18, 0, 0), &"HipR": Vector3(-10, 0, 6), &"KneeR": Vector3(-16, 0, 0),
 		&"_hips": Vector3(0, -0.02, 0), &"_brow": Vector3(0.6, 0, 0),
 	})
