@@ -74,6 +74,8 @@ const PARRY_STAGGER := 1.0         ## how long a parried attacker reels
 const COUNTER_WINDOW := 0.9        ## after a parry, a punch this soon is a counter
 const COUNTER_BONUS := 1.8         ## damage multiplier on a counter
 const GUARD_BREAK_STAGGER := 0.7   ## a blocker hit by a guard breaker reels this long
+## Lock-on (L3 / Tab) holds while the man is within this many metres and on his feet.
+const LOCK_RANGE := 9.0
 const ENGAGE_RANGE := 3.2          ## a player within this of an active enemy takes a stance
 const STANCE_MOVE_SCALE := 0.6     ## speed in a fighting stance (footwork, not sprinting)
 const STANCE_HOLD := 4.0           ## seconds a stance lasts after the last exchange

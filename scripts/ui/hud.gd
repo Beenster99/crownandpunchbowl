@@ -31,7 +31,7 @@ var _banner_tween: Tween
 ## Shown in the controls reminder, in this order, if the action exists in Settings.ACTIONS.
 const HINTS := [["jab", "Jab"], ["hook", "Hook (hold: power)"], ["uppercut", "Uppercut (hold: power)"],
 	["guard_head", "Head guard / parry"], ["guard_body", "Body guard"], ["headbutt", "Headbutt"],
-	["dodge", "Dodge"], ["interact", "Pick up / order drink"], ["order_food", "Order food"],
+	["dodge", "Dodge"], ["lock_on", "Lock on"], ["lock_next", "Next man"], ["interact", "Pick up / order drink"], ["order_food", "Order food"],
 	["throw", "Throw"]]
 ## Shoulder-button combinations, shown as "LB + X  Kick": [modifier, action, caption].
 const COMBO_HINTS := [["guard_body", "jab", "Body shot"], ["guard_head", "jab", "Kick"],

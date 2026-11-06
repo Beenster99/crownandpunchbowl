@@ -93,6 +93,9 @@ var current_move: StringName = &""
 ## relaxed idle or a guard.
 var in_stance := false
 var stance_target: Fighter = null
+## Locked on (PlayerFighter, on its own peer): squared up to this man and every punch goes at
+## him, whoever else is about. Null when not locked.
+var lock_target: Fighter = null
 ## Which guard is up while state is BLOCK: Moves.GUARD_HEAD (LB) or Moves.GUARD_BODY (RB).
 var guard_zone: StringName = Moves.GUARD_HEAD
 ## The last slip's direction (x right, y up), for visuals. Fades with the slip.
@@ -1337,7 +1340,7 @@ func _update_stance() -> void:
 	var tgt: Fighter = null
 	var on := _combat_t > 0.0 or state == State.BLOCK
 	if not is_down() and state != State.HELD and state != State.GRABBING:
-		tgt = _nearest_active_foe()
+		tgt = lock_target if is_locked() else _nearest_active_foe()
 		if team == Team.PLAYERS and tgt != null:
 			on = true
 	else:
@@ -1346,6 +1349,12 @@ func _update_stance() -> void:
 	if on != in_stance:
 		in_stance = on
 		stance_changed.emit(on)
+
+
+## Locked on to someone who's still there to fight.
+func is_locked() -> bool:
+	return lock_target != null and is_instance_valid(lock_target) and not lock_target.is_down() \
+		and lock_target.is_inside_tree() and _flat_dist(lock_target) <= Moves.LOCK_RANGE
 
 
 ## The enemy within ENGAGE_RANGE who is up for a fight (recently in an exchange, or

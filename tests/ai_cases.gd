@@ -19,6 +19,7 @@ func run() -> void:
 		"test_held_punter_struggles_free", "test_bar_staff", "test_waves_and_cleared",
 		"test_police_raid", "test_cooling_off", "test_one_or_two_at_a_time",
 		"test_punters_counter_cover_and_breathe", "test_guard_follows_the_shots",
+		"test_never_the_whole_pub",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -493,3 +494,34 @@ func test_guard_follows_the_shots() -> void:
 		await get_tree().physics_frame
 		low = low or (npc.state == Fighter.State.BLOCK and npc.guard_zone == Moves.GUARD_BODY)
 	_check(low, "after body shots he covers the body instead (%s)" % [npc._zone_heat])
+
+
+## A fight is one on one, or one on two when a mate wades in: even with two players the pub
+## never piles in, and a punter whose man goes down doesn't hop onto a fight that's full.
+func test_never_the_whole_pub() -> void:
+	var d := _director()
+	var p1 := _player(Vector3(-4, 0, 0), 100000.0)
+	var p2 := _player(Vector3(4, 0, 0), 100000.0)
+	var npcs: Array[Npc] = []
+	for i in 8:
+		var who := p1 if i < 4 else p2
+		var a := TAU * i / 4.0
+		npcs.append(d.spawn(&"local", who.position + Vector3(cos(a), 0, sin(a)) * 2.5))
+	await _wait(0.1)
+	_hit(npcs[0], p1)
+	_hit(npcs[4], p2)
+	for i in npcs.size():
+		npcs[i].engage(p1 if i < 4 else p2, true)  # everyone tries to join in at once
+	var total := d.total_engaged_cap()
+	_check(total == d.engaged_cap() + 1, "two players make room for one more (%d)" % total)
+	var most := 0
+	for i in 180:
+		d.heat = 1.0
+		most = maxi(most, npcs.filter(func(n): return n.mood == Npc.Mood.ENGAGED).size())
+		await get_tree().physics_frame
+	var on1 := npcs.filter(func(n): return n.mood == Npc.Mood.ENGAGED and n.foe == p1).size()
+	var on2 := npcs.filter(func(n): return n.mood == Npc.Mood.ENGAGED and n.foe == p2).size()
+	_check(on1 + on2 <= total, "at most %d squaring up across the pub (%d)" % [total, on1 + on2])
+	_check(on1 >= 1 and on2 >= 1, "both players still have a fight (%d, %d)" % [on1, on2])
+	_check(on1 <= d.engaged_cap() and on2 <= d.engaged_cap(), "one or two on each man (%d, %d)" % [on1, on2])
+	_check(not d.has_room(p1) or not d.has_room(p2), "the pub is full: no room for a third mate")

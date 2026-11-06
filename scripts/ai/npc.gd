@@ -520,11 +520,18 @@ func _think_alert(delta: float) -> void:
 func _think_engaged(delta: float) -> void:
 	if foe == null or not is_instance_valid(foe) or not foe.can_be_targeted() \
 			or (foe.is_down() and _nearest_player(30.0, true) != null):
+		var was := foe
 		foe = _nearest_player(30.0, true)
 		if foe == null:
 			foe = _nearest_player(30.0)
 		if foe == null:
 			mood = Mood.ALERT
+			return
+		# Our man's down: only take on his mate if that fight has room, else stand and watch.
+		var d := _find_director()
+		if foe != was and d != null and not bool(_type["always_engaged"]) \
+				and not (d.engaged_on(foe).size() < d.engaged_cap()):
+			back_off()
 			return
 	# Cool off when nobody's traded blows for a while and the room has calmed down.
 	if not bool(_type["always_engaged"]) and rushing <= 0.0 and _quiet_t > 15.0 \

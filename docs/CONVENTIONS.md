@@ -212,6 +212,10 @@ Rules other workstreams rely on:
   shows the opening unless `gameplay/opening_hints` is off.
 - **Perfect reads.** A parry within `PERFECT_WINDOW` of raising the guard, or a slip that close
   to the hit, carries `perfect: true`; the local player gets slow motion (`Fx.slow_mo`, solo only).
+- **Lock-on.** `Fighter.lock_target` (players: `lock_on` toggles, `lock_next` turns to the
+  next man clockwise). While `is_locked()` (target standing, within `Moves.LOCK_RANGE`) the
+  stance faces him, strikes lunge at him and combos don't re-pick a target. It lets go by
+  itself when he goes down or out of range. Emits `Events.lock_changed`; the foe bar marks him.
 - **Punishes.** A hit on a fighter in the recovery of their own strike does `PUNISH_BONUS` and
   carries `punish: true`. Parry and slip counters do `COUNTER_BONUS`.
 - **Stance.** `in_stance` / `stance_changed` say when a fighter is squared up for a fight
@@ -245,6 +249,10 @@ Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/ai_test.gd
   `staff` (`staff` only; nobody hits them and the Director ignores any hit on them).
 - **Moods:** `Npc.Mood.CALM / ALERT / ENGAGED`. Punters engage only when hit, when a mate nearby is
   hit, in a gang-up, or walking in on a hot fight. They cool off when it goes quiet.
+- **Fights are one on one, or one on two.** `engaged_cap()` punters square up per player, and
+  `total_engaged_cap()` (that cap plus one per extra standing player) across the whole pub;
+  the rest watch with their fists down. A punter whose man goes down only switches to another
+  player who has room, otherwise he backs off. Police ignore both caps.
 - **Queries other workstreams use:** `director.heat` (0..1, HUD meter),
   `director.punters_left()`. Events emitted: `fight_started`, `reinforcements_arrived`,
   `police_called`, `pub_cleared`, `banner`. `all_players_down` belongs to co-op rules, not the Director.

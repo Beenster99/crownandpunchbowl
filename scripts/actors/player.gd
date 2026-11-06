@@ -24,6 +24,8 @@ extends Fighter
 ##
 ## Nobody is chased across the room: you walk into range, and a punch only steps in a
 ## short way. Near an active enemy you take a stance and square up to them.
+## L3 (Tab) locks on to the man in front: you stay squared up to him and every punch goes at
+## him, whoever else is about. Press it again to let go; D-pad right (R) switches to the next man.
 ## Mash any button while held to struggle.
 
 ## Current combo (hits landed without a long gap or being hit). HUD reads Events.combo_changed.
@@ -82,6 +84,9 @@ func _apply_farmer() -> void:
 
 func _physics_process(delta: float) -> void:
 	_tick_combo(delta)
+	if lock_target != null and not is_locked():
+		lock_target = null  # down, gone or out of range: the lock lets go
+		Events.lock_changed.emit(self, null)
 	if is_multiplayer_authority():
 		_read_input(delta)
 	super(delta)
@@ -123,6 +128,10 @@ func _read_input(delta: float) -> void:
 	if Input.is_action_just_pressed("throw") and state == State.GRABBING:
 		request_throw()
 		return
+	if Input.is_action_just_pressed("lock_on"):
+		toggle_lock()
+	if Input.is_action_just_pressed("lock_next"):
+		next_lock()
 	if Input.is_action_just_pressed("headbutt"):
 		press(&"headbutt")
 	if _power_button != &"" and not Input.is_action_pressed(String(_power_button)):
@@ -179,6 +188,58 @@ func release_power() -> void:
 	_power_button = &""
 	if state == State.WINDUP and _hold_power:
 		request_unleash()
+
+
+## Lock on to the man in front, or let go if locked. Candidates are enemies on their feet
+## within LOCK_RANGE, the ones fighting you and in front first.
+func toggle_lock() -> void:
+	if is_locked():
+		lock_target = null
+	else:
+		var foes := lock_candidates()
+		lock_target = foes[0] if not foes.is_empty() else null
+	Events.lock_changed.emit(self, lock_target)
+
+
+## Locked on: switch to the next man round from him, clockwise (or lock on if not locked).
+func next_lock() -> void:
+	if not is_locked():
+		toggle_lock()
+		return
+	var best: Fighter = null
+	var best_turn := INF
+	var from := lock_target.global_position - global_position
+	for f in lock_candidates():
+		if f == lock_target:
+			continue
+		var to := f.global_position - global_position
+		# Angle from the current lock round to this man, clockwise seen from above, 0..360.
+		var turn := fposmod(rad_to_deg(atan2(from.x * to.z - from.z * to.x, from.x * to.x + from.z * to.z)), 360.0)
+		if turn < best_turn:
+			best_turn = turn
+			best = f
+	if best != null:
+		lock_target = best
+		Events.lock_changed.emit(self, lock_target)
+
+
+func lock_candidates() -> Array[Fighter]:
+	var out: Array[Fighter] = []
+	for node in get_tree().get_nodes_in_group(GROUP):
+		var f := node as Fighter
+		if f == null or f == self or not is_hostile_to(f) or f.is_down() or not f.can_be_targeted():
+			continue
+		if _flat_dist(f) <= Moves.LOCK_RANGE:
+			out.append(f)
+	var fwd := get_facing()
+	var score := func(f: Fighter) -> float:
+		var to := f.global_position - global_position
+		to.y = 0.0
+		var ang := rad_to_deg(fwd.angle_to(to.normalized())) if to.length() > 0.01 else 0.0
+		var fighting: bool = f.stance_target == self or ("foe" in f and f.get("foe") == self)
+		return to.length() + ang / 45.0 - (2.0 if fighting else 0.0)
+	out.sort_custom(func(a: Fighter, b: Fighter) -> bool: return score.call(a) < score.call(b))
+	return out
 
 
 ## Right stick: move the head. A flick past the threshold slips (head shots miss for a moment).
@@ -258,6 +319,9 @@ func _perform(move: StringName, hold := false) -> void:
 		return
 	var aim := move_input
 	var tgt := Targeting.pick(self, aim)
+	if is_locked():
+		# Locked on: it goes at him (and steps in if he's just out of reach), or at nobody.
+		tgt = lock_target if _flat_dist(lock_target) <= Moves.LUNGE_RANGE else null
 	if move == &"kick" and tgt == null:
 		var floored := Targeting.pick(self, aim, Moves.LUNGE_RANGE * 0.6, true)
 		if floored != null:
@@ -272,7 +336,8 @@ func _perform(move: StringName, hold := false) -> void:
 	var combo_row := Moves.match_combo(_history)
 	if combo_row.has("becomes"):
 		move = combo_row["becomes"]  # e.g. the kick at the end of "Below the belt" goes low
-		tgt = Targeting.pick(self, aim)
+		if not is_locked():
+			tgt = Targeting.pick(self, aim)
 	var bonus := float(combo_row.get("bonus", 1.0))
 	var cname := String(combo_row.get("name", ""))
 	if not combo_row.is_empty() and combo_row["seq"].size() >= 3 \

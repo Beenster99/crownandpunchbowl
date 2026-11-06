@@ -135,14 +135,15 @@ func _process(_delta: float) -> void:
 
 ## Calm people stand relaxed (hands down, pint, chatting); the fists only come up when
 ## there's trouble: the fighter is in a fighting stance (Fighter.in_stance, which every
-## peer works out from the combat RPCs), or an NPC's AI mood is past CALM. Staff never
+## peer works out from the combat RPCs), or an NPC is ENGAGED in the fight. Staff never
 ## square up.
 func _wants_guard() -> bool:
 	if rig.staff:
 		return false
 	if bool(fighter.get("in_stance")):
 		return true
-	return "mood" in fighter and int(fighter.get("mood")) != 0  # Npc.Mood.CALM
+	# Only the punters actually in the fight put their fists up; the rest of the pub watches.
+	return "mood" in fighter and int(fighter.get("mood")) == 2  # Npc.Mood.ENGAGED
 
 
 
