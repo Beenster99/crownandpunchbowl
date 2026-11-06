@@ -218,9 +218,7 @@ func _test_in_pub() -> void:
 	_check(left < 301 or board.game.turn[0]["score"] == 0, "score went down")
 	var landed := Vector2(board.game.turn[0]["x"], board.game.turn[0]["y"])
 	_check(landed.distance_to(_t(20, 3)) < 60.0, "sober throw lands near the aim (%.0f mm)" % landed.distance_to(_t(20, 3)))
-	board.request_throw(_t(20, 3), 0.3)
-	var weak := Vector2(board.game.turn[1]["x"], board.game.turn[1]["y"])
-	_check(weak.y - _t(20, 3).y > 100.0, "an under-powered throw drops low (%.0f mm)" % (weak.y - _t(20, 3).y))
+	board.request_throw(_t(20, 3))
 	board.request_throw(_t(20, 3))
 	_check(board.game.turn_over, "turn over after three")
 	await get_tree().create_timer(DartsBoard.TURN_PAUSE + 0.2).timeout

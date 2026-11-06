@@ -31,12 +31,8 @@ const OCHE_RADIUS := 1.6                ## how close to the oche you must be to 
 const TURN_PAUSE := 1.8                 ## seconds the finished turn stays up
 const MATCH_PAUSE := 7.0                ## seconds the winner is shown before the lobby
 ## Throw scatter (mm, standard deviation) sober and on top when fully tipsy.
-const SCATTER := 13.0
-const TIPSY_SCATTER := 34.0
-## The throw's power meter (0..1): release here for a flat throw. Under-powered darts drop
-## low, over-powered ones fly high, POWER_ERROR mm per whole meter off.
-const SWEET_SPOT := 0.78
-const POWER_ERROR := 320.0
+const SCATTER := 9.0
+const TIPSY_SCATTER := 26.0
 const MAX_AIM := 260.0
 const PANEL_SCRIPT := preload("res://scripts/darts/darts_panel.gd")
 
@@ -192,10 +188,9 @@ func request_options(start_score: int, legs: int, double_out: bool) -> void:
 	_send(&"options", [start_score, legs, double_out])
 
 
-## Throw at `aim` (board mm, including the wobble the player saw) with `power` from the
-## power meter (SWEET_SPOT is a flat throw).
-func request_throw(aim: Vector2, power := SWEET_SPOT) -> void:
-	_send(&"throw", [aim, power])
+## Throw at `aim` (board mm, including the wobble the player saw).
+func request_throw(aim: Vector2) -> void:
+	_send(&"throw", [aim])
 
 
 func _send(action: StringName, args: Array) -> void:
@@ -240,21 +235,18 @@ func _server(peer: int, action: StringName, args: Array) -> void:
 		&"throw":
 			if args.is_empty() or not (args[0] is Vector2) or peer != game.thrower_peer() or _thrower_away():
 				return
-			var power: float = clampf(float(args[1]), 0.0, 1.0) if args.size() > 1 else SWEET_SPOT
-			if not _server_throw(peer, args[0], power):
+			if not _server_throw(peer, args[0]):
 				return
 		_:
 			return
 	_broadcast()
 
 
-func _server_throw(peer: int, aim: Vector2, power := SWEET_SPOT) -> bool:
+func _server_throw(peer: int, aim: Vector2) -> bool:
 	if aim.length() > MAX_AIM:
 		aim = aim.normalized() * MAX_AIM
 	var sigma := SCATTER + TIPSY_SCATTER * _tipsy_of(peer)
-	# y is down on the board: too little power drops the dart low, too much sends it high.
-	var drop := (SWEET_SPOT - power) * POWER_ERROR
-	var landed := aim + Vector2(_rng.randfn(0.0, sigma), drop + _rng.randfn(0.0, sigma))
+	var landed := aim + Vector2(_rng.randfn(0.0, sigma), _rng.randfn(0.0, sigma))
 	var res := game.throw_dart(landed)
 	if res.is_empty():
 		return false

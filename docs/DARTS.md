@@ -12,12 +12,9 @@ Darts is played on a **controller only**. Without one plugged in, the oche says 
 2. Up to four can chalk up at a board. The first to chalk up is the captain and picks
    **501 or 301**, **legs** (one leg, first to 2, first to 3) and **double out or straight out**,
    then presses Start. On your own it's a practice game.
-3. On your turn you step up to the oche and the aim starts on the bull. Steer with the
-   **left stick** (the aim drifts a little, so ease onto your target). Your hand wobbles, more
-   after a few pints and more again while you draw back.
-4. **Hold A** to draw back. The power meter rises and falls; **let go in the gold band** for a
-   flat throw. Let go early and the dart drops low, late and it flies high (about 30 mm per
-   tenth of the meter). Three darts a turn.
+3. On your turn you step up to the oche. Steer the target with the **left stick**. It wanders
+   about on its own (more after a few pints), so pick your moment.
+4. Press **A** to throw. Three darts a turn.
 5. **RT** again (or Step away) leaves the board but keeps your place. **Leave game** gives it up.
 6. If a fight kicks off, or you get hit, everyone at the board steps away. The game waits.
 
