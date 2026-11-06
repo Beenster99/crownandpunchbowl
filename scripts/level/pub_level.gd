@@ -82,6 +82,7 @@ func _ready() -> void:
 			add_child(n)
 	builder = PubBuilder.new(self, $World, $Markers, PubEra.get_style(era))
 	_build(builder)
+	builder.dress()  # pictures, furniture and clutter round the walls (same on every peer)
 	_build_environment()
 	items = PubItems.install(self)
 	_spawn_props()
@@ -332,7 +333,7 @@ func _spawn_props() -> void:
 		var path := ITEM_SCENE_PATH % kind
 		if ItemData.KINDS.has(StringName(kind)):
 			# Pickups and weapons from the items workstream, named identically on every peer.
-			items.add_item(StringName(kind), m.global_position, m.global_rotation.y)
+			items.add_item(StringName(kind), m.global_position, m.global_rotation.y, String(m.get_meta("variant", "")))
 		elif ResourceLoader.exists(path):
 			var item := (load(path) as PackedScene).instantiate() as Node3D
 			item.name = "I%d" % _items_spawned
@@ -350,6 +351,21 @@ func _placeholder(parent: Node3D, kind: String, m: Marker3D) -> void:
 	root.name = kind.to_pascal_case()
 	root.transform = m.transform
 	parent.add_child(root)
+	if PropLibrary.has(kind):
+		# A proper model (the marker's "variant" meta, else picked by position). Furniture
+		# is solid, small things are just looks.
+		var variant: Variant = m.get_meta("variant", m.global_position)
+		var vis := PropLibrary.visual(kind, variant)
+		if kind in ["table", "chair", "stool"]:
+			var body := StaticBody3D.new()
+			body.collision_layer = 1
+			body.collision_mask = 0
+			body.add_child(PropLibrary.shape(kind, variant))
+			body.add_child(vis)
+			root.add_child(body)
+		else:
+			root.add_child(vis)
+		return
 	match kind:
 		"table":
 			var body := b.solid(Vector3(1.1, 0.78, 1.1), Vector3(0, 0.39, 0), wood, 0.0, root, false)

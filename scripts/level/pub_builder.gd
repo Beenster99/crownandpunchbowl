@@ -21,6 +21,8 @@ var flicker_lights: Array[OmniLight3D] = []
 
 var _materials := {}
 var _glass_material: StandardMaterial3D
+## Era colour (html) -> [PubMaterials texture set, repeats per metre, roughness multiplier].
+var _textured := {}
 
 
 func _init(p_level: Node3D, p_world: Node3D, p_markers: Node3D, p_style: Dictionary) -> void:
@@ -28,18 +30,41 @@ func _init(p_level: Node3D, p_world: Node3D, p_markers: Node3D, p_style: Diction
 	world = p_world
 	markers = p_markers
 	style = p_style
+	var tex_scale := {"plaster": 0.45, "panelling": 0.9, "glazed_tile": 1.4, "wallpaper": 0.9}
+	for key in ["trim", "timber", "bar", "furniture"]:
+		_textured[(style[key] as Color).to_html()] = ["wood", 0.9, 1.0]
+	_textured[(style["timber"] as Color).lightened(0.15).to_html()] = ["wood", 0.9, 1.0]
+	_textured[(style["timber"] as Color).lightened(0.1).to_html()] = ["planks", 0.9, 1.0]
+	_textured[(style["floor_a"] as Color).darkened(0.15).to_html()] = ["planks", 0.9, 1.0]
+	_textured[(style["floor_b"] as Color).to_html()] = ["planks", 0.9, 1.0]
+	_textured[(style["bar_top"] as Color).to_html()] = ["wood", 0.9, 0.55]
+	var dado_set: String = style.get("dado_tex", "plaster")
+	_textured[(style["dado"] as Color).to_html()] = [dado_set, tex_scale.get(dado_set, 0.6), 1.0]
+	var wall_set: String = style.get("wall_tex", "plaster")
+	_textured[(style["wall"] as Color).to_html()] = [wall_set, tex_scale.get(wall_set, 0.6), 1.0]
+	_textured[Color("5a3024").to_html()] = ["brick", 1.0, 1.0]   # fireplaces
+	_textured[Color("4a4440").to_html()] = ["stone", 0.8, 1.0]   # hearth stones
 
 
 # --- Materials --------------------------------------------------------------
 
-func material(color: Color, metallic := 0.0, roughness := 0.85) -> StandardMaterial3D:
+## Era colours come back as textured PubMaterials (wood grain on timber and the bar,
+## plaster, panelling, glazed tiles or wallpaper on the walls, brick and stone round the
+## fire, brushed metal on anything metallic). Other colours are plain.
+func material(color: Color, metallic := 0.0, roughness := 0.85) -> Material:
 	var key := "%s/%.2f/%.2f" % [color.to_html(), metallic, roughness]
 	if not _materials.has(key):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = color
-		m.metallic = metallic
-		m.roughness = roughness
-		_materials[key] = m
+		var tex: Array = _textured.get(color.to_html(), [])
+		if metallic >= 0.5:
+			_materials[key] = PubMaterials.surface("metal", color, 2.0, 1.3, metallic * 0.85)
+		elif not tex.is_empty() and color.a >= 1.0:
+			_materials[key] = PubMaterials.surface(tex[0], color, tex[1], tex[2])
+		else:
+			var m := StandardMaterial3D.new()
+			m.albedo_color = color
+			m.metallic = metallic
+			m.roughness = roughness
+			_materials[key] = m
 	return _materials[key]
 
 
@@ -208,11 +233,11 @@ func floor_area(rect: Rect2, tile_metres := 2.0) -> void:
 	var plane := PlaneMesh.new()
 	plane.size = rect.size
 	mesh.mesh = plane
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = _floor_texture(style["floor"], style["floor_a"], style["floor_b"])
-	m.uv1_scale = Vector3(rect.size.x / tile_metres, rect.size.y / tile_metres, 1.0)
-	m.roughness = 0.6 if style["floor"] == "tiles" else 0.9
-	mesh.material_override = m
+	var floor_sets := {"boards": "planks", "tiles": "tiles", "flagstone": "flagstone"}
+	var set: String = floor_sets.get(style["floor"], "flagstone")
+	var tint: Color = Color(0.92, 0.9, 0.88) if set == "tiles" else (style["floor_a"] as Color).lerp(style["floor_b"], 0.5).lightened(0.08)
+	var repeats := {"planks": 0.85, "tiles": 0.8, "flagstone": 0.42}
+	mesh.material_override = PubMaterials.surface(set, tint, repeats[set] * 2.0 / tile_metres, 1.0)
 	body.add_child(mesh)
 	world.add_child(body)
 
@@ -235,6 +260,8 @@ func _wall(origin: Vector3, along_x: bool, a0: float, a1: float, openings: Array
 	root.name = "Wall"
 	world.add_child(root, true)
 	occluder(root)
+	walls_built.append({"origin": origin, "along_x": along_x, "a0": a0, "a1": a1, "height": h,
+		"openings": openings.duplicate(true), "root": root})
 	var ops := openings.duplicate()
 	ops.sort_custom(func(p, q): return p["c"] < q["c"])
 	var cursor := a0
@@ -344,6 +371,7 @@ func beam_x(z: float, x0: float, x1: float, y := -1.0) -> Node3D:
 	b.name = "Beam"
 	world.add_child(b, true)
 	deco(b, Vector3(x1 - x0, 0.28, 0.3), Vector3((x0 + x1) * 0.5, height, z), material(style["timber"]))
+	_keep_out(_box_around(Vector3((x0 + x1) * 0.5, height, z), Vector3((x1 - x0) * 0.5, 0.25, 0.3)))
 	return occluder(b)
 
 
@@ -354,6 +382,7 @@ func beam_z(x: float, z0: float, z1: float, y := -1.0) -> Node3D:
 	b.name = "Beam"
 	world.add_child(b, true)
 	deco(b, Vector3(0.3, 0.28, z1 - z0), Vector3(x, height, (z0 + z1) * 0.5), material(style["timber"]))
+	_keep_out(_box_around(Vector3(x, height, (z0 + z1) * 0.5), Vector3(0.3, 0.25, (z1 - z0) * 0.5)))
 	return occluder(b)
 
 
@@ -428,8 +457,25 @@ func bar_counter(rect: Rect2, staff_dir: Vector3, brass := false) -> void:
 	# Bottles on the bar to grab.
 	for k in [-0.4, 0.4]:
 		var along := Vector3(length * k, 0, 0) if long_x else Vector3(0, 0, length * k)
-		prop("bottle", centre + along + Vector3(0, 0.62, 0))
-	prop("glass", centre + Vector3(0, 0.62, 0))
+		prop("bottle", centre + along + Vector3(0, 0.63, 0))
+	prop("glass", centre + Vector3(0, 0.63, 0))
+	_keep_out(_box_around(centre, size * 0.5 + Vector3(0.3, 0.5, 0.3) + punter_dir.abs() * 1.4))
+	# Clutter along the punters' side of the counter: drip mats, half-finished drinks,
+	# crisps, the tip jar, the bell for last orders.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = PropLibrary.seed_for(centre)
+	var once := ["bell_brass", "tip_jar", "snack_pickled_eggs", "ice_bucket", "pump_clip_stand", "menu_stand"]
+	var many := ["beermat_stack", "ashtray_glass", "ashtray_tin", "snack_crisps", "snack_crisps_sv", "snack_crisps_co",
+		"snack_scratchings", "snack_peanuts_bowl", "glass_half", "glass_empty_pint", "glass_tumbler", "glass_shot",
+		"glass_wine_red", "bottle_candle"]
+	var top_y := centre.y + size.y * 0.5 + 0.045
+	var a := -length * 0.5 + 0.3
+	while a < length * 0.5 - 0.3:
+		var pick: String = once.pop_back() if not once.is_empty() and rng.randf() < 0.35 else many[rng.randi() % many.size()]
+		var along := Vector3(a, 0, 0) if long_x else Vector3(0, 0, a)
+		var out := punter_dir * (depth * rng.randf_range(0.18, 0.36))
+		decor(pick, Vector3(centre.x, top_y, centre.z) + along + out, rng.randf_range(0.0, 360.0))
+		a += rng.randf_range(0.45, 0.9)
 
 
 func _bar_count() -> int:
@@ -449,17 +495,26 @@ func back_bar(centre: Vector3, length: float, facing: Vector3, carved := false) 
 	var body := solid(size, Vector3(centre.x, h * 0.5, centre.z), material(style["bar"]))
 	body.name = "BackBar"
 	var front := facing * (depth * 0.5 + 0.02)
-	# Shelves with coloured bottles.
-	var colours := [Color("1f5a2a"), Color("6b3b14"), Color("8a8a7a"), Color("3a1a4a"), Color("a0742a")]
+	# Shelves of real bottles and glasses. They're pinned props: slam someone into the back
+	# bar and the physics knocks them off.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = PropLibrary.seed_for(centre)
+	var spirits := PropLibrary.variants("bottle")
+	var glasses := PropLibrary.variants("decor_glass")
+	_keep_out(_box_around(Vector3(centre.x, h * 0.5 + 0.3, centre.z), size * 0.5 + Vector3(0.3, 0.3, 0.3)))
 	for shelf in 3:
 		var y := -h * 0.5 + 0.9 + shelf * 0.38
 		deco(body, (Vector3(length, 0.04, 0.3) if along_x else Vector3(0.3, 0.04, length)),
 			front * 0.6 + Vector3(0, y, 0), material(style["bar_top"]))
-		var n := int(length / 0.22)
+		var n := int(length / 0.2)
 		for i in n:
-			var a := -length * 0.5 + 0.15 + i * 0.22
-			var p := (Vector3(a, y + 0.14, 0) if along_x else Vector3(0, y + 0.14, a)) + front * 0.6
-			cylinder(body, 0.045, 0.26, p, material(colours[(i + shelf) % colours.size()], 0.1, 0.2))
+			var a := -length * 0.5 + 0.15 + i * 0.2 + rng.randf_range(-0.03, 0.03)
+			var p := (Vector3(a, y + 0.02, 0) if along_x else Vector3(0, y + 0.02, a)) + front * 0.6
+			var pool := glasses if shelf == 0 and glasses.size() > 0 else spirits
+			if pool.is_empty():
+				continue
+			var pick: String = pool[rng.randi() % pool.size()]
+			decor(pick, body.position + p, rad_to_deg(atan2(facing.x, facing.z)) + rng.randf_range(-25.0, 25.0), true)
 	if carved:
 		# Victorian gantry: mirror panel and carved crest.
 		deco(body, (Vector3(length * 0.8, 0.5, 0.02) if along_x else Vector3(0.02, 0.5, length * 0.8)),
@@ -521,6 +576,8 @@ func fireplace(pos: Vector3, facing: Vector3, kind := "inglenook", top := -1.0) 
 	light.shadow_enabled = _shadows()
 	root.add_child(light)
 	flicker_lights.append(light)
+	_keep_out(_box_around(pos + facing * 1.0 + Vector3(0, float(style["wall_height"]) * 0.5, 0),
+		_flip(along_x, Vector3(w * 0.5 + 1.3, 0, 0)).abs() + Vector3(0, float(style["wall_height"]) * 0.5, 0) + facing.abs() * 1.2))
 	# Fireplace tools are weapons.
 	var tools_pos := pos + _flip(along_x, Vector3(w * 0.5 + 0.7, 0, 0)) + facing * (d + 0.35)
 	prop("poker", tools_pos)
@@ -533,19 +590,22 @@ func dartboard(pos: Vector3, facing: Vector3) -> void:
 	var root := Node3D.new()
 	root.name = "Dartboard"
 	root.position = pos
+	root.add_to_group("dartboards")
+	root.set_meta("facing", facing)
 	world.add_child(root, true)
-	var board := cylinder(root, 0.23, 0.05, Vector3.ZERO, material(Color("1a1a1a")))
-	board.rotation = Vector3(PI * 0.5, 0, 0) if absf(facing.z) > 0.5 else Vector3(0, 0, PI * 0.5)
-	var inner := cylinder(root, 0.16, 0.06, Vector3.ZERO, material(Color("c9b98a")))
-	inner.rotation = board.rotation
-	var bull := cylinder(root, 0.03, 0.07, Vector3.ZERO, material(Color("a01818")))
-	bull.rotation = board.rotation
-	# Cabinet doors either side.
 	var along := Vector3(1, 0, 0) if absf(facing.z) > 0.5 else Vector3(0, 0, 1)
-	for s in [-1.0, 1.0]:
-		var door := deco(root, (Vector3(0.28, 0.6, 0.04) if absf(facing.z) > 0.5 else Vector3(0.04, 0.6, 0.28)),
-			along * s * 0.42 + facing * 0.02, material(style["furniture"]))
-		door.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Regulation board in an open cabinet (PropLibrary "dartboard"); the root stays
+	# unrotated and the model turns to face the room (its face is local +Z).
+	var model := PropLibrary.visual("dartboard")
+	if model != null:
+		model.rotation.y = atan2(facing.x, facing.z)
+		root.add_child(model)
+	else:
+		var board := cylinder(root, 0.23, 0.05, Vector3.ZERO, material(Color("1a1a1a")))
+		board.rotation = Vector3(PI * 0.5, 0, 0) if absf(facing.z) > 0.5 else Vector3(0, 0, PI * 0.5)
+	# Keep the wall round the board and the throwing lane clear of pictures and furniture.
+	_keep_out(_box_around(pos, along * 0.8 + Vector3(0, 0.6, 0) + facing.abs() * 0.3))
+	_keep_out(_box_around(Vector3(pos.x, 1.0, pos.z) + facing * 1.4, along * 0.9 + Vector3(0, 1.0, 0) + facing.abs() * 1.6))
 	# Oche line 2.37 m out and a set of darts on a shelf/table near it.
 	var oche := Vector3(pos.x, 0.01, pos.z) + facing * 2.37
 	deco(world, (Vector3(0.6, 0.02, 0.05) if absf(facing.z) > 0.5 else Vector3(0.05, 0.02, 0.6)), oche, material(Color("c9a03a"), 0.8))
@@ -555,13 +615,15 @@ func dartboard(pos: Vector3, facing: Vector3) -> void:
 
 ## Pool table centred on `pos`, long side along X unless `rot_y` is 90.
 func pool_table(pos: Vector3, rot_y := 0.0) -> void:
-	var body := solid(Vector3(2.4, 0.8, 1.3), Vector3(pos.x, 0.4, pos.z), material(style["furniture"]), rot_y)
+	var model := PropLibrary.visual("pool_table")
+	var body := solid(Vector3(2.4, 0.8, 1.3), Vector3(pos.x, 0.4, pos.z), material(style["furniture"]), rot_y, null, model == null)
 	body.name = "PoolTable"
-	deco(body, Vector3(2.2, 0.04, 1.1), Vector3(0, 0.41, 0), material(Color("1f6a35"), 0.0, 0.95))
-	var balls := [Color("e8e2d0"), Color("c22a1a"), Color("e0b81a"), Color("141414"), Color("c22a1a"), Color("e0b81a")]
-	for i in balls.size():
-		var b := sphere(body, 0.03, Vector3(-0.3 + (i % 3) * 0.08, 0.45, -0.1 + (i / 3) * 0.09), material(balls[i], 0.0, 0.2))
-		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if model != null:
+		model.position.y = -0.4
+		body.add_child(model)
+	else:
+		deco(body, Vector3(2.2, 0.04, 1.1), Vector3(0, 0.41, 0), material(Color("1f6a35"), 0.0, 0.95))
+	_keep_out(AABB(Vector3(pos.x - 2.2, 0, pos.z - 2.0), Vector3(4.4, 2.0, 4.0)))
 	var basis := Basis(Vector3.UP, deg_to_rad(rot_y))
 	prop("pool_cue", pos + basis * Vector3(0.0, 0.85, 0.55), rot_y)
 	prop("pool_cue", pos + basis * Vector3(0.6, 0.0, 0.9), rot_y)
@@ -573,19 +635,33 @@ func pool_table(pos: Vector3, rot_y := 0.0) -> void:
 ## Tables and chairs are weapons, so they're spawned by the items workstream; until
 ## then PubLevel drops greybox stand-ins on these markers.
 func table_set(pos: Vector3, seats := 4, seat_kind := "chair", drinks := 2) -> void:
-	prop("table", pos)
+	var table := prop("table", pos)
+	var top := pos.y + (PropLibrary.dims("table", table.get_meta("variant", "")).y if PropLibrary.has("table") else 0.78) + 0.005
+	_keep_out(_box_around(pos + Vector3(0, 0.6, 0), Vector3(1.4, 0.6, 1.4)))
+	# One style of chair round each table.
+	var seat_variant := PropLibrary.resolve(seat_kind, PropLibrary.seed_for(pos) / 7) if PropLibrary.has(seat_kind) else ""
 	var offsets := [Vector3(0, 0, -0.85), Vector3(0, 0, 0.85), Vector3(-0.85, 0, 0), Vector3(0.85, 0, 0)]
 	for i in mini(seats, offsets.size()):
 		var o: Vector3 = offsets[i]
 		var rot := rad_to_deg(atan2(o.x, o.z))
-		prop(seat_kind, pos + o, rot)
+		prop(seat_kind, pos + o, rot, seat_variant)
 		if i < 2:
 			marker(PubLevel.PUNTER, pos + o * 1.05, {"pose": "seated", "facing": -o.normalized()})
 	for d in drinks:
 		var kind := "pint" if d % 2 == 0 else "glass"
-		prop(kind, pos + Vector3(-0.2 + d * 0.35, 0.8, 0.1 * (d % 2)))
+		prop(kind, Vector3(pos.x - 0.2 + d * 0.35, top, pos.z + 0.1 * (d % 2)))
 	if drinks >= 2:
-		prop("plate", pos + Vector3(0.15, 0.8, -0.25))
+		prop("plate", Vector3(pos.x + 0.15, top, pos.z - 0.25))
+	# Table-top clutter that gets sent flying: ashtrays, drip mats, a candle, crisps.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = PropLibrary.seed_for(pos)
+	var clutter := ["ashtray_glass", "ashtray_tin", "beermat_stack", "candle_stick", "bottle_candle", "salt_pepper",
+		"snack_crisps", "snack_crisps_sv", "snack_scratchings", "snack_peanuts_bowl", "glass_half", "glass_wine_red",
+		"glass_tumbler", "bottle_ketchup", "bottle_brown_sauce", "bottle_vinegar", "menu_stand", "glass_sherry"]
+	var spots := [Vector3(0.24, 0, 0.22), Vector3(-0.26, 0, -0.2), Vector3(0.0, 0, 0.0), Vector3(-0.22, 0, 0.26)]
+	for i in rng.randi_range(1, 3):
+		var o: Vector3 = spots[i]
+		decor(clutter[rng.randi() % clutter.size()], Vector3(pos.x + o.x, top, pos.z + o.z), rng.randf_range(0.0, 360.0))
 
 
 ## High-backed settle (fixed bench) — scenery, solid.
@@ -654,6 +730,8 @@ func lamp(pos: Vector3, wall_facing := Vector3.ZERO) -> void:
 			else:
 				deco(root, Vector3(0.06, 0.06, 0.3), -wall_facing * 0.1, material(style["accent"], 0.9, 0.3))
 			sphere(root, 0.12, Vector3.ZERO, emissive(bulb_col, 3.0)).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if wall_facing != Vector3.ZERO:
+		_keep_out(_box_around(pos, Vector3(0.4, 0.4, 0.4)))
 	var light := OmniLight3D.new()
 	light.position = wall_facing * 0.3 + Vector3(0, 0.2, 0)
 	light.light_color = bulb_col
@@ -709,9 +787,13 @@ func marker(kind: String, pos: Vector3, meta := {}) -> Marker3D:
 
 ## Spawn point for a weapon or consumable. `kind` matches an item id (bottle, glass,
 ## pint, plate, chair, stool, table, pool_cue, darts, poker, fire_tongs, fire_shovel).
-func prop(kind: String, pos: Vector3, rot_y := 0.0) -> Marker3D:
+## `variant` picks a model (PropLibrary); by default the position picks one, so every
+## peer gets the same look. It's stored as the marker's "variant" meta.
+func prop(kind: String, pos: Vector3, rot_y := 0.0, variant := "") -> Marker3D:
 	var m := marker(PubLevel.PROPS, pos, {"item": kind})
 	m.rotation_degrees.y = rot_y
+	if PropLibrary.has(kind):
+		m.set_meta("variant", variant if variant != "" else PropLibrary.resolve(kind, pos))
 	return m
 
 
@@ -818,6 +900,7 @@ func platform(rect: Rect2, top: float, edges: Array = ["front"], rails: Array = 
 	root.name = "Gallery" if top > 1.5 else "Dais"
 	world.add_child(root, true)
 	occluder(root)
+	platforms_built.append({"rect": rect, "top": top})
 	var thick := 0.25 if top > 1.0 else top
 	var centre := Vector3(rect.get_center().x, top - thick * 0.5, rect.get_center().y)
 	var floor_mat := material(style["floor_a"].darkened(0.15)) if top > 1.0 else material(style["timber"].lightened(0.1))
@@ -851,8 +934,10 @@ func platform(rect: Rect2, top: float, edges: Array = ["front"], rails: Array = 
 			var a := -length * 0.5 + length * (float(i) + 0.5) / float(count)
 			var world_a := a + (edge_mid.x if along_x else edge_mid.z)
 			var railed := rails.has(side) and not _in_gaps(world_a, side_gaps, 0.0)
-			marker(PubLevel.LEDGES, edge_mid + _flip(along_x, Vector3(a, 0, 0)) + Vector3(0, top, 0) - n * 0.3,
-				{"normal": n, "drop": top, "railing": railed, "facing": n})
+			var ledge := edge_mid + _flip(along_x, Vector3(a, 0, 0)) + Vector3(0, top, 0) - n * 0.3
+			marker(PubLevel.LEDGES, ledge, {"normal": n, "drop": top, "railing": railed, "facing": n})
+			if not railed:  # keep the landing clear for anyone thrown off
+				_keep_out(AABB(Vector3(ledge.x - 1.0, 0, ledge.z - 1.0) + n * 0.8, Vector3(2.0, top, 2.0)))
 	return root
 
 
@@ -934,3 +1019,267 @@ func stairs(base: Vector3, dir: Vector3, run: float, rise: float, width := 1.4) 
 		deco(root, Vector3(tread, h, width) if along_x else Vector3(width, h, tread), centre, wood)
 	stairs_built.append({"base": base, "top": base + far + up, "dir": dir})
 	return occluder(root)
+
+
+# --- Decor: props, pictures and furniture -------------------------------------------
+
+## Every wall built, as {origin, along_x, a0, a1, height, openings, root}. dress() hangs
+## pictures and stands furniture along them.
+var walls_built: Array[Dictionary] = []
+## Every gallery, loft or dais, as {rect, top}.
+var platforms_built: Array[Dictionary] = []
+var _keepouts: Array[AABB] = []
+var _decor_root: Node3D
+var _decor_count := 0
+
+## Wall pieces dress() picks from, most wanted first. Each goes up at most twice per pub,
+## or as many times as PICTURE_LIMITS says.
+const PICTURES := ["picture_landscape", "picture_portrait", "mirror_brewery", "picture_hunt", "chalkboard_menu",
+	"picture_ship", "horse_brasses", "picture_bull", "wall_clock", "shelf_bottles", "plate_rack_plates",
+	"picture_team_photo", "antlers", "fish_case", "pub_sign_small"]
+const PICTURE_LIMITS := {"horse_brasses": 3, "mirror_brewery": 1, "wall_clock": 1, "chalkboard_menu": 1, "antlers": 1,
+	"fish_case": 1}
+## Floor-standing furniture, most wanted first (the piano always tries to go in).
+const FURNITURE := ["piano_upright", "welsh_dresser", "grandfather_clock", "bookcase", "coat_stand", "sideboard",
+	"armchair_wingback", "fruit_machine", "cask_small", "wine_rack", "jukebox", "aspidistra", "sea_chest",
+	"umbrella_stand", "crate_bottles", "keg_steel", "log_basket", "coal_scuttle", "bench"]
+## Models whose front is local -Z (seats); the rest face +Z.
+const FACES_BACK := ["armchair_wingback"]
+const MAX_FURNITURE := 11
+
+
+## A loose decor prop (PropLibrary.spawn) at `pos` on the floor or a surface, turned
+## `rot_y` degrees. Named D<n> in build order, so names match on every peer. `pinned`
+## freezes it until the physics knocks it loose (shelf bottles).
+func decor(prop_name: String, pos: Vector3, rot_y := 0.0, pinned := false) -> RigidBody3D:
+	if not PropLibrary.has(prop_name):
+		return null
+	var body := PropLibrary.spawn(prop_name, 0, Transform3D(Basis(Vector3.UP, deg_to_rad(rot_y)), pos))
+	if body == null:
+		return null
+	if pinned:
+		body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		body.freeze = true
+		body.set_meta("pinned", true)
+	if _decor_root == null:
+		_decor_root = Node3D.new()
+		_decor_root.name = "Decor"
+		world.add_child(_decor_root)
+	body.name = "D%d" % _decor_count
+	_decor_count += 1
+	_decor_root.add_child(body)
+	return body
+
+
+## Space that dress() mustn't put anything in (fixtures, walkways, landings).
+func _keep_out(box: AABB) -> void:
+	_keepouts.append(box.abs())
+
+
+func _box_around(centre: Vector3, half: Vector3) -> AABB:
+	return AABB(centre - half.abs(), half.abs() * 2.0)
+
+
+## Dress the pub after the layout is built: pictures, mirrors and shelves on the walls and
+## furniture stood against them, wherever there's room. Deterministic, so every peer
+## builds the same pub.
+func dress() -> void:
+	if not PropLibrary.has("picture"):
+		return
+	var room: Rect2 = level.get("room") if level.get("room") != null else Rect2(-50, -50, 100, 100)
+	var blocked := _obstacles()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(String(level.get("pub_id")) if level.get("pub_id") != null else "pub")
+	var sides: Array[Dictionary] = []
+	for w in walls_built:
+		for s in [-1.0, 1.0]:
+			var n := Vector3(0, 0, s) if w["along_x"] else Vector3(s, 0, 0)
+			var mid := _wall_point(w, (float(w["a0"]) + float(w["a1"])) * 0.5, 0.0) + n * 0.6
+			if room.grow(-0.05).has_point(Vector2(mid.x, mid.z)):
+				sides.append({"wall": w, "n": n})
+	# Furniture first (it needs the floor), then pictures above and around it.
+	var furniture := FURNITURE.duplicate()
+	var placed := 0
+	for i in sides.size():
+		var side: Dictionary = sides[(i * 7 + 3) % sides.size()]  # spread round the room
+		placed += _furnish_wall(side, furniture, blocked, rng, room, MAX_FURNITURE - placed)
+		if placed >= MAX_FURNITURE:
+			break
+	var used := {}
+	for side in sides:
+		_hang_pictures(side, used, blocked, rng, room)
+
+
+## Where a point along a wall is: `a` along it, `y` up, on the wall's centre line.
+func _wall_point(w: Dictionary, a: float, y: float) -> Vector3:
+	var o: Vector3 = w["origin"]
+	return Vector3(a, y, o.z) if w["along_x"] else Vector3(o.x, y, a)
+
+
+func _obstacles() -> Array[AABB]:
+	var out: Array[AABB] = []
+	var wall_roots := walls_built.map(func(w): return w["root"])
+	for cs in world.find_children("*", "CollisionShape3D", true, false):
+		var shape := (cs as CollisionShape3D).shape
+		if shape == null:
+			continue
+		var skip := false
+		var p := cs.get_parent()
+		while p != null and p != world:
+			if p in wall_roots or p == _decor_root:
+				skip = true
+				break
+			p = p.get_parent()
+		if skip:
+			continue
+		var box: AABB = (cs as CollisionShape3D).global_transform * shape.get_debug_mesh().get_aabb()
+		if box.end.y <= 0.02:
+			continue  # the floor
+		out.append(box)
+	for kind in [PubLevel.PLAYERS, PubLevel.PUNTER, PubLevel.STAFF, PubLevel.PROPS]:
+		var parent := markers.get_node_or_null(kind)
+		if parent == null:
+			continue
+		for m in parent.get_children():
+			var r := 0.5 if kind == PubLevel.PROPS else 0.75
+			out.append(AABB((m as Node3D).position - Vector3(r, 0.0, r), Vector3(r * 2.0, 1.9, r * 2.0)))
+	for kind in [PubLevel.DOORS, PubLevel.POLICE]:
+		var parent := markers.get_node_or_null(kind)
+		if parent == null:
+			continue
+		for m in parent.get_children():
+			var inside: Vector3 = m.get_meta("inside", (m as Node3D).position)
+			out.append(_box_around(inside + Vector3(0, 1.0, 0), Vector3(1.2, 1.0, 1.2)))
+	var zones := markers.get_node_or_null(PubLevel.BAR_ZONES)
+	if zones != null:
+		for z in zones.get_children():
+			for cs in z.get_children():
+				if cs is CollisionShape3D:
+					out.append((cs as CollisionShape3D).global_transform * cs.shape.get_debug_mesh().get_aabb())
+	# Doorways: keep a clear run in and out.
+	for w in walls_built:
+		for op in w["openings"]:
+			var kind: String = op.get("kind", "door")
+			if kind == "door" or kind == "arch":
+				var c := _wall_point(w, float(op["c"]), 1.0)
+				var half := Vector3(float(op["w"]) * 0.5 + 0.4, 1.1, 1.8) if w["along_x"] else Vector3(1.8, 1.1, float(op["w"]) * 0.5 + 0.4)
+				out.append(_box_around(c, half))
+	out.append_array(_keepouts)
+	return out
+
+
+func _clear(box: AABB, blocked: Array[AABB]) -> bool:
+	for b in blocked:
+		if b.intersects(box):
+			return false
+	return true
+
+
+## True if `box` (spanning a0..a1 along the wall, y0..y1 up) runs into a door or window.
+func _hits_opening(w: Dictionary, a0: float, a1: float, y0: float, y1: float) -> bool:
+	for op in w["openings"]:
+		var o0: float = float(op["c"]) - float(op["w"]) * 0.5 - 0.15
+		var o1: float = float(op["c"]) + float(op["w"]) * 0.5 + 0.15
+		var sill: float = op.get("sill", 0.0)
+		var top: float = op.get("top", 2.1)
+		if a1 > o0 and a0 < o1 and y1 > sill - 0.1 and y0 < top + 0.1:
+			return true
+	return false
+
+
+func _footprint(w: Dictionary, n: Vector3, a0: float, a1: float, y0: float, y1: float, d0: float, d1: float) -> AABB:
+	var face := _wall_point(w, 0.0, 0.0) + n * (WALL_THICKNESS * 0.5)
+	var p0: Vector3
+	var p1: Vector3
+	if w["along_x"]:
+		p0 = Vector3(a0, y0, face.z + n.z * d0)
+		p1 = Vector3(a1, y1, face.z + n.z * d1)
+	else:
+		p0 = Vector3(face.x + n.x * d0, y0, a0)
+		p1 = Vector3(face.x + n.x * d1, y1, a1)
+	return AABB(p0, p1 - p0).abs()
+
+
+func _inside(box: AABB, room: Rect2) -> bool:
+	var r := room.grow(0.05)
+	return r.has_point(Vector2(box.position.x, box.position.z)) and r.has_point(Vector2(box.end.x, box.end.z))
+
+
+func _furnish_wall(side: Dictionary, pool: Array, blocked: Array[AABB], rng: RandomNumberGenerator, room: Rect2,
+		budget: int) -> int:
+	var w: Dictionary = side["wall"]
+	var n: Vector3 = side["n"]
+	var a := float(w["a0"]) + 0.35
+	var placed := 0
+	var tries := 0
+	while a < float(w["a1"]) - 0.35 and placed < budget and not pool.is_empty() and tries < 60:
+		tries += 1
+		# The first few in the pool are the ones we most want; the rest are a lucky dip.
+		var idx := 0 if rng.randf() < 0.5 else rng.randi() % pool.size()
+		var pick: String = pool[idx]
+		var m := PropLibrary.mesh(pick)
+		if m == null:
+			pool.remove_at(idx)
+			continue
+		var box := m.get_aabb()
+		var flip := pick in FACES_BACK
+		var width := box.size.x
+		var back := -box.end.z if flip else box.position.z  # how far behind the origin the back is
+		var depth := box.size.z
+		var fp := _footprint(w, n, a, a + width, 0.0, box.size.y, 0.03, 0.03 + depth)
+		if _inside(fp, room) and _clear(fp.grow(0.04), blocked) and not _hits_opening(w, a, a + width, 0.0, box.size.y):
+			var face := _wall_point(w, a + width * 0.5 - box.get_center().x, 0.0) + n * (WALL_THICKNESS * 0.5 + 0.03 - back)
+			var yaw := rad_to_deg(atan2(n.x, n.z)) + (180.0 if flip else 0.0)
+			decor(pick, face, yaw)
+			blocked.append(fp)
+			pool.remove_at(idx)
+			placed += 1
+			if pick == "piano_upright":
+				var stool_at := face + n * (depth + 0.3)
+				var sb := _box_around(stool_at + Vector3(0, 0.25, 0), Vector3(0.35, 0.25, 0.35))
+				if _clear(sb, blocked):
+					decor("piano_stool", stool_at, yaw + rng.randf_range(-8.0, 8.0))
+					blocked.append(sb)
+			a += width + rng.randf_range(0.3, 1.4)
+		else:
+			a += 0.3
+	return placed
+
+
+func _hang_pictures(side: Dictionary, used: Dictionary, blocked: Array[AABB], rng: RandomNumberGenerator, room: Rect2) -> void:
+	var w: Dictionary = side["wall"]
+	var n: Vector3 = side["n"]
+	var wall_top: float = w["height"]
+	var ceiling: float = minf(wall_top, float(style["beam_height"]) if style.get("beams", false) else wall_top)
+	var a := float(w["a0"]) + 0.5
+	while a < float(w["a1"]) - 0.5:
+		var pool := PICTURES.filter(func(p): return int(used.get(p, 0)) < int(PICTURE_LIMITS.get(p, 2)))
+		if pool.is_empty():
+			return
+		var pick: String = pool[0] if rng.randf() < 0.4 else pool[rng.randi() % pool.size()]
+		var d := PropLibrary.dims(pick)
+		var width := d.x
+		var hung := false
+		# Ground floor, then any gallery or dais this bit of wall runs along.
+		var floors := [0.0]
+		var probe := _wall_point(w, a + width * 0.5, 0.0) + n * 0.6
+		for pl in platforms_built:
+			if (pl["rect"] as Rect2).grow(0.3).has_point(Vector2(probe.x, probe.z)):
+				floors.append(float(pl["top"]))
+		for floor_y in floors:
+			var yc: float = floor_y + 1.55 + rng.randf_range(0.0, 0.25) + (0.3 if pick == "antlers" or pick == "wall_clock" else 0.0)
+			var y0 := yc - d.y * 0.5
+			var y1 := yc + d.y * 0.5
+			var limit := ceiling if floor_y < 0.1 else wall_top
+			if y1 > limit - 0.12 or (floor_y > 0.1 and y1 > wall_top - 0.1):
+				continue
+			var fp := _footprint(w, n, a, a + width, y0, y1, 0.0, maxf(d.z, 0.06) + 0.04)
+			if not _inside(fp, room) or not _clear(fp.grow(0.05), blocked) or _hits_opening(w, a, a + width, y0, y1):
+				continue
+			var at := _wall_point(w, a + width * 0.5, yc) + n * (WALL_THICKNESS * 0.5 + 0.005)
+			decor(pick, at, rad_to_deg(atan2(n.x, n.z)) + rng.randf_range(-1.5, 1.5))
+			blocked.append(fp)
+			used[pick] = int(used.get(pick, 0)) + 1
+			hung = true
+			break
+		a += (width + rng.randf_range(0.6, 1.8)) if hung else 0.35
