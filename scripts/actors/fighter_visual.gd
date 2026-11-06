@@ -78,7 +78,8 @@ func _ready() -> void:
 	lean.name = "HitLean"
 	lean.setup(fighter, rig)
 	add_child(lean)
-	if rig.skeleton != null:
+	# The characters' RigReactor snaps the head itself once it lands; don't double it.
+	if rig.skeleton != null and not ResourceLoader.exists("res://scripts/actors/rig_reactor.gd"):
 		snap = HeadSnap.new()
 		snap.name = "HeadSnap"
 		snap.setup(fighter, rig)
@@ -107,7 +108,8 @@ func _process(_delta: float) -> void:
 		var bob: Vector2 = fighter.slip_dir
 		if "head_bob" in fighter and fighter.is_multiplayer_authority():
 			bob = fighter.get("head_bob")
-		rig.call("set_head_bob", bob if _can_bob() else Vector2.ZERO)
+		# The rig's y is +down (duck); ours is +up.
+		rig.call("set_head_bob", Vector2(bob.x, -bob.y) if _can_bob() else Vector2.ZERO)
 	var partner: Variant = fighter.get("chatting_with") if "chatting_with" in fighter else null
 	rig.set_talking(partner != null and is_instance_valid(partner))
 
@@ -229,7 +231,7 @@ func _on_hit_taken(info: Dictionary) -> void:
 
 func _on_slipped(dir: Vector2) -> void:
 	if rig != null and rig.has_method("set_head_bob") and not fighter.is_multiplayer_authority():
-		rig.call("set_head_bob", dir)
+		rig.call("set_head_bob", Vector2(dir.x, -dir.y))
 
 
 func _on_countered(defender: Node, _attacker: Node) -> void:
