@@ -18,6 +18,12 @@ GameData="*res://scripts/autoload/game_data.gd"
 Settings="*res://scripts/autoload/settings.gd"
 Net="*res://scripts/autoload/net.gd"
 Fx="*res://scripts/fx/fx_director.gd"
+Talk="*res://scripts/autoload/talk.gd"
+
+[audio]
+
+driver/enable_input=true
+general/text_to_speech=true
 
 [display]
 

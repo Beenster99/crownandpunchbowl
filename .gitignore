@@ -7,3 +7,5 @@
 Thumbs.db
 *.tmp
 build/
+# On-PC speech tools (tools/fetch_speech.py), shipped next to the exe, not in git
+/speech/
