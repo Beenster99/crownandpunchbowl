@@ -3,14 +3,12 @@ extends CanvasLayer
 ## scoreboard and the game options. DartsBoard opens it while you're chalked up and closes
 ## it when you step away. It only sends requests through the board.
 
-const AIM_SPEED := 210.0        ## mm per second at full stick
-const AIM_GRIP := 5.0           ## how quickly the aim follows the stick (lower = more drift)
+const AIM_SPEED := 190.0        ## mm per second at full stick
 const STICK_DEADZONE := 0.18
-## The power meter fills in this many seconds, then falls back (and so on while held).
-const POWER_TIME := 0.75
 const THROW_COOLDOWN := 0.4
-const WOBBLE := 9.0             ## mm, sober
-const TIPSY_WOBBLE := 32.0      ## mm extra when fully tipsy
+## How far the target wanders about on its own (mm), sober and extra when fully tipsy.
+const WOBBLE := 11.0
+const TIPSY_WOBBLE := 24.0
 const BLACK := Color("161412")
 const CREAM := Color("ead9b0")
 const RED := Color("b3261e")
@@ -26,11 +24,6 @@ var _cooldown := 0.0
 var _was_turn := false
 var _sent_for := -1
 var _sent_t := 0.0
-var _aim_vel := Vector2.ZERO
-## Holding A: the power meter is running.
-var drawing := false
-var power := 0.0
-var _draw_t := 0.0
 ## The pad that last pressed a button, for the stick.
 var _pad := 0
 
@@ -73,7 +66,7 @@ func _ready() -> void:
 
 	_view = BoardView.new()
 	_view.panel = self
-	_view.custom_minimum_size = Vector2(600, 540)
+	_view.custom_minimum_size = Vector2(540, 540)
 	row.add_child(_view)
 
 	var side := VBoxContainer.new()
@@ -213,12 +206,11 @@ func refresh() -> void:
 	_legs_btn.text = "1 leg" if g.legs_to_win == 1 else "First to %d" % g.legs_to_win
 	_finish_btn.text = "Double out" if g.double_out else "Straight out"
 	_start_btn.text = "Start game" if g.players.size() > 1 else "Start (practice on your own)"
-	_hint.text = "Left stick: aim.  Hold A to draw back, let go in the gold band: early drops low, late flies high.  %s: step away." % \
+	_hint.text = "Left stick: aim (the target wanders, so pick your moment).  A: throw.  %s: step away." % \
 		(Settings.action_label("interact", "pad") if Settings.has_method("action_label") else "RT")
 
 	if my_turn and not _was_turn:
-		aim = Vector2.ZERO  # each turn starts on the bull: steer to where you want
-		_aim_vel = Vector2.ZERO
+		aim = DartsRules.target_point(20, 3)
 	_was_turn = my_turn
 	var vp := get_viewport()
 	if my_turn:
@@ -249,24 +241,19 @@ func _process(delta: float) -> void:
 	var f := board._fighter_of(multiplayer.get_unique_id())
 	if f != null:
 		tipsy = clampf(f.tipsy, 0.0, 1.0)
-	# Drawing back makes the hand shake more.
-	var amp := (WOBBLE + TIPSY_WOBBLE * tipsy) * (1.35 if drawing else 1.0)
-	wobble = Vector2(sin(_t * 1.7) + 0.6 * sin(_t * 3.9 + 1.0), cos(_t * 1.4) + 0.6 * sin(_t * 3.3)) * amp
+	# The target wanders: a slow sway plus a quicker jitter, never quite repeating.
+	var amp := WOBBLE + TIPSY_WOBBLE * tipsy
+	wobble = Vector2(sin(_t * 1.5) + 0.55 * sin(_t * 3.4 + 1.0) + 0.3 * sin(_t * 6.1 + 2.0),
+		cos(_t * 1.2) + 0.55 * sin(_t * 2.9) + 0.3 * cos(_t * 5.3 + 0.5)) * amp
 	if board.is_local_turn():
 		var stick := Vector2(Input.get_joy_axis(_pad, JOY_AXIS_LEFT_X), Input.get_joy_axis(_pad, JOY_AXIS_LEFT_Y))
 		if stick.length() < STICK_DEADZONE:
 			stick = Vector2.ZERO
-		_aim_vel = _aim_vel.lerp(stick * AIM_SPEED, clampf(AIM_GRIP * delta, 0.0, 1.0))
-		aim = (aim + _aim_vel * delta).limit_length(DartsRules.R_BOARD)
-		if drawing:
-			_draw_t += delta
-			power = pingpong(_draw_t / POWER_TIME, 1.0)
-	else:
-		drawing = false
+		aim = (aim + stick * AIM_SPEED * delta).limit_length(DartsRules.R_BOARD)
 	_view.queue_redraw()
 
 
-## Controller only: A starts the power meter, letting go throws.
+## Controller only: A throws.
 func _input(event: InputEvent) -> void:
 	var jb := event as InputEventJoypadButton
 	if jb == null:
@@ -274,19 +261,13 @@ func _input(event: InputEvent) -> void:
 	_pad = jb.device
 	if jb.button_index != JOY_BUTTON_A or not board.is_local_turn():
 		return
-	if jb.pressed and not drawing and _cooldown <= 0.0:
-		drawing = true
-		_draw_t = 0.0
-		power = 0.0
-		get_viewport().set_input_as_handled()
-	elif not jb.pressed and drawing:
-		drawing = false
-		throw(power)
+	if jb.pressed:
+		throw()
 		get_viewport().set_input_as_handled()
 
 
-## Throws at where the reticle is now (aim plus wobble) with `with_power` from the meter.
-func throw(with_power := DartsBoard.SWEET_SPOT) -> void:
+## Throws at where the reticle is now (aim plus wobble).
+func throw() -> void:
 	var g := board.game
 	if _cooldown > 0.0 or not board.is_local_turn():
 		return
@@ -296,7 +277,7 @@ func throw(with_power := DartsBoard.SWEET_SPOT) -> void:
 	_sent_for = key
 	_sent_t = _t
 	_cooldown = THROW_COOLDOWN
-	board.request_throw(aim + wobble, with_power)
+	board.request_throw(aim + wobble)
 
 
 ## Where the darts are going right now, for the board view.
@@ -307,7 +288,7 @@ func reticle() -> Vector2:
 class BoardView extends Control:
 	var panel
 
-	const METER_W := 64.0  ## room on the right for the power meter
+	const METER_W := 0.0
 
 	func _centre() -> Vector2:
 		return Vector2((size.x - METER_W) * 0.5, size.y * 0.5)
@@ -371,23 +352,7 @@ class BoardView extends Control:
 			draw_line(p + Vector2(0, 5), p + Vector2(0, 15), col, 2.0)
 			var over := String(DartsRules.score_at(r)["label"])
 			draw_string(font, Vector2(10, size.y - 12), "Aiming at " + over, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, UiTheme.CREAM)
-			_draw_power(font)
 
-	## Power meter down the right edge: gold band = flat throw.
-	func _draw_power(font: Font) -> void:
-		var h := size.y * 0.7
-		var rect := Rect2(size.x - 40, (size.y - h) * 0.5, 26, h)
-		draw_rect(rect, Color(0, 0, 0, 0.7))
-		var band := 0.04
-		var sweet := DartsBoard.SWEET_SPOT
-		var y0 := rect.end.y - (sweet + band) * h
-		draw_rect(Rect2(rect.position.x, y0, rect.size.x, band * 2.0 * h), UiTheme.BRASS)
-		if panel.drawing:
-			var fill: float = panel.power
-			var col := UiTheme.ALE if absf(fill - sweet) <= band else UiTheme.BLOOD
-			draw_rect(Rect2(rect.position.x + 3, rect.end.y - fill * h, rect.size.x - 6, fill * h), Color(col, 0.85))
-		draw_rect(rect, UiTheme.MUTED, false, 1.0)
-		draw_string(font, Vector2(rect.position.x + 5, rect.position.y - 10), "A", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, UiTheme.CREAM)
 
 	func _sector(c: Vector2, r0: float, r1: float, a0: float, a1: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()
