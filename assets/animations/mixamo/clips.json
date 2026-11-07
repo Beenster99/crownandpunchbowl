@@ -86,13 +86,11 @@
  },
  "mx_fight_idle": {
   "clip": "bouncing_fight_idle",
-  "loop": true,
-  "pool": "fight_idle"
+  "loop": true
  },
  "mx_fight_idle_b": {
   "clip": "idle",
-  "loop": true,
-  "pool": "fight_idle"
+  "loop": true
  },
  "mx_get_up": {
   "clip": "getting_up_3",
@@ -108,8 +106,8 @@
   "root": "inplace",
   "speed": 1.15,
   "then": "groin_hold",
-  "to": 1.61,
-  "variant_of": "groin_down"
+  "replaces": "groin_down",
+  "to": 1.61
  },
  "mx_headbutt": {
   "clip": "illegal_headbutt",

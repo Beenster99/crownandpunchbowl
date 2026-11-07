@@ -19,7 +19,7 @@ func run() -> void:
 		"test_held_punter_struggles_free", "test_bar_staff", "test_waves_and_cleared",
 		"test_police_raid", "test_cooling_off", "test_one_or_two_at_a_time",
 		"test_punters_counter_cover_and_breathe", "test_guard_follows_the_shots",
-		"test_never_the_whole_pub",
+		"test_never_the_whole_pub", "test_punters_feint_and_string_punches",
 	]
 	for t in tests:
 		_arena = Node3D.new()
@@ -396,7 +396,8 @@ func test_one_or_two_at_a_time() -> void:
 	_check(most <= int(GameData.difficulty()["max_attackers"]), "never more than 2 swinging (%d)" % most)
 	var attackers := {}
 	for a in tells:
-		attackers[a] = true
+		if not a.is_in_group("police"):  # the Old Bill ignore the caps
+			attackers[a] = true
 	_check(attackers.size() <= cap, "only the ones squaring up throw punches (%d)" % attackers.size())
 	_check(tells.size() >= 2 and tells.size() <= 10, "a steady pace, not a flurry (%d tells in 10 s)" % tells.size())
 
@@ -525,3 +526,43 @@ func test_never_the_whole_pub() -> void:
 	_check(on1 >= 1 and on2 >= 1, "both players still have a fight (%d, %d)" % [on1, on2])
 	_check(on1 <= d.engaged_cap() and on2 <= d.engaged_cap(), "one or two on each man (%d, %d)" % [on1, on2])
 	_check(not d.has_room(p1) or not d.has_room(p2), "the pub is full: no room for a third mate")
+
+
+## Punters who can box show you a punch and pull out of it, and string two or three together.
+func test_punters_feint_and_string_punches() -> void:
+	var d := _director()
+	var p := _player(Vector3(0, 0, 0), 100000.0)
+	var npc := d.spawn(&"local", Vector3(0, 0, -1.3))
+	npc._type = npc._type.duplicate()
+	npc._type["feint"] = 1.0
+	npc._type["moves"] = {&"punter_jab": 1}
+	await _wait(0.1)
+	_hit(npc, p)
+	var feints := []
+	var f_cb := func(a): feints.append(a)
+	Events.attack_feinted.connect(f_cb)
+	for i in 300:
+		d.heat = 1.0
+		await get_tree().physics_frame
+		if not feints.is_empty():
+			break
+	Events.attack_feinted.disconnect(f_cb)
+	_check(feints == [npc], "he shows you one and pulls out of it (%d feints)" % feints.size())
+	_check(p.hp == p.max_hp, "a feint never lands")
+	npc._type["feint"] = 0.0
+	npc._type["combo"] = 1.0
+	var tells := []
+	var t_cb := func(a, _t, _s): tells.append([a, Time.get_ticks_msec()])
+	Events.attack_telegraphed.connect(t_cb)
+	var most := 0
+	for i in 360:
+		d.heat = 1.0
+		npc.global_position = Vector3(0, 0, -1.3)
+		await get_tree().physics_frame
+		# Punches thrown within a second of each other: one combination.
+		var run := 1
+		for k in range(1, tells.size()):
+			run = run + 1 if int(tells[k][1]) - int(tells[k - 1][1]) < 1000 else 1
+			most = maxi(most, run)
+	Events.attack_telegraphed.disconnect(t_cb)
+	_check(most >= 2, "and strings punches together (longest run %d of %d)" % [most, tells.size()])

@@ -8,8 +8,9 @@ extends Fighter
 ##   lands to parry, and your next punch is a counter. Head guard only stops head shots,
 ##   body guard only body shots, so read where it's going.
 ##   RB + a punch throws it to the body. LB + X kick (stomps a man on the floor), LB + Y
-##   shoulder charge, LB + B clinch knee. LB + RB together grabs and holds; while holding,
-##   punches are knees, A or Throw hurls them, LB + RB again lets go.
+##   shoulder charge, LB + B clinch knee. LB + X with the left stick pulled back kicks him in
+##   the groin. LB + RB together grabs and holds; while holding, punches are knees, A or Throw
+##   hurls them, LB + RB again lets go.
 ##   A dodges the way the left stick points (back, with the stick centred).
 ##   Right stick moves the head. A flick slips head shots for a moment, and slipping one
 ##   right as it lands sets up a counter. Ducking (stick down) and punching goes to the body.
@@ -217,11 +218,19 @@ func guards(lb: bool, rb: bool, lb_now := false, rb_now := false) -> bool:
 ## to the body. `hold`: the button stays down, so a hook or uppercut loads into a power shot
 ## until release_power(). Returns true if a held punch went out.
 func button(b: StringName, lb := false, rb := false, duck := false, hold := false) -> bool:
+	if lb and not rb and b == &"jab" and _stick_back():
+		return press(&"groin_kick", hold)  # LB + X with the stick pulled back: below the belt
 	if lb and not rb:
 		return press(Moves.LB_MOVES[b], hold)
 	elif rb or duck:
 		return press(Moves.BODY_PUNCHES[b], hold)
 	return press(Moves.PUNCHES[b], hold)
+
+
+## The left stick is pulled back, away from the way we're facing.
+func _stick_back() -> bool:
+	var m := Vector3(move_input.x, 0.0, move_input.z)
+	return m.length() > 0.5 and m.normalized().dot(get_facing()) < -0.5
 
 
 ## Let go of the punch button: a loading power shot goes.

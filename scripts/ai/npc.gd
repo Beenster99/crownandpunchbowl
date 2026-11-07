@@ -57,6 +57,9 @@ var _read_windup := false # already reacted to the foe's current wind-up
 var _pressure := 0.0      # recent punches taken (blocked or not); makes them cover up
 var _cover_zone: StringName = &""  # cover up with this guard as soon as we're free
 var _counter_pending := false      # fire a counter jab off the guard
+var _combo_left := 0      # follow-ups still to throw in this combination
+var _feint_t := -1.0      # seconds into the wind-up to pull out of it (a feint), or -1
+var _bounce := 0.0        # footwork rhythm while circling: in and out
 var _winded := false      # gassed: back off and breathe until the tank's half full
 ## Squared up and in range, a punter keeps a guard up (high or low) between his own attacks,
 ## and it follows where he's being hit: tag his head and the hands come up, leaving the body;
@@ -203,7 +206,12 @@ func _on_hit_taken(info: Dictionary) -> void:
 		# Getting tagged repeatedly: shell up where it's coming from.
 		var zone := StringName(info.get("zone", Moves.GUARD_HEAD))
 		_cover_zone = Moves.GUARD_HEAD if zone == Moves.GUARD_HEAD else Moves.GUARD_BODY
-	if float(info.get("damage", 0.0)) > 0.0 and not blocked \
+	if bool(info.get("rocked", false)) and mood == Mood.ENGAGED:
+		# Out on his feet: back off behind a high guard and try to clear his head.
+		_cover_zone = Moves.GUARD_HEAD
+		_recover_t = maxf(_recover_t, _rng.randf_range(1.2, 2.0))
+		_drop_token()
+	elif float(info.get("damage", 0.0)) > 0.0 and not blocked \
 			and mood == Mood.ENGAGED and _rng.randf() < 0.6:
 		# Rocked: back off and get the guard up before coming again.
 		_recover_t = maxf(_recover_t, _rng.randf_range(0.7, 1.5))
@@ -399,6 +407,25 @@ func _think(delta: float) -> void:
 	rushing = maxf(rushing - delta, 0.0)
 	if rushing <= 0.0:
 		rush_grab = false
+	if _feint_t >= 0.0:
+		_feint_t -= delta
+		if state != State.WINDUP:
+			_feint_t = -1.0
+		elif _feint_t < 0.0:
+			# Pulled out of it: he showed you the punch to make you flinch. Back out, and the
+			# real one comes soon.
+			cancel_windup()
+			_combo_left = 0
+			_attack_cd = _rng.randf_range(0.35, 0.8)
+			_recover_t = _rng.randf_range(0.3, 0.6)
+	if _combo_left > 0 and can_chain() and not _winded and foe != null and is_instance_valid(foe) \
+			and foe.can_be_targeted() and not foe.is_down() and _flat_dist(foe) <= 1.7 \
+			and same_level(foe):
+		# Straight off the last one: the next punch of the combination.
+		_combo_left -= 1
+		request_attack(NpcTypes.pick_weighted(Moves.PUNTER_FOLLOW_UPS, _rng), foe)
+	elif _combo_left > 0 and state != State.WINDUP and state != State.ATTACK:
+		_combo_left = 0
 	if _has_token:
 		_token_t += delta
 		var swinging := state == State.WINDUP or state == State.ATTACK
@@ -579,7 +606,7 @@ func _think_engaged(delta: float) -> void:
 		_back_off(foe, 0.6)
 		return
 	if _recover_t > 0.0 and rushing <= 0.0:
-		_back_off(foe, 0.7)
+		_back_off(foe, 0.95)  # out of range quickly after an exchange
 		return
 	var wants_in := _attack_cd <= 0.0 and not foe.is_down()
 	if wants_in and not _has_token:
@@ -588,8 +615,8 @@ func _think_engaged(delta: float) -> void:
 		_token_t = 0.0
 	if wants_in and _has_token:
 		if d > 1.8:
-			# Step in deliberately rather than charging, so the player sees who's coming.
-			move_input = (dir + _separation() * 0.3).limit_length(0.8)
+			# Step in sharply on his turn: in, throw, and back out again.
+			move_input = (dir + _separation() * 0.3).limit_length(1.0)
 			return
 		if rush_grab and foe.can_be_grabbed():
 			rush_grab = false
@@ -601,6 +628,10 @@ func _think_engaged(delta: float) -> void:
 		request_attack(move, foe)
 		if state == State.WINDUP:
 			_token_used = true
+			if _rng.randf() < float(_type.get("feint", 0.0)) and move != &"shove":
+				_feint_t = windup_remaining() * _rng.randf_range(0.4, 0.7)
+			elif _rng.randf() < float(_type.get("combo", 0.0)):
+				_combo_left = 1 if _rng.randf() < 0.6 else 2
 		else:
 			_drop_token()
 		var aggression := maxf(float(_type["aggression"]), 0.1)
@@ -627,10 +658,12 @@ func _circle(delta: float, d: float, dir: Vector3) -> void:
 			_strafe = 0.0  # hold ground and glare
 		elif roll < 0.6 or _strafe == 0.0:
 			_strafe = -1.0 if _rng.randf() < 0.5 else 1.0
-	var ring := float(_type["circle_distance"]) + 0.4
+	# Bounce in and out on the ring, like a boxer finding his range, rather than gliding.
+	_bounce += delta * _rng.randf_range(2.2, 3.4)
+	var ring := float(_type["circle_distance"]) + 0.4 + sin(_bounce) * 0.55
 	var radial := clampf(d - ring, -1.0, 1.0)
 	var tangent := Vector3(-dir.z, 0.0, dir.x) * _strafe
-	move_input = (dir * radial * 0.6 + tangent * 0.25 + _separation()).limit_length(0.5)
+	move_input = (dir * radial * 0.9 + tangent * 0.3 + _separation()).limit_length(0.7)
 
 
 ## Squared up, in range and not blowing: hold a guard while waiting (how often depends on
@@ -641,7 +674,10 @@ func _wants_stance_guard(d: float) -> bool:
 	if _stance_roll_t > 0.0:
 		return false
 	_stance_roll_t = _rng.randf_range(0.6, 1.2)
-	return _rng.randf() < float(_type.get("defence", 0.0)) + 0.45
+	var chance := float(_type.get("defence", 0.0)) + 0.45
+	if is_winded():
+		chance *= 0.5  # hands keep dropping to the ribs
+	return _rng.randf() < chance
 
 
 ## Which guard to hold: where he's been getting hit, once it's clearly more one than the

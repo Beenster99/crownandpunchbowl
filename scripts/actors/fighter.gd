@@ -147,6 +147,16 @@ var _saved_mask := 0
 var _airborne := false
 var _fall_peak := 0.0
 var _impacts: BodyImpacts
+## Area damage (see Moves.ROCK_SHARE): seconds left rocked / winded, on every peer.
+var rocked_t := 0.0
+var winded_t := 0.0
+var _head_hurt := 0.0     # host only: 1.0 rocks him
+var _body_hurt := 0.0     # host only: 1.0 winds him
+var _hurt_wait := 0.0
+var _clock := 0.0
+var _strikes: Array = []  # host only: recent strikes {t, zone, victim} for set-ups
+var _countering := false  # host only: the strike in progress is a counter
+var _combo_knockdown := false  # the knockdown comes from the combo, not the move
 
 
 func _ready() -> void:
@@ -189,6 +199,8 @@ func is_blocking_from(from_pos: Vector3, zone: StringName = Moves.GUARD_HEAD) ->
 		return false
 	if (zone == Moves.GUARD_HEAD) != (guard_zone == Moves.GUARD_HEAD):
 		return false
+	if is_rocked() and _state_t < Moves.ROCKED_GUARD_DELAY:
+		return false  # the hands are slow coming up
 	var to := from_pos - global_position
 	to.y = 0.0
 	if to.length() < 0.01:
@@ -310,13 +322,28 @@ func is_gassed() -> bool:
 	return stamina < max_stamina * Moves.GASSED
 
 
+## Head shots have him on wobbly legs: slow guard, slow feet, and a heavy shot finishes him.
+func is_rocked() -> bool:
+	return rocked_t > 0.0
+
+
+## Body shots have taken the wind out of him: slow to breathe, slow on his feet.
+func is_winded() -> bool:
+	return winded_t > 0.0
+
+
+## How close head (or body) damage is to rocking (winding) him, 0..1. Host only.
+func hurt_fraction(zone: StringName) -> float:
+	return clampf(_head_hurt if zone == Moves.GUARD_HEAD else _body_hurt, 0.0, 1.0)
+
+
 ## Where a punch would get through right now: &"body" when the head is covered, &"head" when
 ## the body is, &"all" when the guard is down and he's in trouble (gassed, reeling, doubled
 ## over, or recovering from a punch), and &"" when there's nothing to read (just standing).
 func open_zone() -> StringName:
 	if state == State.BLOCK:
 		return Moves.GUARD_BODY if guard_zone == Moves.GUARD_HEAD else Moves.GUARD_HEAD
-	if state == State.STAGGER or state == State.DOUBLED or is_gassed() \
+	if state == State.STAGGER or state == State.DOUBLED or is_gassed() or is_rocked() \
 			or (state == State.ATTACK and _attack_t > float(_move.get("active", 0.0))):
 		return &"all"
 	return &""
@@ -478,7 +505,47 @@ func take_hit(info: Dictionary) -> void:
 		held_by._server_release(_RELEASE_SILENT)
 	if heavy and attacker != null and reaction == State.STAGGER:
 		dur *= 1.25
+	if reaction == State.STAGGER or reaction == State.DOUBLED or reaction == State.HELD:
+		_server_hurt(zone, dmg, bool(info.get("opening", false)) or bool(info.get("setup", false)), info)
 	_rpc_react.rpc(reaction, dur, new_hp, impulse, _pack(info), broke_nose)
+
+
+## Head shots build towards rocked, body shots towards winded. Host only.
+func _server_hurt(zone: StringName, dmg: float, clean: bool, info: Dictionary) -> void:
+	if dmg <= 0.0 or max_hp <= 0.0:
+		return
+	var add := dmg / (max_hp * (Moves.ROCK_SHARE if zone == Moves.GUARD_HEAD else Moves.WIND_SHARE))
+	add /= maxf(toughness, 0.1)
+	if clean:
+		add *= Moves.CLEAN_HURT
+	_hurt_wait = Moves.HURT_DECAY_DELAY
+	if zone == Moves.GUARD_HEAD:
+		_head_hurt += add
+		if _head_hurt >= 1.0 and not is_rocked():
+			_head_hurt = 0.3
+			info["rocked"] = true
+			_rpc_hurt_state.rpc(Moves.ROCKED_TIME, winded_t)
+	else:
+		_body_hurt += add
+		if _body_hurt >= 1.0 and not is_winded():
+			_body_hurt = 0.3
+			info["winded"] = true
+			_server_drain(max_stamina * Moves.WINDED_DRAIN)
+			_rpc_hurt_state.rpc(rocked_t, Moves.WINDED_TIME)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_hurt_state(rocked: float, winded: float) -> void:
+	if not _sender_is_host():
+		return
+	var was_rocked := is_rocked()
+	var was_winded := is_winded()
+	rocked_t = rocked
+	winded_t = winded
+	if is_rocked() and not was_rocked:
+		Events.fighter_rocked.emit(self)
+	if is_winded() and not was_winded:
+		Events.fighter_winded.emit(self)
 
 
 ## Slipping can't happen while busy: only on your feet and free to move your head.
@@ -706,7 +773,8 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 	if tgt == null and (bool(m["lunge"]) or bool(m["charge"])):
 		# No stick aim here: only the man in front (passing the facing would count as aiming).
 		tgt = Targeting.pick(self, Vector3.ZERO, Moves.LUNGE_RANGE, bool(m["ground"]))
-	if _counter_ready > 0.0 and not bool(m["ground"]):
+	_countering = _counter_ready > 0.0 and not bool(m["ground"])
+	if _countering:
 		bonus *= Moves.COUNTER_BONUS
 		if combo_name == "":
 			combo_name = "Counter"
@@ -714,6 +782,20 @@ func _server_attack(move_id: StringName, tgt: Fighter, bonus := 1.0, combo_name 
 	# Too gassed to load one up: it just goes.
 	hold = hold and bool(m["chargeable"]) and stamina >= float(m["stamina"]) * 2.0
 	_rpc_start_move.rpc(move_id, _path(tgt), bonus, combo_name, hold)
+
+
+## Pull out of a wind-up before it goes: a feint. Host only (NPCs).
+func cancel_windup() -> void:
+	if multiplayer.is_server() and state == State.WINDUP and not _charging:
+		_rpc_cancel_windup.rpc()
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_cancel_windup() -> void:
+	if not _sender_is_host() or state != State.WINDUP:
+		return
+	_enter(State.IDLE, 0.0)
+	Events.attack_feinted.emit(self)
 
 
 ## Throw the power shot being held, if there is one.
@@ -854,6 +936,21 @@ func _server_resolve_hit() -> void:
 			and not v.is_blocking_from(global_position, zone)
 		if opening:
 			dmg *= Moves.CLEAN_BONUS
+		# The punches before it moved his guard, and this one went into the gap: a set-up.
+		var setup := opening and _set_up_on(v, zone)
+		if setup:
+			dmg *= Moves.SETUP_BONUS
+		# A named combo pays in full only when the finisher goes in clean: into the gap, on a
+		# man who's reeling or open, or as a punish. Into a guard it's just more punches.
+		var bonus := _bonus
+		var went_in := opening or punish or v.open_zone() == &"all" or v.state == State.HELD
+		if bonus > 1.0 and not _countering and not went_in:
+			bonus = 1.0 + (bonus - 1.0) * Moves.COMBO_UNCLEAN_SHARE
+		dmg *= bonus / maxf(_bonus, 0.01)
+		# He's rocked: a heavy or powered shot to the head finishes him.
+		var finish := v.is_rocked() and zone == Moves.GUARD_HEAD and not bool(m["ground"]) \
+			and (bool(m["heavy"]) or _power_frac >= 0.5 or setup or (_bonus >= 1.3 and went_in)) \
+			and not v.is_blocking_from(global_position, zone)
 		var height := 1.45 if bool(m["to_face"]) else 1.1
 		if zone == &"groin":
 			height = 0.85
@@ -863,7 +960,8 @@ func _server_resolve_hit() -> void:
 			"charge": bool(m["charge"]),
 			"position": v.global_position + Vector3.UP * height,
 			"direction": dir, "heavy": bool(m["heavy"]), "to_face": bool(m["to_face"]),
-			"knockdown": bool(m["knockdown"]), "ground": bool(m["ground"]),
+			"knockdown": bool(m["knockdown"]) and (went_in or not _combo_knockdown) or finish,
+			"ground": bool(m["ground"]),
 			"stagger": float(m["stagger"]), "poise": float(m["poise"]),
 			"knockback": float(m["knockback"]), "weapon": weapon,
 			"guard_break": bool(m.get("guard_break", false)),
@@ -881,6 +979,14 @@ func _server_resolve_hit() -> void:
 			info["clean"] = true
 			info["heavy"] = true
 			info["poise"] = float(info["poise"]) * Moves.CLEAN_BONUS
+		if setup:
+			info["setup"] = true
+			info["setup_name"] = _combo_name if _combo_name != "" and _combo_name != "Counter" \
+				else ("Downstairs, upstairs" if zone == Moves.GUARD_HEAD else "Upstairs, downstairs")
+			info["stagger"] = float(info["stagger"]) * 1.2
+		if finish:
+			info["finish"] = true
+			info["heavy"] = true
 		if punish:
 			info["punish"] = true
 			info["heavy"] = true
@@ -889,17 +995,34 @@ func _server_resolve_hit() -> void:
 		# face shot on someone reeling or held.
 		info["clean"] = bool(m["to_face"]) and (_bonus >= 1.3 \
 			or v.state == State.STAGGER or v.state == State.HELD)
-		if _bonus > 1.0:
-			info["stagger"] = float(info["stagger"]) * _bonus
-			info["poise"] = float(info["poise"]) * _bonus
+		if bonus > 1.0:
+			info["stagger"] = float(info["stagger"]) * bonus
+			info["poise"] = float(info["poise"]) * bonus
 			info["combo"] = _combo_name
-			if _bonus >= 1.3:
+			if bonus >= 1.3:
 				info["heavy"] = true
 		v.take_hit(info)
 		if weapon != null and weapon.has_method("on_hit"):
 			weapon.on_hit(info)
+	if float(m["damage"]) > 0.0:
+		var aimed: Fighter = victims[0] if not victims.is_empty() else target
+		_strikes.append({"t": _clock, "zone": StringName(m.get("zone", Moves.GUARD_HEAD)),
+			"victim": aimed})
+		if _strikes.size() > 6:
+			_strikes.pop_front()
 	if not victims.is_empty() and float(m["self_damage"]) > 0.0:
 		_rpc_vitals.rpc(maxf(1.0, hp - float(m["self_damage"])), 0.0)
+
+
+## True if, in the last SETUP_WINDOW seconds, we threw at `v` in the other zone from `zone`
+## (head vs body: a groin shot counts as body), so his guard went there.
+func _set_up_on(v: Fighter, zone: StringName) -> bool:
+	var head := zone == Moves.GUARD_HEAD
+	for s in _strikes:
+		if s["victim"] == v and _clock - float(s["t"]) <= Moves.SETUP_WINDOW \
+				and (StringName(s["zone"]) == Moves.GUARD_HEAD) != head:
+			return true
+	return false
 
 
 func _find_victims() -> Array[Fighter]:
@@ -986,10 +1109,13 @@ func _rpc_start_move(move_id: StringName, target_path: NodePath, bonus := 1.0,
 		m["windup"] = float(m["windup"]) * Moves.GASSED_WINDUP
 	_power = 1.0
 	_power_frac = 0.0
+	_combo_knockdown = false
 	if combo_name != "" and m.has("knockdown"):
 		for c in Moves.COMBOS:
-			if c["name"] == combo_name and bool(c.get("knockdown", false)):
+			if c["name"] == combo_name and bool(c.get("knockdown", false)) \
+					and not bool(m["knockdown"]):
 				m["knockdown"] = true
+				_combo_knockdown = true
 	_bonus = bonus
 	_combo_name = combo_name
 	_combat_t = Moves.STANCE_HOLD
@@ -1289,6 +1415,13 @@ func _tick_state(delta: float) -> void:
 	if _slip_t <= 0.0:
 		slip_dir = slip_dir.move_toward(Vector2.ZERO, delta * 4.0)
 	_combat_t = maxf(_combat_t - delta, 0.0)
+	_clock += delta
+	rocked_t = maxf(rocked_t - delta, 0.0)
+	winded_t = maxf(winded_t - delta, 0.0)
+	_hurt_wait -= delta
+	if _hurt_wait <= 0.0:
+		_head_hurt = maxf(_head_hurt - Moves.HURT_DECAY * delta, 0.0)
+		_body_hurt = maxf(_body_hurt - Moves.HURT_DECAY * delta, 0.0)
 	_update_stance()
 	_poise_wait -= delta
 	if _poise_wait <= 0.0:
@@ -1298,6 +1431,8 @@ func _tick_state(delta: float) -> void:
 		var regen := Moves.STAMINA_REGEN
 		if state == State.BLOCK:
 			regen *= Moves.STAMINA_BLOCK_REGEN
+		if is_winded():
+			regen *= Moves.WINDED_REGEN
 		stamina = minf(stamina + regen * delta, max_stamina)
 	match state:
 		State.WINDUP:
@@ -1402,6 +1537,8 @@ func _nearest_active_foe() -> Fighter:
 
 func _get_up() -> void:
 	_poise = Moves.POISE * toughness
+	rocked_t = 0.0  # the count clears his head (a little)
+	_head_hurt *= 0.5
 	if can_be_knocked_out and hp <= max_hp * crawl_fraction:
 		_enter(State.CRAWL, 0.0)
 	else:
@@ -1431,6 +1568,10 @@ func _tick_motion(delta: float) -> void:
 			# Weight: footwork speeds up and slows down over a moment instead of snapping.
 			if is_gassed():
 				scale *= Moves.GASSED_SPEED
+			if is_rocked():
+				scale *= Moves.ROCKED_SPEED
+			elif is_winded():
+				scale *= Moves.WINDED_SPEED
 			var want := move_input.limit_length(1.0) * move_speed * scale
 			var rate := Moves.ACCEL if want.length() > _walk_vel.length() else Moves.DECEL
 			_walk_vel = _walk_vel.move_toward(want, rate * delta)

@@ -31,7 +31,8 @@ func run() -> void:
 		"test_punches_can_miss", "test_no_stick_punch_goes_straight", "test_foe_health_bar",
 		"test_stamina", "test_jabs_crush_a_guard", "test_body_shots_sap_stamina", "test_power_shot",
 		"test_punish_a_miss", "test_player_holds_for_power", "test_clean_shot_into_the_gap",
-		"test_perfect_parry", "test_lock_on",
+		"test_perfect_parry", "test_lock_on", "test_set_up_into_the_gap",
+		"test_rocked_and_finished", "test_winded_by_body_shots",
 	]
 	# COMBAT_ONLY=test_a,test_b runs just those.
 	var only := OS.get_environment("COMBAT_ONLY")
@@ -467,7 +468,9 @@ func test_player_combos_and_mashing() -> void:
 	await _wait(0.9)
 	_check(combos == ["Double jab, hook", "The Full English"],
 		"rhythm strings are combos (got %s)" % [combos])
-	var expected := 500.0 - 5.0 - 5.0 - 11.0 * 1.3 - 14.0 * 1.7
+	# He's too tough to reel, so the finishers don't go in clean: half the combo bonus.
+	var half := Moves.COMBO_UNCLEAN_SHARE
+	var expected := 500.0 - 5.0 - 5.0 - 11.0 * (1.0 + 0.3 * half) - 14.0 * (1.0 + 0.7 * half)
 	_check(absf(e.hp - expected) < 0.01, "combos hit harder (hp %.2f, want %.2f)" % [e.hp, expected])
 	# Out of rhythm: no combo.
 	combos.clear()
@@ -908,6 +911,14 @@ func test_groin_kick_combo() -> void:
 	_check(moves == [&"jab", &"body_jab", &"groin_kick"], "jab, body jab, kick goes low (got %s)" % [moves])
 	_check(combos.has("Below the belt"), "and it's a combo (got %s)" % [combos])
 	_check(e.state == Fighter.State.DOUBLED, "they go down on all fours holding it (state %d)" % e.state)
+	# Or straight off: LB + X with the stick pulled back.
+	await _wait(Moves.DOUBLED_TIME + 1.0)
+	moves.clear()
+	p.move_input = Vector3(0, 0, 1)  # facing -z: pulling back
+	await _tap(p, &"jab", true)
+	p.move_input = Vector3.ZERO
+	await _wait(0.6)
+	_check(moves == [&"groin_kick"], "LB + X, stick back, is the groin kick (got %s)" % [moves])
 	_check(not e.is_down() and e.can_be_grabbed(), "doubled over, they can still be hit and held")
 	await _wait(Moves.DOUBLED_TIME + 0.3)
 	_check(e.state == Fighter.State.IDLE, "and get back up after a while (state %d)" % e.state)
@@ -1328,3 +1339,93 @@ func test_lock_on() -> void:
 	locked.take_hit({"attacker": p, "damage": 1.0, "direction": Vector3(0, 0, -1), "knockdown": true})
 	await _wait(0.1)
 	_check(p.lock_target == null, "the lock lets go of a man on the floor")
+
+
+## Jabs upstairs bring his hands up; the body shot that follows into the gap is a set-up.
+func test_set_up_into_the_gap() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.toughness = 5.0
+	e.parry_skill = 0.0
+	await _wait(0.1)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	# A body shot into the gap with nothing before it: clean, but not a set-up.
+	e.request_block(true, Moves.GUARD_HEAD)
+	await _wait(0.4)
+	p.request_attack(&"body_jab", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("opening", false)) and not bool(hits[0].get("setup", false)),
+		"a lone clean shot isn't a set-up")
+	await _wait(Moves.SETUP_WINDOW + 0.2)
+	# Jab at the high guard, then go downstairs.
+	await _until_free(e)
+	e.request_block(true, Moves.GUARD_HEAD)
+	await _wait(0.4)
+	hits.clear()
+	p.request_attack(&"jab", e)
+	await _until_free(p)
+	var hp := e.hp
+	p.request_attack(&"body_jab", e)
+	await _until_free(p)
+	_check(hits.size() == 2 and bool(hits[0].get("blocked", false)), "the jab is blocked (%d hits)" % hits.size())
+	var last: Dictionary = hits.back() if not hits.is_empty() else {}
+	_check(bool(last.get("setup", false)) and String(last.get("setup_name", "")) == "Upstairs, downstairs",
+		"the body shot after it is a set-up (%s)" % [last.get("setup_name", "none")])
+	_check(is_equal_approx(hp - e.hp, 4.0 * Moves.CLEAN_BONUS * Moves.SETUP_BONUS),
+		"and pays off (%.2f)" % (hp - e.hp))
+
+
+## Enough to the head in a spell rocks him: slow guard, wobbly legs, and a heavy shot drops him.
+func test_rocked_and_finished() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.max_hp = 100.0
+	e.hp = 100.0
+	e.parry_skill = 0.0
+	await _wait(0.1)
+	var rocked := []
+	var cb := func(f): rocked.append(f)
+	Events.fighter_rocked.connect(cb)
+	for i in 3:
+		e.take_hit({"attacker": p, "damage": 11.0, "zone": Moves.GUARD_HEAD, "poise": 0.0,
+			"stagger": 0.1, "direction": Vector3(0, 0, -1)})
+		await _wait(0.15)
+	Events.fighter_rocked.disconnect(cb)
+	_check(e.is_rocked() and rocked == [e], "33 to the head of a 100 hp man rocks him")
+	_check(e.open_zone() == &"all", "a rocked man is open")
+	await _until_free(e)
+	e.request_block(true, Moves.GUARD_HEAD)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(not e.is_blocking_from(p.global_position, Moves.GUARD_HEAD), "his hands are slow coming up")
+	e.request_block(false)
+	var hits := []
+	p.hit_dealt.connect(func(info): hits.append(info))
+	p.request_attack(&"hook", e)
+	await _until_free(p)
+	_check(hits.size() == 1 and bool(hits[0].get("finish", false)), "a hook on a rocked man finishes him")
+	_check(e.state == Fighter.State.DOWN, "and puts him down (%s)" % Fighter.State.keys()[e.state])
+	await _wait(e.get_up_time + 0.5)
+	_check(not e.is_rocked(), "the count clears his head")
+
+
+## Body shots wind him: stamina knocked out, slow to get it back, slow on his feet.
+func test_winded_by_body_shots() -> void:
+	var p := _fighter(Fighter.Team.PLAYERS, Vector3(0, 0, 0), Vector3(0, 0, -1))
+	var e := _fighter(Fighter.Team.PUNTERS, Vector3(0, 0, -1.2), Vector3(0, 0, 0))
+	e.max_hp = 100.0
+	e.hp = 100.0
+	await _wait(0.1)
+	var before := e.stamina
+	for i in 3:
+		e.take_hit({"attacker": p, "damage": 10.0, "zone": Moves.GUARD_BODY, "poise": 0.0,
+			"stagger": 0.1, "direction": Vector3(0, 0, -1)})
+		await _wait(0.15)
+	_check(e.is_winded() and not e.is_rocked(), "30 to the body winds him")
+	_check(e.stamina < before - e.max_stamina * Moves.WINDED_DRAIN, "and knocks the wind out (%.1f)" % e.stamina)
+	var low := e.stamina
+	await _wait(2.0)
+	_check(e.stamina - low < Moves.STAMINA_REGEN * 2.0 * 0.6, "he's slow getting it back (%.1f)" % (e.stamina - low))
+	await _wait(Moves.WINDED_TIME)
+	_check(not e.is_winded(), "until he gets his breath")

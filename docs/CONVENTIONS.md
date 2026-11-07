@@ -166,7 +166,8 @@ Rules other workstreams rely on:
 - **Player controls (pad, keyboard in brackets).** X jab (LMB), B hook (RMB), Y uppercut (F),
   R3 headbutt (Q), A dodge along the left stick (Space). LB head guard (Shift), RB body guard
   (Ctrl). RB + a punch goes to the body (`Moves.BODY_PUNCHES`). LB + X kick, LB + Y shoulder
-  charge, LB + B clinch knee (`Moves.LB_MOVES`). LB + RB together grabs and holds; while
+  charge, LB + B clinch knee (`Moves.LB_MOVES`); LB + X with the left stick pulled back is
+  the groin kick. LB + RB together grabs and holds; while
   holding, punches knee, A or Throw hurls them, LB + RB again lets go. The right stick
   (arrows) moves the head: a flick slips. Combos are in `Moves.COMBOS` and a string keeps
   going while a longer combo can still follow; a combo's `becomes` swaps its last move (jab,
@@ -210,6 +211,17 @@ Rules other workstreams rely on:
   carries `opening: true` (and `clean`). Engaged punters in range hold a stance guard between
   attacks that follows where they're being hit (`Npc._zone_heat`, `guard_skill`); the foe bar
   shows the opening unless `gameplay/opening_hints` is off.
+- **Set-ups.** A clean shot that follows a strike at the same man in the other zone (head
+  vs body) within `SETUP_WINDOW` is a set-up: `SETUP_BONUS` on top, `setup: true` and a
+  `setup_name` call-out. A named combo pays its full bonus only when the finisher goes in
+  (into the gap, on a man who's open or held, or as a punish); otherwise
+  `COMBO_UNCLEAN_SHARE` of it, and a combo knockdown doesn't happen.
+- **Rocked and winded.** Landed head shots build towards rocked, body shots towards winded
+  (`ROCK_SHARE` / `WIND_SHARE` of max hp in a spell, clean shots count `CLEAN_HURT`).
+  `is_rocked()`: open, slow feet, a guard that only works after `ROCKED_GUARD_DELAY`, and a
+  heavy, powered or set-up head shot finishes him (`finish: true`, knockdown). Getting up
+  clears it. `is_winded()`: stamina knocked out, slow regen, slow feet, NPCs guard less.
+  The hit that tips it carries `rocked` / `winded`; `Events.fighter_rocked` / `fighter_winded`.
 - **Perfect reads.** A parry within `PERFECT_WINDOW` of raising the guard, or a slip that close
   to the hit, carries `perfect: true`; the local player gets slow motion (`Fx.slow_mo`, solo only).
 - **Lock-on.** `Fighter.lock_target` (players: `lock_on` toggles, `lock_next` turns to the
@@ -236,6 +248,16 @@ Rules other workstreams rely on:
 - **Nobody hits the bar staff.** Staff (`Team.STAFF`) can't be targeted, grabbed or hit by
   players or NPCs; attacks pass straight through them and `take_hit` ignores them.
 
+## Guard poses
+
+The guards (the mid-range stance in `CharacterRig._anim_defs`, the head and body guards and
+the stance idles in `RigFightAnims`) are fitted on the real models with
+`tools/fit_guard_pose.gd`: knuckles by the cheek and brow, fists either side of the face (never
+crossed), elbows down in front of the chest and clear of it. Check any change with front and
+side renders of several looks, not one: Euler angles that look right from a three-quarter view
+can cross the arms over the chest. The motion-captured fight idles are not in the stance pool
+because their arms sink into the body on these models.
+
 ## AI and Director
 
 Implemented in `scripts/ai/`: `Npc` (`npc.gd`, extends Fighter), `Director` (`director.gd`) and
@@ -249,6 +271,11 @@ Tests: `godot --headless --fixed-fps 60 --path . --script res://tests/ai_test.gd
   `staff` (`staff` only; nobody hits them and the Director ignores any hit on them).
 - **Moods:** `Npc.Mood.CALM / ALERT / ENGAGED`. Punters engage only when hit, when a mate nearby is
   hit, in a gang-up, or walking in on a hot fight. They cool off when it goes quiet.
+- **Punters box.** They bounce in and out on the ring while waiting, step in sharply on
+  their turn and back out fast after. `punter_jab` / `punter_cross` are quick head shots
+  worth slipping (`ENEMY_WINDUP_SCALE` is 1.15). Per type, `combo` is the chance a punch is
+  followed by one or two more off its recovery (`Moves.PUNTER_FOLLOW_UPS`), and `feint` the
+  chance the tell starts and he pulls out (`Fighter.cancel_windup`, `Events.attack_feinted`).
 - **Fights are one on one, or one on two.** `engaged_cap()` punters square up per player, and
   `total_engaged_cap()` (that cap plus one per extra standing player) across the whole pub;
   the rest watch with their fists down. A punter whose man goes down only switches to another

@@ -89,7 +89,18 @@ func _on_hit_landed(info: Dictionary) -> void:
 			fx.slow_mo(Moves.PERFECT_SLOWMO, Moves.PERFECT_TIME_SCALE)
 		return
 	if info.get("attacker") == player:
-		if bool(info.get("guard_crushed", false)):
+		if bool(info.get("finish", false)):
+			flash("FINISHED HIM", Color(1.0, 0.4, 0.3), 0.9)
+			var fx := get_node_or_null(^"/root/Fx")
+			if fx != null and fx.has_method("slow_mo"):
+				fx.slow_mo(Moves.PERFECT_SLOWMO, Moves.PERFECT_TIME_SCALE)
+		elif bool(info.get("rocked", false)):
+			flash("ROCKED HIM  FINISH IT", Color(1.0, 0.7, 0.3), 1.0)
+		elif bool(info.get("winded", false)):
+			flash("WINDED HIM", Color(1.0, 0.75, 0.35), 0.9)
+		elif bool(info.get("setup", false)):
+			flash(String(info.get("setup_name", "SET UP")).to_upper(), Color(1.0, 0.95, 0.45), 0.9)
+		elif bool(info.get("guard_crushed", false)):
 			flash("GUARD BROKEN", Color(1.0, 0.8, 0.3))
 		elif float(info.get("power", 0.0)) >= 0.95 and not bool(info.get("blocked", false)):
 			flash("FULL POWER", Color(1.0, 0.55, 0.2))
@@ -99,6 +110,10 @@ func _on_hit_landed(info: Dictionary) -> void:
 			flash("CLEAN SHOT", Color(1.0, 0.9, 0.4))
 	elif info.get("victim") == player and bool(info.get("guard_crushed", false)):
 		flash("GUARD CRUSHED", Color(1.0, 0.35, 0.25))
+	elif info.get("victim") == player and bool(info.get("rocked", false)):
+		flash("ROCKED  COVER UP", Color(1.0, 0.35, 0.25), 1.0)
+	elif info.get("victim") == player and bool(info.get("winded", false)):
+		flash("WINDED  BACK OFF", Color(1.0, 0.45, 0.3), 1.0)
 
 
 ## The one small prompt, under the player's feet. Made on first use.

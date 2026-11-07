@@ -129,6 +129,15 @@ func _process(_delta: float) -> void:
 	elif _coiled:
 		_coiled = false
 		rig.position = Vector3.ZERO
+	# Rocked: wobbly legs, swaying. Winded: hunched over the ribs.
+	var sway := Vector3.ZERO
+	if fighter.is_rocked():
+		var t := Time.get_ticks_msec() / 1000.0
+		sway = Vector3(sin(t * 3.1) * 0.06, 0.0, sin(t * 4.3) * 0.09)
+	elif fighter.is_winded():
+		sway = Vector3(0.18, 0.0, 0.0)
+	rig.rotation.x = lerpf(rig.rotation.x, sway.x, 0.2)
+	rig.rotation.z = lerpf(rig.rotation.z, sway.z, 0.2)
 	var partner: Variant = fighter.get("chatting_with") if "chatting_with" in fighter else null
 	rig.set_talking(partner != null and is_instance_valid(partner))
 

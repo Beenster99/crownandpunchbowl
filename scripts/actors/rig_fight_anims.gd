@@ -19,6 +19,11 @@ static func _w(base: Dictionary, changes: Dictionary) -> Dictionary:
 	return CharacterRig._with(base, changes)
 
 
+## A joint's angle in `pose`, rolled forward (+) or back by `deg` about x.
+static func _roll(pose: Dictionary, joint: StringName, deg: float) -> Vector3:
+	return (pose.get(joint, Vector3.ZERO) as Vector3) + Vector3(deg, 0, 0)
+
+
 ## The pose at key `i` of an existing def.
 static func _key(defs: Dictionary, anim_name: StringName, i: int) -> Dictionary:
 	return defs[anim_name]["keys"][i][1]
@@ -39,34 +44,31 @@ static func add(defs: Dictionary, guard: Dictionary, pain: Dictionary, kneel: fl
 # --- Stances: everyone squares up a bit differently --------------------------
 
 static func _stances(defs: Dictionary, guard: Dictionary) -> void:
-	# The pub brawler: square on, chest out, chin up, fists low and loose, rolling the
-	# shoulders. Comes forward like he owns the place.
+	# The pub brawler: square on, chest out, chin up, rolling the shoulders behind the guard.
+	# Comes forward like he owns the place.
 	var brawl := _w(guard, {&"Hips": Vector3(0, -6, 0), &"Spine": Vector3(2, 4, 0), &"Chest": Vector3(4, 0, 0),
-		&"Head": Vector3(4, 2, 0), &"ShoulderL": Vector3(36, -20, 22), &"ElbowL": Vector3(108, 0, 0), &"HandL": Vector3(0, -60, 0),
-		&"ShoulderR": Vector3(30, 25, -25), &"ElbowR": Vector3(112, 0, 0), &"HandR": Vector3(0, 60, 0),
+		&"Head": Vector3(4, 2, 0), &"ShoulderL": Vector3(64, -43, -21), &"ElbowL": Vector3(106, 0, 0), &"HandL": Vector3(-17, -70, 1),
+		&"ShoulderR": Vector3(58, 57, 29), &"ElbowR": Vector3(121, 0, 0), &"HandR": Vector3(-22, 70, 0),
 		&"HipL": Vector3(8, 0, -8), &"KneeL": Vector3(-10, 0, 0), &"HipR": Vector3(-4, 0, 8), &"KneeR": Vector3(-8, 0, 0),
 		&"_hips": Vector3(0, -0.01, 0), &"_brow": Vector3(1, 0, 0)})
 	defs[&"idle_brawler"] = {"length": 1.8, "loop": true, "keys": [
 		[0.0, brawl],
-		[0.45, _w(brawl, {&"Spine": Vector3(4, 10, -4), &"ShoulderL": Vector3(42, -20, 22), &"ShoulderR": Vector3(26, 25, -25),
+		[0.45, _w(brawl, {&"Spine": Vector3(4, 10, -4), &"ShoulderL": _roll(brawl, &"ShoulderL", 5.0), &"ShoulderR": _roll(brawl, &"ShoulderR", -4.0),
 			&"_hips": Vector3(0.015, -0.015, 0)})],
 		[0.9, _w(brawl, {&"Head": Vector3(8, -4, 0), &"Chest": Vector3(6, 0, 0)})],
-		[1.35, _w(brawl, {&"Spine": Vector3(4, -4, 4), &"ShoulderL": Vector3(32, -20, 22), &"ShoulderR": Vector3(36, 25, -25),
+		[1.35, _w(brawl, {&"Spine": Vector3(4, -4, 4), &"ShoulderL": _roll(brawl, &"ShoulderL", -4.0), &"ShoulderR": _roll(brawl, &"ShoulderR", 5.0),
 			&"_hips": Vector3(-0.015, -0.015, 0)})],
 		[1.8, brawl],
 	]}
-	# The wary one: crouched, weight back, lead hand out open to keep you off, the rear
-	# fist by the cheek. Circles and waits.
+	# The wary one: crouched, weight back, behind the guard. Circles and waits.
 	var wary := _w(guard, {&"Hips": Vector3(0, -24, 0), &"Spine": Vector3(-14, 12, 0), &"Head": Vector3(-12, 10, 0),
-		&"ShoulderL": Vector3(62, -10, 12), &"ElbowL": Vector3(70, 0, 0), &"HandL": Vector3(-24, 0, 0), &"_fistL": Vector3(0.2, 0, 0),
-		&"ShoulderR": Vector3(40, 30, -30), &"ElbowR": Vector3(138, 0, 0), &"HandR": Vector3(0, 70, 0),
 		&"HipL": Vector3(22, 0, -8), &"KneeL": Vector3(-26, 0, 0), &"HipR": Vector3(-14, 0, 8), &"KneeR": Vector3(-30, 0, 0),
 		&"_hips": Vector3(0, -0.06, 0.03)})
 	defs[&"idle_wary"] = {"length": 1.5, "loop": true, "keys": [
 		[0.0, wary],
-		[0.4, _w(wary, {&"ShoulderL": Vector3(68, -10, 8), &"ElbowL": Vector3(56, 0, 0), &"_hips": Vector3(0.01, -0.07, 0.025)})],
+		[0.4, _w(wary, {&"ShoulderL": _roll(wary, &"ShoulderL", 5.0), &"_hips": Vector3(0.01, -0.07, 0.025)})],
 		[0.75, _w(wary, {&"Spine": Vector3(-16, 16, 0), &"Head": Vector3(-14, 6, 0)})],
-		[1.1, _w(wary, {&"ShoulderL": Vector3(58, -10, 16), &"ElbowL": Vector3(84, 0, 0), &"_hips": Vector3(-0.01, -0.065, 0.035)})],
+		[1.1, _w(wary, {&"ShoulderL": _roll(wary, &"ShoulderL", -4.0), &"_hips": Vector3(-0.01, -0.065, 0.035)})],
 		[1.5, wary],
 	]}
 
@@ -341,8 +343,8 @@ static func _defence(defs: Dictionary, guard: Dictionary) -> void:
 	# Head guard (LB), the close-range cover: elbows down and tight, gloves pressed to the cheeks and brow,
 	# chin buried, peeking out between them.
 	var high := _w(guard, {&"Hips": Vector3(0, -10, 0), &"Spine": Vector3(-14, 6, 0), &"Head": Vector3(-22, 4, 0),
-		&"ShoulderL": Vector3(48, -38, 34), &"ElbowL": Vector3(146, 0, 0), &"HandL": Vector3(0, -70, 0),
-		&"ShoulderR": Vector3(48, 38, -34), &"ElbowR": Vector3(146, 0, 0), &"HandR": Vector3(0, 70, 0),
+		&"ShoulderL": Vector3(66, -49, -28), &"ElbowL": Vector3(116, 0, 0), &"HandL": Vector3(-19, -70, 18),
+		&"ShoulderR": Vector3(70, 40, 13), &"ElbowR": Vector3(109, 0, 0), &"HandR": Vector3(-2, 70, -14),
 		&"KneeL": Vector3(-26, 0, 0), &"KneeR": Vector3(-24, 0, 0), &"_hips": Vector3(0, -0.05, 0), &"_brow": Vector3(0.9, 0, 0)})
 	defs[&"guard_head"] = {"length": 1.2, "loop": true, "keys": [
 		[0.0, high],
@@ -353,8 +355,8 @@ static func _defence(defs: Dictionary, guard: Dictionary) -> void:
 	# Body guard (RB): elbows tucked in over the ribs, fists up by the chin, hunched
 	# and sat down on the legs.
 	var low := _w(guard, {&"Hips": Vector3(0, -12, 0), &"Spine": Vector3(-24, 4, 0), &"Chest": Vector3(-6, 0, 0), &"Head": Vector3(-6, 6, 0),
-		&"ShoulderL": Vector3(30, -35, 30), &"ElbowL": Vector3(140, 0, 0), &"HandL": Vector3(0, -70, 0),
-		&"ShoulderR": Vector3(30, 35, -30), &"ElbowR": Vector3(140, 0, 0), &"HandR": Vector3(0, 70, 0),
+		&"ShoulderL": Vector3(58, -48, -34), &"ElbowL": Vector3(114, 0, 0), &"HandL": Vector3(-15, -70, -6),
+		&"ShoulderR": Vector3(68, 40, 20), &"ElbowR": Vector3(103, 0, 0), &"HandR": Vector3(12, 70, 2),
 		&"HipL": Vector3(24, 0, -8), &"KneeL": Vector3(-36, 0, 0), &"HipR": Vector3(-4, 0, 8), &"KneeR": Vector3(-34, 0, 0),
 		&"_hips": Vector3(0, -0.09, 0.01), &"_brow": Vector3(0.9, 0, 0)})
 	defs[&"guard_body"] = {"length": 1.2, "loop": true, "keys": [
