@@ -19,6 +19,10 @@ In the pub, move with WASD or the left stick. Esc or Start opens the pause menu.
 camera with the mouse wheel, + and -, or D-pad up and down (hold to keep zooming); the zoom is
 remembered. **Players can hit each other** (friendly fire, under Gameplay and in the lobby) is
 the host's choice and applies to everyone; nobody can hit the bar staff either way.
+**First person**: press P, or keep zooming in past the closest view (wheel, +, D-pad up); zoom
+out to go back. It's also under Gameplay > Camera. Squared up to a man (or locked on with L3 /
+Tab) you look at him and the stick circles him; walking free, the stick or mouse steers. Each
+player picks their own view online. On the floor or held, the overhead view comes back.
 
 ## Tests
 

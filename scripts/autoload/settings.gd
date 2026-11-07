@@ -15,7 +15,8 @@ const PATH := "user://settings.cfg"
 const DEFAULTS := {
 	"gameplay": {"difficulty": 1, "camera_shake": 1.0, "blood": 1, "counter_prompts": true,
 		"opening_hints": true,
-		"subtitles": true, "context_prompts": true, "vibration": true, "control_hints": true, "friendly_fire": false},
+		"subtitles": true, "context_prompts": true, "vibration": true, "control_hints": true, "friendly_fire": false,
+		"camera_view": 0},
 	"sound": {"master": 0.9, "music": 0.6, "sfx": 1.0, "voice": 1.0, "mute_unfocused": false},
 	"graphics": {"window_mode": 0, "vsync": true, "max_fps": 0, "render_scale": 1.0, "shadows": true,
 		"msaa": 1, "ui_scale": 1.0, "resolution": "auto", "quality": 2, "shadow_quality": 2,
@@ -36,6 +37,8 @@ const OPTIONS := {
 			"hint": "Used when you host or play solo. The host's choice applies in co-op."},
 		"friendly_fire": {"label": "Players can hit each other", "type": "toggle",
 			"hint": "Friendly fire: punches, kicks, grabs and thrown things land on your mates too. The host's choice applies in co-op. Nobody can hit the bar staff."},
+		"camera_view": {"label": "Camera", "type": "choice", "items": ["Overhead", "First person"],
+			"hint": "First person puts you behind your own eyes, squared up to the man you're fighting. Switch in a fight with P, or zoom in past the closest overhead view (mouse wheel, + or D-pad up); zoom out to go back."},
 		"camera_shake": {"label": "Camera shake", "type": "slider", "min": 0.0, "max": 1.5,
 			"step": 0.05, "percent": true},
 		"blood": {"label": "Blood", "type": "choice", "items": ["Off", "Normal", "Buckets"]},
@@ -157,6 +160,8 @@ const ACTIONS := {
 	"pause": ["Pause", {"key": KEY_ESCAPE}, {"joy": JOY_BUTTON_START}],
 	"zoom_in": ["Zoom in", {"mouse": MOUSE_BUTTON_WHEEL_UP}, {"joy": JOY_BUTTON_DPAD_UP}],
 	"zoom_out": ["Zoom out", {"mouse": MOUSE_BUTTON_WHEEL_DOWN}, {"joy": JOY_BUTTON_DPAD_DOWN}],
+	# No free pad button: on a pad, zoom in past the closest view (D-pad up) for first person.
+	"camera_view": ["Switch first-person / overhead camera", {"key": KEY_P}, {}],
 	"push_to_talk": ["Push to talk (hold and speak)", {"key": KEY_V}, {"joy": JOY_BUTTON_BACK}],
 	"say_line": ["Type something to say", {"key": KEY_ENTER}, {}],
 }
@@ -390,7 +395,7 @@ func load_settings() -> void:
 func _fix_new_action_clashes(cfg: ConfigFile) -> void:
 	for action in binds:
 		for d in DEVICES:
-			if cfg.has_section_key("keybinds", "%s.%s" % [action, d]):
+			if cfg.has_section_key("keybinds", "%s.%s" % [action, d]) or binds[action][d].is_empty():
 				continue
 			for other in binds:
 				if other == action or not binding_equals(binds[other][d], binds[action][d]):
