@@ -26,6 +26,7 @@ var _skin_mat: Material
 var _spots: Array = []
 var _dirty := true
 var _aging := false
+var _face_blood := 0.0
 
 
 func setup(w: Node, r: Node) -> void:
@@ -57,6 +58,10 @@ func _process(_delta: float) -> void:
 		_patch(body, sk)
 	if _body == null:
 		return
+	var fb := float(wounds.fighter.get_meta("fx_face_blood", 0.0)) if is_instance_valid(wounds.fighter) else 0.0
+	if not is_equal_approx(fb, _face_blood):
+		_face_blood = fb
+		_dirty = true
 	if _dirty:
 		_dirty = false
 		_upload()
@@ -200,7 +205,7 @@ static func _bone(sk: Skeleton3D, bone: StringName, fallback: Vector3) -> Vector
 func _upload() -> void:
 	if _skin_mat == null or _spots.is_empty():
 		return
-	var marked: bool = wounds.is_marked()
+	var marked: bool = wounds.is_marked() or _face_blood > 0.0
 	if not marked:
 		if _skin_mat.next_pass == material:
 			_skin_mat.next_pass = null
@@ -231,6 +236,9 @@ func _upload() -> void:
 	material.set_shader_parameter("spot_cut", cuts)
 	material.set_shader_parameter("spot_out", outs)
 	material.set_shader_parameter("blood", 1.0 if _blood_on() else 0.0)
+	material.set_shader_parameter("face_blood", _face_blood)
+	material.set_shader_parameter("nose_spot", Wounds.spot_index(&"nose"))
+	material.set_shader_parameter("lip_spot", Wounds.spot_index(&"lip"))
 	if _skin_mat.next_pass != material:
 		_skin_mat.next_pass = material
 	_aging = true

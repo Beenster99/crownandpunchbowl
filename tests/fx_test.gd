@@ -76,6 +76,13 @@ func _initialize() -> void:
 		await process_frame
 	_check(is_equal_approx(Engine.time_scale, 1.0), "hit-stop never released (time_scale %s)" % Engine.time_scale)
 	_check(dummy.get_node_or_null("FxFaceBlood") != null, "no bloody face decal")
+	for i in 30:
+		fx.blood.add_face_blood(dummy, 0.5)
+	_check(fx.blood.face_blood(dummy) <= fx.blood.face_blood_max + 0.001, "face blood isn't capped")
+	var patch := dummy.get_node_or_null("FxFaceBlood") as Node3D
+	var patch_size: Vector3 = patch.size if patch is Decal else patch.scale
+	_check(patch_size.x < 0.25 and patch_size.z < 0.3 if patch is Decal else patch_size.x < 0.25 and patch_size.y < 0.3,
+		"face blood patch covers more than the nose and mouth (%s)" % patch_size)
 	_check(fx.blood.decal_count() > 0, "no floor blood decals")
 	_check(speaking > 0, "nothing is playing")
 
