@@ -81,6 +81,33 @@ func _initialize() -> void:
 
 	events.fighter_knocked_out.emit(dummy)
 	_check(not fx.is_crawling(dummy), "KO'd fighter still crawling")
+	_check(fx.moans_left(dummy) == fx.ko_moans, "KO'd fighter has no moan budget")
+
+	# 2b. Pain sounds stop: a few moans each, then quiet, and nothing once the fight's over.
+	var groaner := Node3D.new()
+	groaner.name = "N9"
+	current_scene.add_child(groaner)
+	fx.crawl_moan_every = Vector2(0.05, 0.06)
+	events.fighter_crawling.emit(groaner)
+	await create_timer(2.0).timeout  # the first moan waits up to 1.2 s
+	_check(fx.is_crawling(groaner) and fx.moans_left(groaner) == 0,
+		"crawler kept moaning past %d groans (%d left)" % [fx.crawl_moans, fx.moans_left(groaner)])
+	var ko2 := Node3D.new()
+	ko2.name = "N10"
+	current_scene.add_child(ko2)
+	events.fighter_knocked_out.emit(ko2)
+	events.fighter_crawling.emit(groaner)
+	events.pub_cleared.emit("test")
+	_check(fx.moans_left(ko2) == 0 and fx.moans_left(groaner) == 0, "moaning carried on after the pub was cleared")
+	var groaning := 0
+	until = Time.get_ticks_msec() + 600
+	while Time.get_ticks_msec() < until:
+		for p in fx.get_children():
+			if p is AudioStreamPlayer3D and p.playing and String(p.get_meta("cue", "")).begins_with("groan"):
+				groaning += 1
+		await process_frame
+	_check(groaning == 0, "groans still playing after the pub was cleared")
+	fx.crawl_moan_every = Vector2(2.2, 4.5)
 	var bottle := Node3D.new()
 	bottle.name = "Bottle"
 	current_scene.add_child(bottle)
